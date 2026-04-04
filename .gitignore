@@ -1,0 +1,68 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# Environment
+.env
+.env.local
+.env.production
+.env.staging
+*.env
+
+# Alembic
+# keep versions folder but ignore any local overrides
+
+# Database
+*.sqlite
+*.db
+
+# Node / Frontend
+node_modules/
+dist/
+build/
+.next/
+coverage/
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*.suo
+
+# Docker
+.docker/
+
+# Uploads / temp files
+uploads/
+temp/
+*.tmp
+
+# Testing
+.pytest_cache/
+htmlcov/
+.coverage
+
+# Terraform
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.backup
+terraform/*.tfvars
+terraform/.terraform.lock.hcl
