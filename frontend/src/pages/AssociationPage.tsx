@@ -1,8 +1,6 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
-import Card from '@mui/material/Card'
-import CardContent from '@mui/material/CardContent'
 import Chip from '@mui/material/Chip'
 import Dialog from '@mui/material/Dialog'
 import DialogActions from '@mui/material/DialogActions'
@@ -11,10 +9,12 @@ import DialogTitle from '@mui/material/DialogTitle'
 import Divider from '@mui/material/Divider'
 import FormControl from '@mui/material/FormControl'
 import IconButton from '@mui/material/IconButton'
+import InputAdornment from '@mui/material/InputAdornment'
 import InputLabel from '@mui/material/InputLabel'
 import MenuItem from '@mui/material/MenuItem'
+import Paper from '@mui/material/Paper'
 import Select from '@mui/material/Select'
-import Stack from '@mui/material/Stack'
+import Skeleton from '@mui/material/Skeleton'
 import TextField from '@mui/material/TextField'
 import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
@@ -24,7 +24,10 @@ import AddIcon from '@mui/icons-material/Add'
 import BlockIcon from '@mui/icons-material/Block'
 import EditIcon from '@mui/icons-material/Edit'
 import GroupAddIcon from '@mui/icons-material/GroupAdd'
+import LocationOnIcon from '@mui/icons-material/LocationOn'
+import PersonIcon from '@mui/icons-material/Person'
 import PersonRemoveIcon from '@mui/icons-material/PersonRemove'
+import SearchIcon from '@mui/icons-material/Search'
 import { DataGrid } from '@mui/x-data-grid'
 import type { GridColDef, GridRenderCellParams } from '@mui/x-data-grid'
 import apiClient from '../api/client'
@@ -33,46 +36,91 @@ import { hasRole } from '../utils/auth'
 import type { Association, User } from '../types'
 import ConfirmDialog from '../components/layout/ConfrimDialog'
 import ErrorAlert from '../components/layout/ErrorAlert'
-import LoadingSpinner from '../components/layout/LoadingSpinner'
 
 const emptyForm = { legal_name: '', filter_name: '', location_name: '' }
 
-// ─── Mobile card ─────────────────────────────────────────────────────────────
+// ─── Skeleton list ────────────────────────────────────────────────────────────
 
-interface AssocCardProps {
+function AssocListSkeleton() {
+  return (
+    <Paper variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden' }}>
+      {[0, 1, 2, 3].map((i) => (
+        <Box key={i}>
+          {i > 0 && <Divider />}
+          <Box sx={{ p: 2 }}>
+            <Skeleton variant="text" width="55%" height={22} />
+            <Skeleton variant="text" width="35%" height={18} sx={{ mt: 0.5 }} />
+            <Skeleton variant="text" width="45%" height={18} sx={{ mt: 0.25 }} />
+            <Box display="flex" gap={1} mt={1.25}>
+              <Skeleton variant="rounded" width={56} height={22} />
+              <Skeleton variant="rounded" width={96} height={22} />
+            </Box>
+          </Box>
+        </Box>
+      ))}
+    </Paper>
+  )
+}
+
+// ─── Mobile list item ─────────────────────────────────────────────────────────
+
+interface AssocRowProps {
   assoc: Association
   isAdmin: boolean
   isSuperAdmin: boolean
+  isLast: boolean
   onEdit: (a: Association) => void
   onManageManagers: (a: Association) => void
   onDeactivate: (a: Association) => void
 }
 
-function AssocCard({ assoc, isAdmin, isSuperAdmin, onEdit, onManageManagers, onDeactivate }: AssocCardProps) {
+function AssocRow({ assoc, isAdmin, isSuperAdmin, isLast, onEdit, onManageManagers, onDeactivate }: AssocRowProps) {
   return (
-    <Card variant="outlined">
-      <CardContent sx={{ pb: '12px !important' }}>
+    <>
+      <Box sx={{ p: 2 }}>
         <Box display="flex" justifyContent="space-between" alignItems="flex-start" gap={1}>
+          {/* Left: info */}
           <Box minWidth={0} flex={1}>
-            <Typography variant="subtitle1" fontWeight={600}>
+            <Typography variant="subtitle1" fontWeight={500} lineHeight={1.3}>
               {assoc.legal_name}
             </Typography>
-            <Typography variant="body2" color="text.secondary">
-              {assoc.filter_name} · {assoc.location_name}
+            <Typography variant="body2" color="text.secondary" mt={0.25}>
+              {assoc.filter_name}
             </Typography>
-            <Box display="flex" gap={1} flexWrap="wrap" mt={1}>
+            <Box display="flex" alignItems="center" gap={0.5} mt={0.25}>
+              <LocationOnIcon sx={{ fontSize: 13, color: 'text.disabled', flexShrink: 0 }} />
+              <Typography variant="body2" color="text.secondary">
+                {assoc.location_name}
+              </Typography>
+            </Box>
+            {/* Managers + status chips */}
+            <Box display="flex" gap={1} flexWrap="wrap" mt={1.25} alignItems="center">
               <Chip
                 label={assoc.is_active ? 'Active' : 'Inactive'}
                 color={assoc.is_active ? 'success' : 'default'}
                 size="small"
               />
-              {assoc.managers.map((m) => (
-                <Chip key={m.id} label={`${m.fname} ${m.lname}`} size="small" />
-              ))}
+              {assoc.managers.length === 0 ? (
+                <Box display="flex" alignItems="center" gap={0.5}>
+                  <PersonIcon sx={{ fontSize: 13, color: 'text.disabled' }} />
+                  <Typography variant="body2" color="text.disabled">Unassigned</Typography>
+                </Box>
+              ) : (
+                assoc.managers.map((m) => (
+                  <Chip
+                    key={m.id}
+                    icon={<PersonIcon />}
+                    label={`${m.fname} ${m.lname}`}
+                    size="small"
+                    variant="outlined"
+                  />
+                ))
+              )}
             </Box>
           </Box>
+          {/* Right: actions */}
           {isAdmin && (
-            <Box display="flex" flexDirection="column" alignItems="flex-end" gap={0.5} flexShrink={0}>
+            <Box display="flex" gap={0.25} flexShrink={0}>
               <Tooltip title="Edit">
                 <IconButton size="small" onClick={() => onEdit(assoc)}>
                   <EditIcon fontSize="small" />
@@ -93,8 +141,9 @@ function AssocCard({ assoc, isAdmin, isSuperAdmin, onEdit, onManageManagers, onD
             </Box>
           )}
         </Box>
-      </CardContent>
-    </Card>
+      </Box>
+      {!isLast && <Divider />}
+    </>
   )
 }
 
@@ -112,6 +161,7 @@ export default function AssociationPage() {
   const [rows, setRows] = useState<Association[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
 
   const [formOpen, setFormOpen] = useState(false)
   const [formData, setFormData] = useState(emptyForm)
@@ -142,6 +192,14 @@ export default function AssociationPage() {
   }, [])
 
   useEffect(() => { fetchAssociations() }, [fetchAssociations])
+
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase()
+    if (!q) return rows
+    return rows.filter((a) =>
+      `${a.legal_name} ${a.filter_name} ${a.location_name}`.toLowerCase().includes(q),
+    )
+  }, [rows, search])
 
   function openCreate() {
     setEditTarget(null)
@@ -277,10 +335,9 @@ export default function AssociationPage() {
     }] as GridColDef<Association>[]) : []),
   ]
 
-  if (loading) return <LoadingSpinner />
-
   return (
     <Box>
+      {/* Header */}
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
         <Typography variant="h5">Associations</Typography>
         {isAdmin && (
@@ -292,28 +349,54 @@ export default function AssociationPage() {
 
       {error && <ErrorAlert message={error} onClose={() => setError(null)} />}
 
-      {/* Mobile: card list — Desktop: DataGrid */}
+      {/* Search */}
+      <TextField
+        placeholder="Search by name or location…"
+        size="small"
+        fullWidth
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        sx={{ mb: 2 }}
+        slotProps={{
+          input: {
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon fontSize="small" />
+              </InputAdornment>
+            ),
+          },
+        }}
+      />
+
+      {/* Desktop: DataGrid — Mobile: list */}
       {isMobile ? (
-        <Stack spacing={1.5}>
-          {rows.length === 0 && (
-            <Typography color="text.secondary" textAlign="center" py={4}>No associations found.</Typography>
-          )}
-          {rows.map((a) => (
-            <AssocCard
-              key={a.id}
-              assoc={a}
-              isAdmin={isAdmin}
-              isSuperAdmin={isSuperAdmin}
-              onEdit={openEdit}
-              onManageManagers={openManagerDialog}
-              onDeactivate={setDeactivateTarget}
-            />
-          ))}
-        </Stack>
+        loading ? (
+          <AssocListSkeleton />
+        ) : filtered.length === 0 ? (
+          <Typography color="text.secondary" textAlign="center" py={6}>
+            No associations found.
+          </Typography>
+        ) : (
+          <Paper variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden' }}>
+            {filtered.map((a, i) => (
+              <AssocRow
+                key={a.id}
+                assoc={a}
+                isAdmin={isAdmin}
+                isSuperAdmin={isSuperAdmin}
+                isLast={i === filtered.length - 1}
+                onEdit={openEdit}
+                onManageManagers={openManagerDialog}
+                onDeactivate={setDeactivateTarget}
+              />
+            ))}
+          </Paper>
+        )
       ) : (
         <DataGrid
-          rows={rows}
+          rows={filtered}
           columns={columns}
+          loading={loading}
           getRowHeight={() => 'auto'}
           autoHeight
           pageSizeOptions={[25, 50, 100]}
@@ -357,10 +440,18 @@ export default function AssociationPage() {
       />
 
       {/* Manager assignment dialog */}
-      <Dialog open={!!managerDialogAssoc} onClose={() => setManagerDialogAssoc(null)} fullScreen={fullScreen} maxWidth="sm" fullWidth>
+      <Dialog
+        open={!!managerDialogAssoc}
+        onClose={() => setManagerDialogAssoc(null)}
+        fullScreen={fullScreen}
+        maxWidth="sm"
+        fullWidth
+      >
         <DialogTitle>
-          <Typography variant="h6">Manage managers</Typography>
-          <Typography variant="body2" color="text.secondary">{managerDialogAssoc?.filter_name}</Typography>
+          Manage managers
+          <Typography variant="body2" color="text.secondary" mt={0.25}>
+            {managerDialogAssoc?.filter_name}
+          </Typography>
         </DialogTitle>
         <Divider />
         <DialogContent>
@@ -387,11 +478,14 @@ export default function AssociationPage() {
             <Typography variant="body2" color="text.secondary">Assign a manager</Typography>
             <FormControl fullWidth size="small">
               <InputLabel>Select user</InputLabel>
-              <Select value={selectedUserId} label="Select user" onChange={(e) => setSelectedUserId(e.target.value)}>
+              <Select value={selectedUserId} label="Select user"
+                onChange={(e) => setSelectedUserId(e.target.value)}>
                 {allUsers
                   .filter((u) => !managerDialogAssoc?.managers.some((m) => m.id === u.id))
                   .map((u) => (
-                    <MenuItem key={u.id} value={u.id}>{u.fname} {u.lname} — {u.title}</MenuItem>
+                    <MenuItem key={u.id} value={u.id}>
+                      {u.fname} {u.lname} — {u.title}
+                    </MenuItem>
                   ))}
               </Select>
             </FormControl>

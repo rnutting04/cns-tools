@@ -10,6 +10,7 @@ import DashboardIcon from '@mui/icons-material/Dashboard'
 import ApartmentIcon from '@mui/icons-material/Apartment'
 import PeopleIcon from '@mui/icons-material/People'
 import DescriptionIcon from '@mui/icons-material/Description'
+import FolderIcon from '@mui/icons-material/Folder'
 import TableChartIcon from '@mui/icons-material/TableChart'
 import { NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
@@ -39,6 +40,12 @@ const NAV_ITEMS: NavItem[] = [
     roles: ['admin', 'super_admin'],
   },
   { label: 'Letter generator', to: '/letters', icon: <DescriptionIcon fontSize="small" /> },
+  {
+    label: 'Template manager',
+    to: '/templates',
+    icon: <FolderIcon fontSize="small" />,
+    roles: ['admin', 'super_admin'],
+  },
   { label: 'Excel tools', to: '/excel', icon: <TableChartIcon fontSize="small" /> },
 ]
 

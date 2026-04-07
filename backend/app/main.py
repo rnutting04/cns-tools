@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.routers import auth, user, association
+from app.routers import templates, managers
 
 app = FastAPI(title="C&S Tool Hub")
 
@@ -17,6 +18,8 @@ app.add_middleware(
 app.include_router(auth.router, prefix="/api")
 app.include_router(user.router, prefix="/api")
 app.include_router(association.router, prefix="/api")
+app.include_router(templates.router, prefix="/api")
+app.include_router(managers.router, prefix="/api")
 
 
 @app.get("/health")

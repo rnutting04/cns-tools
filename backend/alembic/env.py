@@ -8,6 +8,8 @@ from app.database import Base
 # import all models so alembic can detect them
 from app.models.user import User
 from app.models.association import Association, UserAssociation
+from app.models.template import Template
+from app.models.letter_job import LetterJob
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)

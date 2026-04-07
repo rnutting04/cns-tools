@@ -6,6 +6,7 @@ import DashboardPage from '../pages/DashboardPage'
 import AssociationPage from '../pages/AssociationPage'
 import UsersPage from '../pages/UsersPage'
 import LetterGeneratorPage from '../pages/LetterGeneratorPage'
+import TemplateManagerPage from '../pages/TemplateManagerPage'
 import ExcelToolsPage from '../pages/ExcelToolsPage'
 import NotFoundPage from '../pages/NotFoundPage'
 
@@ -40,6 +41,14 @@ export default function AppRouter() {
             }
           />
           <Route path="letters" element={<LetterGeneratorPage />} />
+          <Route
+            path="templates"
+            element={
+              <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
+                <TemplateManagerPage />
+              </ProtectedRoute>
+            }
+          />
           <Route path="excel" element={<ExcelToolsPage />} />
         </Route>
         <Route path="/404" element={<NotFoundPage />} />

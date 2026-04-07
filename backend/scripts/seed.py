@@ -7,6 +7,7 @@ import bcrypt
 from app.database import SessionLocal
 from app.models.user import User, UserRole
 from app.models.association import Association, UserAssociation
+from app.models.letter_job import LetterJob
 
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(
@@ -18,6 +19,7 @@ def seed():
     db = SessionLocal()
 
     print("Clearing existing data...")
+    db.query(LetterJob).delete()
     db.query(UserAssociation).delete()
     db.query(Association).delete()
     db.query(User).delete()
@@ -27,52 +29,52 @@ def seed():
     sunset = Association(
         legal_name="Sunset Ridge Homeowners Association Inc.",
         filter_name="Sunset Ridge",
-        location_name="Orlando, FL",
+        location_name="Orlando",
     )
     lakewood = Association(
         legal_name="Lakewood Commons Community Association",
         filter_name="Lakewood Commons",
-        location_name="Tampa, FL",
+        location_name="Tampa",
     )
     pine = Association(
         legal_name="Pine Valley Residents Association",
         filter_name="Pine Valley",
-        location_name="Jacksonville, FL",
+        location_name="Jacksonville",
     )
     maplewood = Association(
         legal_name="Maplewood Estates HOA",
         filter_name="Maplewood Estates",
-        location_name="Miami, FL",
+        location_name="Miami",
     )
     riverstone = Association(
         legal_name="Riverstone Community Association Inc.",
         filter_name="Riverstone",
-        location_name="Sarasota, FL",
+        location_name="Sarasota",
     )
     harbor = Association(
         legal_name="Harbor Pointe Residential Association",
         filter_name="Harbor Pointe",
-        location_name="St. Petersburg, FL",
+        location_name="St. Petersburg",
     )
     clearwater = Association(
         legal_name="Clearwater Cove HOA Inc.",
         filter_name="Clearwater Cove",
-        location_name="Clearwater, FL",
+        location_name="Clearwater",
     )
     magnolia = Association(
         legal_name="Magnolia Park Community Association",
         filter_name="Magnolia Park",
-        location_name="Gainesville, FL",
+        location_name="Gainesville",
     )
     cypress = Association(
         legal_name="Cypress Glen Homeowners Association",
         filter_name="Cypress Glen",
-        location_name="Fort Lauderdale, FL",
+        location_name="Fort Lauderdale",
     )
     emerald = Association(
         legal_name="Emerald Isle Residential Community",
         filter_name="Emerald Isle",
-        location_name="Pensacola, FL",
+        location_name="Pensacola",
     )
 
     all_associations = [
