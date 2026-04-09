@@ -48,6 +48,10 @@ def replace_placeholders(doc: Document, field_values: dict[str, Any]) -> Documen
             _replace_in_paragraph(header_para, field_values)
         for footer_para in section.footer.paragraphs:
             _replace_in_paragraph(footer_para, field_values)
+        for first_header_para in section.first_page_header.paragraphs:
+            _replace_in_paragraph(first_header_para, field_values)
+        for first_footer_para in section.first_page_footer.paragraphs:
+            _replace_in_paragraph(first_footer_para, field_values)
 
     return doc
 

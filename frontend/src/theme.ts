@@ -1,17 +1,21 @@
 import { createTheme } from '@mui/material/styles'
 
+// C&S Community Management Services brand colors
+// Primary: navy/royal blue from the C and S logo blocks
+// Secondary: medium green from the & logo block and arc
+
 const theme = createTheme({
   palette: {
     primary: {
-      main: '#1B3A5C',
-      light: '#2D5986',
-      dark: '#102540',
+      main: '#1E3D8F',
+      light: '#3358C4',
+      dark: '#132770',
       contrastText: '#ffffff',
     },
     secondary: {
-      main: '#C8862A',
-      light: '#E0A84E',
-      dark: '#A06518',
+      main: '#2E9B4E',
+      light: '#4CB86A',
+      dark: '#1D7834',
       contrastText: '#ffffff',
     },
     background: {
@@ -22,8 +26,8 @@ const theme = createTheme({
       primary: '#1A2332',
       secondary: '#5A6A7E',
     },
-    success: { main: '#2E7D32' },
-    warning: { main: '#C8862A' },
+    success: { main: '#2E9B4E' },
+    warning: { main: '#E8920A' },
     error: { main: '#C62828' },
   },
   typography: {
@@ -44,7 +48,7 @@ const theme = createTheme({
     },
     MuiAppBar: {
       styleOverrides: {
-        root: { boxShadow: '0 1px 4px rgba(0,0,0,0.12)' },
+        root: { boxShadow: '0 1px 4px rgba(0,0,0,0.18)' },
       },
     },
     MuiCard: {
@@ -60,6 +64,14 @@ const theme = createTheme({
     MuiTableCell: {
       styleOverrides: {
         head: { fontWeight: 600, backgroundColor: '#F4F6F9' },
+      },
+    },
+    MuiStepIcon: {
+      styleOverrides: {
+        root: {
+          '&.Mui-active': { color: '#1E3D8F' },
+          '&.Mui-completed': { color: '#2E9B4E' },
+        },
       },
     },
   },

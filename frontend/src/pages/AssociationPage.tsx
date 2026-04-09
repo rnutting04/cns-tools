@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Chip from '@mui/material/Chip'
+import CircularProgress from '@mui/material/CircularProgress'
 import Dialog from '@mui/material/Dialog'
 import DialogActions from '@mui/material/DialogActions'
 import DialogContent from '@mui/material/DialogContent'
@@ -422,7 +423,12 @@ export default function AssociationPage() {
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button onClick={() => setFormOpen(false)} disabled={formLoading}>Cancel</Button>
-          <Button variant="contained" onClick={handleFormSubmit} disabled={formLoading}>
+          <Button
+            variant="contained"
+            onClick={handleFormSubmit}
+            disabled={formLoading}
+            startIcon={formLoading ? <CircularProgress size={16} color="inherit" /> : undefined}
+          >
             {formLoading ? 'Saving…' : 'Save'}
           </Button>
         </DialogActions>
@@ -494,6 +500,7 @@ export default function AssociationPage() {
               onClick={handleAssignManager}
               disabled={!selectedUserId || managerLoading}
               fullWidth
+              startIcon={managerLoading ? <CircularProgress size={16} color="inherit" /> : undefined}
             >
               {managerLoading ? 'Assigning…' : 'Assign'}
             </Button>

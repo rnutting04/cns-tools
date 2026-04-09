@@ -5,10 +5,12 @@ import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Card from '@mui/material/Card'
 import CardContent from '@mui/material/CardContent'
+import CircularProgress from '@mui/material/CircularProgress'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import { useAuth } from '../hooks/useAuth'
 import ErrorAlert from '../components/layout/ErrorAlert'
+import CnsLogo from '../components/common/CnsLogo'
 
 export default function LoginPage() {
   const { login } = useAuth()
@@ -41,15 +43,47 @@ export default function LoginPage() {
       justifyContent="center"
       alignItems="center"
       minHeight="100vh"
-      bgcolor="background.default"
+      sx={{
+        background: 'linear-gradient(145deg, #0F2057 0%, #1E3D8F 45%, #1D7834 100%)',
+      }}
     >
-      <Card sx={{ width: '100%', maxWidth: 400, mx: 2 }}>
+      <Card sx={{ width: '100%', maxWidth: 420, mx: 2, borderRadius: 3, overflow: 'hidden', boxShadow: '0 8px 40px rgba(0,0,0,0.28)' }}>
+        {/* Brand header bar */}
+        <Box
+          sx={{
+            bgcolor: '#1E3D8F',
+            pt: 4,
+            pb: 3,
+            px: 4,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 1.5,
+          }}
+        >
+          <CnsLogo height={56} showText={false} />
+          <Box textAlign="center">
+            <Typography
+              variant="subtitle2"
+              sx={{
+                color: 'rgba(255,255,255,0.9)',
+                letterSpacing: '1.5px',
+                fontSize: '0.7rem',
+                fontWeight: 600,
+                textTransform: 'uppercase',
+              }}
+            >
+              Community Management Services, Inc.
+            </Typography>
+          </Box>
+        </Box>
+
         <CardContent sx={{ p: 4 }}>
-          <Typography variant="h5" mb={0.5}>
-            CNS Tools
+          <Typography variant="h6" fontWeight={600} mb={0.5} color="text.primary">
+            Sign in
           </Typography>
           <Typography variant="body2" color="text.secondary" mb={3}>
-            Sign in to your account
+            Enter your credentials to access your account
           </Typography>
 
           {error && <ErrorAlert message={error} onClose={() => setError(null)} />}
@@ -79,6 +113,7 @@ export default function LoginPage() {
               variant="contained"
               size="large"
               disabled={loading}
+              startIcon={loading ? <CircularProgress size={18} color="inherit" /> : undefined}
               sx={{ mt: 1 }}
             >
               {loading ? 'Signing in…' : 'Sign in'}

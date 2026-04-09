@@ -28,8 +28,8 @@ import { useAuth } from '../hooks/useAuth'
 import ErrorAlert from '../components/layout/ErrorAlert'
 import BallotCandidateEditor from '../components/letters/BallotCandidateEditor'
 import NoticeCandidacyWarningDialog from '../components/letters/NoticeCandidacyWarningDialog'
-import type { Association, Template } from '../types'
-
+import type { Association, Template, ProxyVote } from '../types'
+import ProxyVoteEditor from '../components/letters/ProxyVoteEditor'
 const STEPS = ['Select template', 'Fill in fields', 'Generate']
 
 const AUTO_POPULATE_KEYS = new Set([
@@ -157,43 +157,6 @@ function TemplateStep({
           </Box>
         </Box>
       ))}
-    </Box>
-  )
-}
-
-function ProxyVotesEditor({
-  values,
-  onVotesChange,
-}: {
-  values: FieldValueMap
-  onVotesChange: (votes: string[]) => void
-}) {
-  const currentVotes = Array.isArray(values.votes) ? (values.votes as string[]) : []
-  const textValue = currentVotes.join('\n')
-
-  return (
-    <Box>
-      <Typography variant="subtitle2" color="text.secondary" mb={1}>
-        Proxy vote items
-      </Typography>
-
-      <TextField
-        label="Votes"
-        size="small"
-        fullWidth
-        multiline
-        minRows={6}
-        value={textValue}
-        onChange={(e) => {
-          const lines = e.target.value
-            .split('\n')
-            .map((line) => line.trim())
-            .filter(Boolean)
-
-          onVotesChange(lines)
-        }}
-        helperText="Enter one vote item per line."
-      />
     </Box>
   )
 }
@@ -404,33 +367,38 @@ function FieldsStep({
 
       {rendererType === 'proxy' && (
         <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
-          <ProxyVotesEditor
-            values={values}
-            onVotesChange={(votes) => onChange('votes', votes)}
+          <ProxyVoteEditor
+            votes={Array.isArray(values.votes) ? (values.votes as ProxyVote[]) : []}
+            onChange={(votes) => onChange('votes', votes)}
           />
         </Paper>
       )}
-
       {(rendererType === 'ballot' || rendererType === 'electronic_ballot') && (
         <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
           {(() => {
             const thisYear = new Date().getFullYear()
+            const candidates = Array.isArray(values.candidates)
+              ? (values.candidates as string[])
+              : []
+
             return (
               <Box display="flex" flexDirection="column" gap={2}>
-                <FormControl size="small" fullWidth>
-                  <InputLabel>Ballot year</InputLabel>
-                  <Select
-                    value={String(values.ballot_year ?? '')}
-                    label="Ballot year"
-                    onChange={(e) => onChange('ballot_year', e.target.value)}
-                  >
-                    <MenuItem value={String(thisYear)}>{thisYear}</MenuItem>
-                    <MenuItem value={String(thisYear + 1)}>{thisYear + 1}</MenuItem>
-                  </Select>
-                </FormControl>
+                {rendererType === 'ballot' && (
+                  <FormControl size="small" fullWidth>
+                    <InputLabel>Ballot year</InputLabel>
+                    <Select
+                      value={String(values.ballot_year ?? '')}
+                      label="Ballot year"
+                      onChange={(e) => onChange('ballot_year', e.target.value)}
+                    >
+                      <MenuItem value={String(thisYear)}>{thisYear}</MenuItem>
+                      <MenuItem value={String(thisYear + 1)}>{thisYear + 1}</MenuItem>
+                    </Select>
+                  </FormControl>
+                )}
 
                 <BallotCandidateEditor
-                  candidates={Array.isArray(values.candidates) ? (values.candidates as string[]) : []}
+                  candidates={candidates}
                   onChange={(c) => onChange('candidates', c)}
                 />
               </Box>
@@ -448,7 +416,9 @@ function GenerateStep({
   associations,
   managers,
   onGenerate,
+  onDownload,
   generating,
+  downloading,
   downloadUrl,
   error,
   onReset,
@@ -458,7 +428,9 @@ function GenerateStep({
   associations: Association[]
   managers: ManagerOption[]
   onGenerate: () => void
+  onDownload: () => void
   generating: boolean
+  downloading: boolean
   downloadUrl: string | null
   error: string | null
   onReset: () => void
@@ -556,15 +528,14 @@ function GenerateStep({
           </Box>
 
           <Box display="flex" gap={2} flexWrap="wrap">
-            <Button
-              variant="contained"
-              startIcon={<DownloadIcon />}
-              href={downloadUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Download letter
-            </Button>
+          <Button
+            variant="contained"
+            startIcon={downloading ? <CircularProgress size={16} color="inherit" /> : <DownloadIcon />}
+            onClick={onDownload}
+            disabled={downloading}
+          >
+            {downloading ? 'Downloading…' : 'Download letter'}
+          </Button>
 
             <Button variant="outlined" startIcon={<RestartAltIcon />} onClick={onReset}>
               Generate another
@@ -579,31 +550,70 @@ function GenerateStep({
             </Typography>
           )}
 
-          <Button
-            variant="contained"
-            onClick={onGenerate}
-            disabled={generating}
-            startIcon={generating ? <CircularProgress size={16} color="inherit" /> : undefined}
-          >
-            {generating ? 'Generating…' : 'Generate letter'}
-          </Button>
+        <Button
+          variant="contained"
+          onClick={onGenerate}
+          disabled={generating}
+          startIcon={generating ? <CircularProgress size={16} color="inherit" /> : undefined}
+        >
+          {generating ? 'Generating…' : 'Generate letter'}
+        </Button>
         </Box>
       )}
     </Box>
   )
 }
 
+function isProxyVoteComplete(vote: ProxyVote): boolean {
+  const has = (value?: string) => !!value?.trim()
+
+  switch (vote.type) {
+    case 'waive_financial_one_year':
+      return has(vote.fiscal_year)
+
+    case 'lower_financial_level':
+      return ( has(vote.from_level) &&
+        has(vote.to_level) &&
+        has(vote.fiscal_year) &&
+        vote.from_level !== vote.to_level
+      )
+
+    case 'cross_utilization_reserves':
+      return has(vote.fiscal_year)
+
+    case 'straight_line_to_pooled':
+      return true
+
+    case 'partial_reserve_funding':
+      return has(vote.percentage) && has(vote.fiscal_year)
+
+    case 'waive_reserves':
+      return has(vote.fiscal_year)
+
+    case 'use_reserves_other_purpose':
+      return has(vote.amount) && has(vote.reserve_from) && has(vote.purpose)
+
+    case 'move_reserve_line_items':
+      return has(vote.amount) && has(vote.reserve_from) && has(vote.reserve_to)
+
+    case 'irs_rollover':
+      return has(vote.tax_year)
+
+    default:
+      return false
+  }
+}
+
 export default function LetterGeneratorPage() {
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
   const { user } = useAuth()
-
   const [activeStep, setActiveStep] = useState(0)
   const [templates, setTemplates] = useState<Template[]>([])
   const [associations, setAssociations] = useState<Association[]>([])
   const [managers, setManagers] = useState<ManagerOption[]>([])
   const [loadError, setLoadError] = useState<string | null>(null)
-
+  const [downloading, setDownloading] = useState(false)
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null)
   const [fieldValues, setFieldValues] = useState<FieldValueMap>({})
 
@@ -650,11 +660,20 @@ export default function LetterGeneratorPage() {
 
       // Ballot renderers require a year selection and at least one non-empty candidate
       if (rendererType === 'ballot' || rendererType === 'electronic_ballot') {
-        if (!fieldValues.ballot_year) return false
+        if (rendererType === 'ballot' && !fieldValues.ballot_year) return false
+      
         const candidates = Array.isArray(fieldValues.candidates)
           ? (fieldValues.candidates as string[])
           : []
+      
         if (candidates.length === 0 || candidates.some((c) => !c.trim())) return false
+      }
+
+      if (rendererType === 'proxy') {
+        const votes = Array.isArray(fieldValues.votes) ? (fieldValues.votes as ProxyVote[]) : []
+      
+        if (votes.length === 0) return false
+        if (votes.some((vote) => !isProxyVoteComplete(vote))) return false
       }
 
       const manualFields = selectedTemplate.fields.filter((f) => !AUTO_POPULATE_KEYS.has(f.key))
@@ -680,6 +699,35 @@ export default function LetterGeneratorPage() {
 
   const handleBack = () => {
     setActiveStep((s) => Math.max(s - 1, 0))
+  }
+
+  const handleDownload = async () => {
+    if (!downloadUrl) return
+  
+    try {
+      setDownloading(true)
+  
+      const response = await fetch(downloadUrl)
+      if (!response.ok) {
+        throw new Error('Failed to download file.')
+      }
+  
+      const blob = await response.blob()
+      const blobUrl = window.URL.createObjectURL(blob)
+  
+      const a = document.createElement('a')
+      a.href = blobUrl
+      a.download = `${selectedTemplate?.name ?? 'letter'}.docx`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+  
+      window.URL.revokeObjectURL(blobUrl)
+    } catch {
+      setGenError('Failed to download file.')
+    } finally {
+      setDownloading(false)
+    }
   }
 
   const handleGenerate = async () => {
@@ -739,7 +787,7 @@ export default function LetterGeneratorPage() {
       return
     }
     handleGenerate()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTemplate, isMeetingDateInNoticePeriod])
 
   const handleReset = () => {
@@ -803,7 +851,9 @@ export default function LetterGeneratorPage() {
             associations={associations}
             managers={managers}
             onGenerate={handleGenerateClick}
+            onDownload={handleDownload}
             generating={generating}
+            downloading={downloading}
             downloadUrl={downloadUrl}
             error={genError}
             onReset={handleReset}

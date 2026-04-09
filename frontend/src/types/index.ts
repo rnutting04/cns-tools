@@ -2,6 +2,33 @@ export type UserRole = 'super_admin' | 'admin' | 'manager' | 'employee'
 export type RendererType = 'simple' | 'proxy' | 'ballot' | 'electronic_ballot' | 'notice_candidacy'
 export type FieldType = 'text' | 'date' | 'dropdown' | 'association' | 'manager' | 'time'
 
+
+
+export type ProxyVoteType =
+  | 'waive_financial_one_year'
+  | 'lower_financial_level'
+  | 'cross_utilization_reserves'
+  | 'straight_line_to_pooled'
+  | 'partial_reserve_funding'
+  | 'waive_reserves'
+  | 'use_reserves_other_purpose'
+  | 'move_reserve_line_items'
+  | 'irs_rollover'
+
+export type ProxyVote = {
+  type: ProxyVoteType
+  fiscal_year?: string
+  from_level?: string
+  to_level?: string
+  percentage?: string
+  amount?: string
+  reserve_from?: string
+  reserve_to?: string
+  purpose?: string
+  tax_year?: string
+}
+
+
 export interface FieldDefinition {
   key: string
   label: string

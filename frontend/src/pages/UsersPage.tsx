@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Chip from '@mui/material/Chip'
+import CircularProgress from '@mui/material/CircularProgress'
 import Dialog from '@mui/material/Dialog'
 import DialogActions from '@mui/material/DialogActions'
 import DialogContent from '@mui/material/DialogContent'
@@ -415,7 +416,12 @@ export default function UsersPage() {
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button onClick={() => setCreateOpen(false)} disabled={createLoading}>Cancel</Button>
-          <Button variant="contained" onClick={handleCreate} disabled={createLoading}>
+          <Button
+            variant="contained"
+            onClick={handleCreate}
+            disabled={createLoading}
+            startIcon={createLoading ? <CircularProgress size={16} color="inherit" /> : undefined}
+          >
             {createLoading ? 'Creating…' : 'Create'}
           </Button>
         </DialogActions>
@@ -449,7 +455,12 @@ export default function UsersPage() {
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button onClick={() => setEditTarget(null)} disabled={editLoading}>Cancel</Button>
-          <Button variant="contained" onClick={handleEdit} disabled={editLoading}>
+          <Button
+            variant="contained"
+            onClick={handleEdit}
+            disabled={editLoading}
+            startIcon={editLoading ? <CircularProgress size={16} color="inherit" /> : undefined}
+          >
             {editLoading ? 'Saving…' : 'Save'}
           </Button>
         </DialogActions>
@@ -476,7 +487,12 @@ export default function UsersPage() {
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button onClick={() => setRoleTarget(null)} disabled={roleLoading}>Cancel</Button>
-          <Button variant="contained" onClick={handleRoleChange} disabled={roleLoading}>
+          <Button
+            variant="contained"
+            onClick={handleRoleChange}
+            disabled={roleLoading}
+            startIcon={roleLoading ? <CircularProgress size={16} color="inherit" /> : undefined}
+          >
             {roleLoading ? 'Saving…' : 'Save'}
           </Button>
         </DialogActions>

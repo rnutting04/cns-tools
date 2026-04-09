@@ -8,6 +8,12 @@ from docx.shared import Pt
 from app.services.letter_generator import replace_placeholders
 
 
+PROXY_WARNING_TEXT = (
+    "WAIVING OF RESERVES, IN WHOLE OR IN PART, OR ALLOWING ALTERNATIVE USES OF "
+    "EXISTING RESERVES MAY RESULT IN UNIT OWNER LIABILITY FOR PAYMENT OF "
+    "UNANTICIPATED SPECIAL ASSESSMENTS REGARDING THOSE ITEMS."
+)
+
 # ─── SIMPLE RENDERER ─────────────────────────────────────────
 
 def simple_renderer(template_bytes: bytes, field_values: dict) -> bytes:
@@ -21,24 +27,152 @@ def simple_renderer(template_bytes: bytes, field_values: dict) -> bytes:
 
 # ─── PROXY RENDERER ──────────────────────────────────────────
 
+def _render_proxy_vote_text(vote: dict) -> tuple[str, bool]:
+    vote_type = vote.get("type")
+
+    if vote_type == "waive_financial_one_year":
+        return (
+            "I approve waiving the financial reporting requirement and for preparation "
+            "of a lower level of financial reports, as set forth in Section 718.111 (13), "
+            f"Florida Statutes for the fiscal year {vote.get('fiscal_year', '')}.",
+            False,
+        )
+
+    if vote_type == "lower_financial_level":
+        return (
+            "I approve lowering the level of the financial reporting requirement from "
+            f"{vote.get('from_level', '')} to {vote.get('to_level', '')} as set forth in "
+            f"Section 718.111(13) Florida Statutes for the fiscal year {vote.get('fiscal_year', '')}.",
+            False,
+        )
+
+    if vote_type == "cross_utilization_reserves":
+        return (
+            "I approve the cross utilization of reserve line item funds and to use funds "
+            "for additional deferred maintenance expenses or replacement costs per 718.112 (2) "
+            f"of the Florida Statutes for the fiscal year {vote.get('fiscal_year', '')}.",
+            True,
+        )
+
+    if vote_type == "straight_line_to_pooled":
+        return (
+            "I am in favor of changing reserve funding from straight line to pooled reserves "
+            "as per Florida Statute 718.",
+            False,
+        )
+
+    if vote_type == "partial_reserve_funding":
+        return (
+            "I am in favor of waiving the fully funding of reserves per the Florida Statute "
+            f"718.112(2)(f) and funding the reserves at a {vote.get('percentage', '')}% rate "
+            f"for the fiscal year {vote.get('fiscal_year', '')}.",
+            True,
+        )
+
+    if vote_type == "waive_reserves":
+        return (
+            "I am in favor of waiving the fully funding of reserves per the Florida Statute "
+            f"718.112(2)(f) for the fiscal year {vote.get('fiscal_year', '')}.",
+            True,
+        )
+
+    if vote_type == "use_reserves_other_purpose":
+        return (
+            "I authorize the Board of Directors to use up to "
+            f"${vote.get('amount', '')} of reserve funds from line item "
+            f"{vote.get('reserve_from', '')} for {vote.get('purpose', '')} costs.",
+            True,
+        )
+
+    if vote_type == "move_reserve_line_items":
+        return (
+            "I authorize the Board of Directors to move "
+            f"{vote.get('amount', '')} from reserve line item {vote.get('reserve_from', '')} "
+            f"to reserve line item {vote.get('reserve_to', '')}.",
+            True,
+        )
+
+    if vote_type == "irs_rollover":
+        return (
+            "I approve the adoption of Resolution IRS-70-604 which states that any excess "
+            "of Membership income over membership expenses for the tax year ended "
+            f"{vote.get('tax_year', '')}, shall be applied against the succeeding tax years "
+            "member assessments.",
+            False,
+        )
+
+    return "", False
+
+
+def _build_proxy_vote_table(doc: Document, vote_texts: list[str]):
+    tmp = doc.add_table(rows=0, cols=2)
+
+    for text in vote_texts:
+        row = tmp.add_row().cells
+
+        p_left = row[0].paragraphs[0]
+        p_left.paragraph_format.space_before = Pt(0)
+        p_left.paragraph_format.space_after = Pt(0)
+        r_left = p_left.add_run(text)
+        r_left.font.size = Pt(12)
+
+        p_right = row[1].paragraphs[0]
+        p_right.paragraph_format.space_before = Pt(0)
+        p_right.paragraph_format.space_after = Pt(0)
+        p_right.alignment = 1  # center
+        r_right = p_right.add_run("YES ___ NO ___")
+        r_right.font.size = Pt(12)
+
+        _set_cell_width(row[0], 7200)
+        _set_cell_width(row[1], 1800)
+
+    _set_no_borders(tmp._tbl)
+
+    tbl_el = tmp._tbl
+    tbl_el.getparent().remove(tbl_el)
+    return tbl_el
+
+
 def proxy_renderer(template_bytes: bytes, field_values: dict) -> bytes:
     doc = Document(BytesIO(template_bytes))
 
-    replace_placeholders(doc, field_values)
+    votes = field_values.get("votes", [])
+    if not isinstance(votes, list):
+        votes = []
 
-    for p in doc.paragraphs:
-        if "{{BLOCK:PROXY_VOTES}}" in p.text:
-            p.text = ""
+    rendered_votes: list[str] = []
+    needs_warning = False
 
-            table = doc.add_table(rows=0, cols=2)
-            votes = field_values.get("votes", [])
+    for vote in votes:
+        if not isinstance(vote, dict):
+            continue
+        text, warning = _render_proxy_vote_text(vote)
+        if text:
+            rendered_votes.append(text)
+        if warning:
+            needs_warning = True
 
-            for v in votes:
-                row = table.add_row().cells
-                row[0].text = v
-                row[1].text = "YES ___ NO ___"
+    fv = dict(field_values)
+    matter_count = len(rendered_votes)
+    fv["proxy_matter_count"] = str(matter_count)
+    fv["proxy_matter_count_word_num_lower"] = _word_num_lower(matter_count)
 
-            p._element.addnext(table._element)
+    # Remove block anchors before generic replacement
+    vote_elements = []
+    if rendered_votes:
+        vote_elements.append(_build_proxy_vote_table(doc, rendered_votes))
+    _replace_anchor(doc, "{{BLOCK:PROXY_VOTES}}", vote_elements)
+
+    if needs_warning:
+        warning_para = doc.add_paragraph()
+        warning_run = warning_para.add_run(PROXY_WARNING_TEXT)
+        warning_run.bold = True
+        warning_run.font.size = Pt(12)
+        _replace_anchor(doc, "{{BLOCK:PROXY_WARNING}}", [warning_para._element])
+    else:
+        _replace_anchor(doc, "{{BLOCK:PROXY_WARNING}}", [])
+
+    replace_placeholders(doc, fv)
 
     output = BytesIO()
     doc.save(output)
@@ -253,28 +387,88 @@ def ballot_renderer(template_bytes: bytes, field_values: dict) -> bytes:
 
 def _build_electronic_ballot_table(doc: Document, candidates: list[str]):
     """
-    Build a borderless two-column table:
-      Col 1 (narrow): ☐ checkbox character
-      Col 2 (wide):   numbered candidate name in uppercase
-    Returns the detached tbl element.
-    """
-    tmp = doc.add_table(rows=0, cols=2)
+    Build a borderless 4-column table in a two-up ballot layout:
 
-    for i, name in enumerate(candidates, start=1):
+        1. Patricia Costa      ☐      5. Ed Malachowski      ☐
+        2. Daniel Gilreath     ☐      6. Paul Melton         ☐
+
+    Columns:
+      1 = left numbered candidate
+      2 = left checkbox
+      3 = right numbered candidate
+      4 = right checkbox
+
+    Candidates are split evenly across the two sides.
+    """
+    tmp = doc.add_table(rows=0, cols=4)
+
+    left = candidates[: (len(candidates) + 1) // 2]
+    right = candidates[(len(candidates) + 1) // 2 :]
+
+    rows_needed = max(len(left), len(right))
+
+    for i in range(rows_needed):
         row = tmp.add_row().cells
-        run0 = row[0].paragraphs[0].add_run("\u2610")  # ☐
-        run0.font.size = Pt(12)
-        run1 = row[1].paragraphs[0].add_run(f"{i}.  {name.upper()}")
-        run1.font.size = Pt(12)
-        _set_cell_width(row[0], 360)    # ~0.25 inch
-        _set_cell_width(row[1], 7560)   # remainder
+
+        # Left side
+        if i < len(left):
+            p = row[0].paragraphs[0]
+            p.alignment = 0  # left
+            p.paragraph_format.space_before = Pt(0)
+            p.paragraph_format.space_after = Pt(0)
+            r = p.add_run(f"{i + 1}. {left[i]}")
+            r.font.size = Pt(12)
+
+            p_box = row[1].paragraphs[0]
+            p_box.alignment = 1  # center
+            p_box.paragraph_format.space_before = Pt(0)
+            p_box.paragraph_format.space_after = Pt(0)
+            r_box = p_box.add_run("\u2610")  # ☐
+            r_box.font.size = Pt(12)
+        else:
+            row[0].text = ""
+            row[1].text = ""
+
+        # Right side
+        if i < len(right):
+            right_num = len(left) + i + 1
+
+            p = row[2].paragraphs[0]
+            p.alignment = 0  # left
+            p.paragraph_format.space_before = Pt(0)
+            p.paragraph_format.space_after = Pt(0)
+            r = p.add_run(f"{right_num}. {right[i]}")
+            r.font.size = Pt(12)
+
+            p_box = row[3].paragraphs[0]
+            p_box.alignment = 1  # center
+            p_box.paragraph_format.space_before = Pt(0)
+            p_box.paragraph_format.space_after = Pt(0)
+            r_box = p_box.add_run("\u2610")  # ☐
+            r_box.font.size = Pt(12)
+        else:
+            row[2].text = ""
+            row[3].text = ""
+
+        # Tight widths so the layout resembles the sample more closely
+        _set_cell_width(row[0], 3000)  # left name
+        _set_cell_width(row[1], 450)   # left checkbox
+        _set_cell_width(row[2], 3000)  # right name
+        _set_cell_width(row[3], 450)   # right checkbox
 
     _set_no_borders(tmp._tbl)
+
+    # center the whole table
+    tblPr = tmp._tbl.tblPr
+    jc = tblPr.find(qn("w:jc"))
+    if jc is None:
+        jc = OxmlElement("w:jc")
+        tblPr.append(jc)
+    jc.set(qn("w:val"), "center")
 
     tbl_el = tmp._tbl
     tbl_el.getparent().remove(tbl_el)
     return tbl_el
-
 
 def electronic_ballot_renderer(template_bytes: bytes, field_values: dict) -> bytes:
     candidates, fv = _build_ballot_field_values(field_values)

@@ -10,6 +10,7 @@ import LogoutIcon from '@mui/icons-material/Logout'
 import MenuIcon from '@mui/icons-material/Menu'
 import { useAuth } from '../../hooks/useAuth'
 import { useNavigate } from 'react-router-dom'
+import CnsLogo from './CnsLogo'
 
 interface Props {
   onMenuClick: () => void
@@ -41,9 +42,22 @@ export default function TopBar({ onMenuClick }: Props) {
             <MenuIcon />
           </IconButton>
         )}
-        <Typography variant="h6" sx={{ flexShrink: 0 }}>
-          CNS Tools
-        </Typography>
+
+        {/* Logo + app name */}
+        <Box display="flex" alignItems="center" gap={1.5} sx={{ flexShrink: 0 }}>
+          <CnsLogo height={32} />
+          {!isMobile && (
+            <Box>
+              <Typography variant="subtitle2" sx={{ color: 'primary.contrastText', fontWeight: 700, lineHeight: 1.1, fontSize: '0.85rem' }}>
+                C&amp;S Community Management
+              </Typography>
+              <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.7)', lineHeight: 1, fontSize: '0.65rem', letterSpacing: '0.5px' }}>
+                Services, Inc.
+              </Typography>
+            </Box>
+          )}
+        </Box>
+
         <Box flex={1} />
         {user && (
           <Box display="flex" alignItems="center" gap={{ xs: 1, sm: 2 }}>
