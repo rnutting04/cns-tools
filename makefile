@@ -2,7 +2,7 @@
 
 dev:
 	docker compose up -d
-	cd backend && uvicorn app.main:app --reload --port 8000
+	cd backend && venv/bin/python -m uvicorn app.main:app --reload --port 8000
 
 seed:
 	./scripts/seed.sh

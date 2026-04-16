@@ -8,7 +8,7 @@ cd "$(dirname "$0")/../backend" || exit 1
 # check venv is activated
 if [ -z "$VIRTUAL_ENV" ]; then
     echo "venv is not activated. Activating..."
-    source ..backend/venv/bin/activate
+    source ../backend/venv/bin/activate
 fi
 
 # run seed script

@@ -1,0 +1,122 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+  pull_request:
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+
+      
+      # - name: Lint frontend
+      #   run: npm run lint
+      #
+      # - name: Typecheck frontend
+      #   run: npm run typecheck
+
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: cs_user
+          POSTGRES_PASSWORD: localpassword
+          POSTGRES_DB: cs_tool_hub
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U cs_user -d cs_tool_hub"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+      minio:
+        image: minio/minio
+        env:
+          MINIO_ROOT_USER: local_access_key
+          MINIO_ROOT_PASSWORD: local_secret_key
+        ports:
+          - 9000:9000
+        options: >-
+          --health-cmd="curl -f http://localhost:9000/minio/health/live || exit 1"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+        volumes:
+          - /tmp/minio-data:/data
+        command: server /data --console-address ":9001"
+
+    env:
+      DATABASE_URL: postgresql://cs_user:localpassword@localhost:5432/cs_tool_hub
+      SECRET_KEY: ci_secret_key
+      SPACES_ENDPOINT: http://localhost:9000
+      SPACES_KEY: local_access_key
+      SPACES_SECRET: local_secret_key
+      SPACES_BUCKET: cs-tool-hub
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y curl
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Wait for Postgres
+        run: |
+          until pg_isready -h localhost -p 5432 -U cs_user -d cs_tool_hub; do
+            echo "Waiting for Postgres..."
+            sleep 2
+          done
+
+      - name: Run Alembic migrations
+        run: alembic upgrade head
+
+      - name: Backend import check
+        run: python -c "from app.main import app; print('Backend import OK')"
+
+      # - name: Seed database
+      #   run: python -m scripts.seed
+
+      # - name: Run backend tests
+      #   run: pytest
