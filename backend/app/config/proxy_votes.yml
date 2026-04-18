@@ -1,0 +1,81 @@
+# Proxy vote text templates used by the proxy renderer.
+#
+# Each vote type has:
+#   text:             The vote text, with {placeholder} substitutions filled
+#                     from the vote dict submitted by the user.
+#                     Missing placeholders render as empty strings (not errors).
+#   requires_warning: If true, the proxy warning text is included in the
+#                     generated letter when this vote type is present.
+#
+# To add a new vote type:
+#   1. Add an entry here with text + requires_warning
+#   2. The frontend needs to submit vote dicts with "type" matching the key
+#
+# The proxy_warning_text is shown in bold at the bottom of proxies that
+# contain any vote marked requires_warning: true.
+
+proxy_warning_text: >-
+  WAIVING OF RESERVES, IN WHOLE OR IN PART, OR ALLOWING ALTERNATIVE USES OF
+  EXISTING RESERVES MAY RESULT IN UNIT OWNER LIABILITY FOR PAYMENT OF
+  UNANTICIPATED SPECIAL ASSESSMENTS REGARDING THOSE ITEMS.
+
+votes:
+  waive_financial_one_year:
+    requires_warning: false
+    text: >-
+      I approve waiving the financial reporting requirement and for preparation
+      of a lower level of financial reports, as set forth in Section 718.111 (13),
+      Florida Statutes for the fiscal year {fiscal_year}.
+
+  lower_financial_level:
+    requires_warning: false
+    text: >-
+      I approve lowering the level of the financial reporting requirement from
+      {from_level} to {to_level} as set forth in Section 718.111(13) Florida
+      Statutes for the fiscal year {fiscal_year}.
+
+  cross_utilization_reserves:
+    requires_warning: true
+    text: >-
+      I approve the cross utilization of reserve line item funds and to use funds
+      for additional deferred maintenance expenses or replacement costs per
+      718.112 (2) of the Florida Statutes for the fiscal year {fiscal_year}.
+
+  straight_line_to_pooled:
+    requires_warning: false
+    text: >-
+      I am in favor of changing reserve funding from straight line to pooled
+      reserves as per Florida Statute 718.
+
+  partial_reserve_funding:
+    requires_warning: true
+    text: >-
+      I am in favor of waiving the fully funding of reserves per the Florida
+      Statute 718.112(2)(f) and funding the reserves at a {percentage}% rate
+      for the fiscal year {fiscal_year}.
+
+  waive_reserves:
+    requires_warning: true
+    text: >-
+      I am in favor of waiving the fully funding of reserves per the Florida
+      Statute 718.112(2)(f) for the fiscal year {fiscal_year}.
+
+  use_reserves_other_purpose:
+    requires_warning: true
+    text: >-
+      I authorize the Board of Directors to use up to ${amount} of reserve funds
+      from line item {reserve_from} for {purpose} costs.
+
+  move_reserve_line_items:
+    requires_warning: true
+    text: >-
+      I authorize the Board of Directors to move {amount} from reserve line item
+      {reserve_from} to reserve line item {reserve_to}.
+
+  irs_rollover:
+    requires_warning: false
+    text: >-
+      I approve the adoption of Resolution IRS-70-604 which states that any
+      excess of Membership income over membership expenses for the tax year
+      ended {tax_year}, shall be applied against the succeeding tax years
+      member assessments.

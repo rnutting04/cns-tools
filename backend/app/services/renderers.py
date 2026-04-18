@@ -1,3 +1,4 @@
+# app/services/renderers.py
 from io import BytesIO
 
 from docx import Document
@@ -5,14 +6,12 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Pt
 
+from app.config.letter_config import (
+    get_proxy_warning_text,
+    render_proxy_vote,
+)
 from app.services.letter_generator import replace_placeholders
 
-
-PROXY_WARNING_TEXT = (
-    "WAIVING OF RESERVES, IN WHOLE OR IN PART, OR ALLOWING ALTERNATIVE USES OF "
-    "EXISTING RESERVES MAY RESULT IN UNIT OWNER LIABILITY FOR PAYMENT OF "
-    "UNANTICIPATED SPECIAL ASSESSMENTS REGARDING THOSE ITEMS."
-)
 
 # ─── SIMPLE RENDERER ─────────────────────────────────────────
 
@@ -26,83 +25,6 @@ def simple_renderer(template_bytes: bytes, field_values: dict) -> bytes:
 
 
 # ─── PROXY RENDERER ──────────────────────────────────────────
-
-def _render_proxy_vote_text(vote: dict) -> tuple[str, bool]:
-    vote_type = vote.get("type")
-
-    if vote_type == "waive_financial_one_year":
-        return (
-            "I approve waiving the financial reporting requirement and for preparation "
-            "of a lower level of financial reports, as set forth in Section 718.111 (13), "
-            f"Florida Statutes for the fiscal year {vote.get('fiscal_year', '')}.",
-            False,
-        )
-
-    if vote_type == "lower_financial_level":
-        return (
-            "I approve lowering the level of the financial reporting requirement from "
-            f"{vote.get('from_level', '')} to {vote.get('to_level', '')} as set forth in "
-            f"Section 718.111(13) Florida Statutes for the fiscal year {vote.get('fiscal_year', '')}.",
-            False,
-        )
-
-    if vote_type == "cross_utilization_reserves":
-        return (
-            "I approve the cross utilization of reserve line item funds and to use funds "
-            "for additional deferred maintenance expenses or replacement costs per 718.112 (2) "
-            f"of the Florida Statutes for the fiscal year {vote.get('fiscal_year', '')}.",
-            True,
-        )
-
-    if vote_type == "straight_line_to_pooled":
-        return (
-            "I am in favor of changing reserve funding from straight line to pooled reserves "
-            "as per Florida Statute 718.",
-            False,
-        )
-
-    if vote_type == "partial_reserve_funding":
-        return (
-            "I am in favor of waiving the fully funding of reserves per the Florida Statute "
-            f"718.112(2)(f) and funding the reserves at a {vote.get('percentage', '')}% rate "
-            f"for the fiscal year {vote.get('fiscal_year', '')}.",
-            True,
-        )
-
-    if vote_type == "waive_reserves":
-        return (
-            "I am in favor of waiving the fully funding of reserves per the Florida Statute "
-            f"718.112(2)(f) for the fiscal year {vote.get('fiscal_year', '')}.",
-            True,
-        )
-
-    if vote_type == "use_reserves_other_purpose":
-        return (
-            "I authorize the Board of Directors to use up to "
-            f"${vote.get('amount', '')} of reserve funds from line item "
-            f"{vote.get('reserve_from', '')} for {vote.get('purpose', '')} costs.",
-            True,
-        )
-
-    if vote_type == "move_reserve_line_items":
-        return (
-            "I authorize the Board of Directors to move "
-            f"{vote.get('amount', '')} from reserve line item {vote.get('reserve_from', '')} "
-            f"to reserve line item {vote.get('reserve_to', '')}.",
-            True,
-        )
-
-    if vote_type == "irs_rollover":
-        return (
-            "I approve the adoption of Resolution IRS-70-604 which states that any excess "
-            "of Membership income over membership expenses for the tax year ended "
-            f"{vote.get('tax_year', '')}, shall be applied against the succeeding tax years "
-            "member assessments.",
-            False,
-        )
-
-    return "", False
-
 
 def _build_proxy_vote_table(doc: Document, vote_texts: list[str]):
     tmp = doc.add_table(rows=0, cols=2)
@@ -146,7 +68,7 @@ def proxy_renderer(template_bytes: bytes, field_values: dict) -> bytes:
     for vote in votes:
         if not isinstance(vote, dict):
             continue
-        text, warning = _render_proxy_vote_text(vote)
+        text, warning = render_proxy_vote(vote)
         if text:
             rendered_votes.append(text)
         if warning:
@@ -165,7 +87,7 @@ def proxy_renderer(template_bytes: bytes, field_values: dict) -> bytes:
 
     if needs_warning:
         warning_para = doc.add_paragraph()
-        warning_run = warning_para.add_run(PROXY_WARNING_TEXT)
+        warning_run = warning_para.add_run(get_proxy_warning_text())
         warning_run.bold = True
         warning_run.font.size = Pt(12)
         _replace_anchor(doc, "{{BLOCK:PROXY_WARNING}}", [warning_para._element])
@@ -359,7 +281,7 @@ def _build_ballot_table(doc: Document, candidates: list[str], two_col_threshold:
 
 
 def ballot_renderer(template_bytes: bytes, field_values: dict) -> bytes:
-   
+
     candidates, fv = _build_ballot_field_values(field_values)
 
     doc = Document(BytesIO(template_bytes))
@@ -469,6 +391,7 @@ def _build_electronic_ballot_table(doc: Document, candidates: list[str]):
     tbl_el = tmp._tbl
     tbl_el.getparent().remove(tbl_el)
     return tbl_el
+
 
 def electronic_ballot_renderer(template_bytes: bytes, field_values: dict) -> bytes:
     candidates, fv = _build_ballot_field_values(field_values)

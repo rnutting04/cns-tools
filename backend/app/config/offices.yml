@@ -1,0 +1,13 @@
+# Office locations used for letter generation.
+# Edit this file to add, remove, or update offices.
+# The top-level key is the value stored in `field_values["office_location"]`.
+
+Bradenton:
+  office_street: "4301 32nd Street West, Suite A20"
+  office_city_state_zip: "Bradenton, Florida 34205"
+  office_phone: "941-758-9454"
+
+Sarasota:
+  office_street: "5589 Marquesas Circle Unit 202"
+  office_city_state_zip: "Sarasota, Florida 34233"
+  office_phone: "941-377-3419"
