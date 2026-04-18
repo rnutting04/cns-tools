@@ -40,8 +40,8 @@ class VoteTemplate(TypedDict):
 # --- Office lookup -------------------------------------------------------
 @lru_cache(maxsize=1)
 def _load_offices() -> dict[str, OfficeData]:
-    """Load offices.yaml once and cache it."""
-    path = CONFIG_DIR / "offices.yaml"
+    """Load offices.yml once and cache it."""
+    path = CONFIG_DIR / "offices.yml"
     with path.open("r", encoding="utf-8") as f:
         data = yaml.safe_load(f) or {}
     return data
@@ -71,8 +71,8 @@ def list_office_names() -> list[str]:
 # --- Proxy vote templates ------------------------------------------------
 @lru_cache(maxsize=1)
 def _load_proxy_votes() -> dict:
-    """Load proxy_votes.yaml once and cache it."""
-    path = CONFIG_DIR / "proxy_votes.yaml"
+    """Load proxy_votes.yml once and cache it."""
+    path = CONFIG_DIR / "proxy_votes.yml"
     with path.open("r", encoding="utf-8") as f:
         data = yaml.safe_load(f) or {}
     return data
