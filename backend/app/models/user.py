@@ -23,6 +23,7 @@ class User(Base):
     title = Column(String(100), nullable=False)
     role = Column(Enum(UserRole), nullable=False, default=UserRole.manager)
     password_hash = Column(String(255), nullable=False)
+    password_change_required = Column(Boolean, nullable=False, default=True)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

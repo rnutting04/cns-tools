@@ -12,6 +12,8 @@ import PeopleIcon from '@mui/icons-material/People'
 import DescriptionIcon from '@mui/icons-material/Description'
 import FolderIcon from '@mui/icons-material/Folder'
 import TableChartIcon from '@mui/icons-material/TableChart'
+import SettingsIcon from '@mui/icons-material/Settings'
+import SecurityIcon from '@mui/icons-material/Security'
 import { NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import { hasRole } from '../../utils/auth'
@@ -47,6 +49,13 @@ const NAV_ITEMS: NavItem[] = [
     roles: ['admin', 'super_admin'],
   },
   { label: 'Excel tools', to: '/excel', icon: <TableChartIcon fontSize="small" /> },
+  {
+    label: 'Audit log',
+    to: '/audit',
+    icon: <SecurityIcon fontSize="small" />,
+    roles: ['super_admin'],
+  },
+  { label: 'Settings', to: '/settings', icon: <SettingsIcon fontSize="small" /> },
 ]
 
 interface Props {

@@ -14,6 +14,7 @@ from app.schemas.association import (
     AssociationWithManagers,
 )
 from app.schemas.user import UserResponse
+from app.services.audit import log_event
 from app.dependencies import get_current_user, require_admin, require_super_admin
 
 # Resolve forward reference: AssociationWithManagers.managers -> UserResponse
@@ -41,7 +42,6 @@ def list_associations(
         joinedload(Association.managers).joinedload(UserAssociation.user)
     )
     if current_user.role == UserRole.manager:
-        # Only return associations this manager is assigned to
         assigned_ids = (
             db.query(UserAssociation.association_id)
             .filter(UserAssociation.user_id == current_user.id)
@@ -56,7 +56,7 @@ def list_associations(
 def create_association(
     body: AssociationCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_admin),
+    current_user: User = Depends(require_admin),
 ):
     assoc = Association(
         legal_name=body.legal_name,
@@ -64,6 +64,19 @@ def create_association(
         location_name=body.location_name,
     )
     db.add(assoc)
+    db.flush()
+    log_event(
+        db,
+        actor=current_user,
+        action="association.created",
+        target_type="association",
+        target_id=str(assoc.id),
+        metadata={
+            "legal_name": assoc.legal_name,
+            "filter_name": assoc.filter_name,
+            "location_name": assoc.location_name,
+        },
+    )
     db.commit()
     db.refresh(assoc)
     return assoc
@@ -74,13 +87,22 @@ def update_association(
     association_id: UUID,
     body: AssociationUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_admin),
+    current_user: User = Depends(require_admin),
 ):
     assoc = db.query(Association).filter(Association.id == association_id).first()
     if not assoc:
         raise HTTPException(status_code=404, detail="Association not found")
-    for field, value in body.model_dump(exclude_unset=True).items():
+    updates = body.model_dump(exclude_unset=True)
+    for field, value in updates.items():
         setattr(assoc, field, value)
+    log_event(
+        db,
+        actor=current_user,
+        action="association.updated",
+        target_type="association",
+        target_id=str(association_id),
+        metadata=updates,
+    )
     db.commit()
     db.refresh(assoc)
     return assoc
@@ -90,12 +112,20 @@ def update_association(
 def deactivate_association(
     association_id: UUID,
     db: Session = Depends(get_db),
-    _: User = Depends(require_super_admin),
+    current_user: User = Depends(require_super_admin),
 ):
     assoc = db.query(Association).filter(Association.id == association_id).first()
     if not assoc:
         raise HTTPException(status_code=404, detail="Association not found")
     assoc.is_active = False
+    log_event(
+        db,
+        actor=current_user,
+        action="association.deactivated",
+        target_type="association",
+        target_id=str(association_id),
+        metadata={"legal_name": assoc.legal_name},
+    )
     db.commit()
 
 
@@ -108,21 +138,20 @@ def assign_manager(
     association_id: UUID,
     body: AssignManagerBody,
     db: Session = Depends(get_db),
-    _: User = Depends(require_admin),
+    current_user: User = Depends(require_admin),
 ):
     assoc = db.query(Association).filter(Association.id == association_id).first()
     if not assoc:
         raise HTTPException(status_code=404, detail="Association not found")
-    
+
     user = db.query(User).filter(User.id == body.user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
-    # must be at least manager role to be assigned
+
     if user.role not in (UserRole.manager, UserRole.admin, UserRole.super_admin):
         raise HTTPException(
-            status_code=400, 
-            detail="User must have at least manager role to be assigned to an association"
+            status_code=400,
+            detail="User must have at least manager role to be assigned to an association",
         )
 
     if not user.is_active:
@@ -138,8 +167,20 @@ def assign_manager(
     )
     if already_assigned:
         raise HTTPException(status_code=409, detail="Manager already assigned")
-    
+
     db.add(UserAssociation(user_id=body.user_id, association_id=association_id))
+    log_event(
+        db,
+        actor=current_user,
+        action="user_association.created",
+        target_type="association",
+        target_id=str(association_id),
+        metadata={
+            "user_id": str(body.user_id),
+            "user_email": user.email,
+            "association_name": assoc.legal_name,
+        },
+    )
     db.commit()
     db.refresh(assoc)
     return assoc
@@ -150,7 +191,7 @@ def remove_manager(
     association_id: UUID,
     user_id: UUID,
     db: Session = Depends(get_db),
-    _: User = Depends(require_admin),
+    current_user: User = Depends(require_admin),
 ):
     link = (
         db.query(UserAssociation)
@@ -162,5 +203,22 @@ def remove_manager(
     )
     if not link:
         raise HTTPException(status_code=404, detail="Assignment not found")
+
+    user_email = link.user.email if link.user else str(user_id)
+    assoc = db.query(Association).filter(Association.id == association_id).first()
+    assoc_name = assoc.legal_name if assoc else str(association_id)
+
     db.delete(link)
+    log_event(
+        db,
+        actor=current_user,
+        action="user_association.removed",
+        target_type="association",
+        target_id=str(association_id),
+        metadata={
+            "user_id": str(user_id),
+            "user_email": user_email,
+            "association_name": assoc_name,
+        },
+    )
     db.commit()

@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     SPACES_KEY: str
     SPACES_SECRET: str
     SPACES_BUCKET: str
+    AUDIT_RETENTION_DAYS: int = 365
 
     class Config:
         env_file = ENV_FILE

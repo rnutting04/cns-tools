@@ -9,6 +9,8 @@ import LetterGeneratorPage from '../pages/LetterGeneratorPage'
 import TemplateManagerPage from '../pages/TemplateManagerPage'
 import ExcelToolsPage from '../pages/ExcelToolsPage'
 import NotFoundPage from '../pages/NotFoundPage'
+import SettingsPage from '../pages/settings/SettingsPage'
+import AuditPage from '../pages/AuditPage'
 
 export default function AppRouter() {
   return (
@@ -50,6 +52,15 @@ export default function AppRouter() {
             }
           />
           <Route path="excel" element={<ExcelToolsPage />} />
+          <Route
+            path="audit"
+            element={
+              <ProtectedRoute allowedRoles={['super_admin']}>
+                <AuditPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route path="settings" element={<SettingsPage />} />
         </Route>
         <Route path="/404" element={<NotFoundPage />} />
         <Route path="*" element={<Navigate to="/404" replace />} />

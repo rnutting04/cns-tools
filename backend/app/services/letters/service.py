@@ -25,6 +25,7 @@ from app.models.association import Association, UserAssociation
 from app.models.letter_job import JobStatus, LetterJob
 from app.models.template import Template
 from app.models.user import User, UserRole
+from app.services.audit import log_event
 from app.services.letters.exceptions import (
     AccessDenied,
     AssociationNotFound,
@@ -189,7 +190,21 @@ def generate_letter(
 
         job.output_path = output_key
         job.status = JobStatus.complete
-        db.commit()
+        log_event(
+            db,
+            actor=current_user,
+            action="letter.generated",
+            target_type="letter_job",
+            target_id=str(job.id),
+            metadata={
+                "template_id": str(template_id),
+                "template_name": template.name,
+                "association_id": str(association.id),
+                "association_name": association.legal_name,
+                "renderer_type": template.renderer_type,
+            },
+        )
+        db.commit()  # commits job status + audit event together
 
         download_url = storage_service.generate_presigned_url(
             output_key, expires=url_expires_seconds
@@ -202,5 +217,18 @@ def generate_letter(
 
     except Exception as exc:
         job.status = JobStatus.failed
-        db.commit()
+        # Sanitize: only include the exception type, not a raw traceback
+        log_event(
+            db,
+            actor=current_user,
+            action="letter.generation_failed",
+            target_type="letter_job",
+            target_id=str(job.id),
+            metadata={
+                "template_id": str(template_id),
+                "template_name": template.name,
+                "error": type(exc).__name__,
+            },
+        )
+        db.commit()  # commits job failure + audit event together
         raise RenderFailed(f"Letter generation failed: {exc}") from exc

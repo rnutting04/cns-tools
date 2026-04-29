@@ -65,6 +65,7 @@ export interface User {
   title: string
   role: UserRole
   is_active: boolean
+  password_change_required: boolean
   created_at: string
   updated_at: string
   associations?: Association[]
@@ -91,6 +92,26 @@ export interface TokenPayload {
 export interface ApiError {
   detail: string
   status?: number
+}
+
+export interface AuditEvent {
+  id: string
+  created_at: string
+  actor_user_id: string | null
+  actor_email: string | null
+  action: string
+  target_type: string | null
+  target_id: string | null
+  event_metadata: Record<string, unknown>
+  ip_address: string | null
+  user_agent: string | null
+}
+
+export interface AuditPage {
+  items: AuditEvent[]
+  total: number
+  page: number
+  pages: number
 }
 
 export interface LetterJob {

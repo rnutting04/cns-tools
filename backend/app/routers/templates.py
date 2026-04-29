@@ -18,6 +18,7 @@ from app.schemas.template import (
     LetterJobResponse,
     TemplateResponse,
 )
+from app.services.audit import log_event
 from app.services.letters import generate_letter
 from app.services.letters.exceptions import (
     AccessDenied,
@@ -42,7 +43,7 @@ async def create_template(
     fields: str = Form(...),
     renderer_type: str = Form("simple"),
     db: Session = Depends(get_db),
-    _: User = Depends(require_admin),
+    current_user: User = Depends(require_admin),
 ):
     if not file.filename or not file.filename.endswith(".docx"):
         raise HTTPException(status_code=400, detail="File must be a .docx")
@@ -75,6 +76,14 @@ async def create_template(
         renderer_type=renderer_type,
     )
     db.add(template)
+    log_event(
+        db,
+        actor=current_user,
+        action="template.created",
+        target_type="template",
+        target_id=str(template_id),
+        metadata={"name": name, "category": category, "renderer_type": renderer_type},
+    )
     db.commit()
     db.refresh(template)
     return template
@@ -92,12 +101,20 @@ def list_templates(
 def deactivate_template(
     template_id: uuid.UUID,
     db: Session = Depends(get_db),
-    _: User = Depends(require_admin),
+    current_user: User = Depends(require_admin),
 ):
     template = db.query(Template).filter(Template.id == template_id).first()
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
     template.is_active = False
+    log_event(
+        db,
+        actor=current_user,
+        action="template.deactivated",
+        target_type="template",
+        target_id=str(template_id),
+        metadata={"name": template.name, "category": template.category},
+    )
     db.commit()
 
 

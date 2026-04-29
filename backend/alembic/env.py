@@ -10,6 +10,7 @@ from app.models.user import User
 from app.models.association import Association, UserAssociation
 from app.models.template import Template
 from app.models.letter_job import LetterJob
+from app.models.audit_event import AuditEvent
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)

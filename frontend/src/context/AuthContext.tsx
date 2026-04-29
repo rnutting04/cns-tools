@@ -9,6 +9,7 @@ interface AuthContextValue {
   loading: boolean
   login: (email: string, password: string) => Promise<void>
   logout: () => void
+  refreshUser: () => Promise<void>
 }
 
 export const AuthContext = createContext<AuthContextValue | null>(null)
@@ -60,8 +61,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(me.data)
   }, [])
 
+  const refreshUser = useCallback(async () => {
+    const me = await apiClient.get<User>('/api/auth/me')
+    setUser(me.data)
+  }, [])
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   )

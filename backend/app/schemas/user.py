@@ -31,6 +31,7 @@ class UserResponse(BaseModel):
     title: str
     role: UserRole
     is_active: bool
+    password_change_required: bool
     created_at: datetime
     updated_at: datetime
 
