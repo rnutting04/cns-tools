@@ -13,10 +13,10 @@ build/
 # Environment
 .env
 .env.local
+.env.prod
 .env.production
 .env.staging
 *.env
-.env.prod
 
 # Alembic
 # keep versions folder but ignore any local overrides
