@@ -1,0 +1,32 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-ra --strict-markers"
+markers = [
+    "unit: pure/isolated tests with no database or network",
+    "integration: tests that exercise API routes against a real Postgres test DB",
+]
+filterwarnings = [
+    # SQLAlchemy/pydantic deprecations are noisy; surface our own warnings only.
+    "ignore::DeprecationWarning",
+]
+
+[tool.coverage.run]
+source = ["app"]
+omit = ["app/config/letter_templates/*", "*/__init__.py"]
+
+[tool.coverage.report]
+show_missing = true
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+extend-exclude = ["alembic/versions", "venv"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+# E501 (line length) is handled by the formatter; B008 is FastAPI's Depends() idiom.
+ignore = ["E501", "B008"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B011"]

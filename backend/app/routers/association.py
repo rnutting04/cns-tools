@@ -45,7 +45,7 @@ def list_associations(
         assigned_ids = (
             db.query(UserAssociation.association_id)
             .filter(UserAssociation.user_id == current_user.id)
-            .subquery()
+            .scalar_subquery()
         )
         query = query.filter(Association.id.in_(assigned_ids))
     associations = query.all()

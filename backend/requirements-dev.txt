@@ -1,0 +1,11 @@
+# Development & testing dependencies (not installed in the production image).
+# Install with:  pip install -r requirements.txt -r requirements-dev.txt
+-r requirements.txt
+
+pytest==8.3.4
+pytest-cov==6.0.0
+httpx==0.28.1           # FastAPI TestClient transport
+freezegun==1.5.1        # deterministic dates (field_enrichment uses date.today())
+moto[s3]==5.0.18        # mock S3/MinIO so storage tests need no live bucket
+ruff==0.8.6             # lint + format
+pre-commit==4.0.1       # local git hooks (see ../.pre-commit-config.yaml)
