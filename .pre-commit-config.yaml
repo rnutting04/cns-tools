@@ -1,0 +1,34 @@
+# Local git hooks. One framework drives both languages because backend/ and
+# frontend/ live in a single git repo (two hook managers would fight over the
+# pre-commit hook). Hooks run on STAGED files only, so legacy code is linted
+# incrementally as it is touched rather than all at once.
+#
+# Setup:
+#   pip install -r backend/requirements-dev.txt   # provides `pre-commit`
+#   pre-commit install
+#
+# Run manually against everything:  pre-commit run --all-files
+default_install_hook_types: [pre-commit]
+
+repos:
+  # --- Backend: ruff lint + format (scoped to backend/*.py) ----------------
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.6
+    hooks:
+      - id: ruff
+        name: ruff lint (backend)
+        args: [--fix]
+        files: ^backend/.*\.py$
+      - id: ruff-format
+        name: ruff format (backend)
+        files: ^backend/.*\.py$
+
+  # --- Frontend: eslint on staged TS/TSX, run from the frontend/ package ----
+  - repo: local
+    hooks:
+      - id: frontend-eslint
+        name: eslint (frontend)
+        language: system
+        entry: scripts/eslint-staged.sh
+        files: ^frontend/src/.*\.(ts|tsx)$
+        require_serial: true

@@ -15,7 +15,7 @@ import TableChartIcon from '@mui/icons-material/TableChart'
 import SettingsIcon from '@mui/icons-material/Settings'
 import SecurityIcon from '@mui/icons-material/Security'
 import { NavLink, useLocation } from 'react-router-dom'
-import { useAuth } from '../../hooks/useAuth'
+import { useAuth } from '../../context/AuthContext'
 import { hasRole } from '../../utils/auth'
 
 const DRAWER_WIDTH = 220

@@ -2,7 +2,7 @@ import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 import LockIcon from '@mui/icons-material/Lock'
-import { useAuth } from '../../hooks/useAuth'
+import { useAuth } from '../../context/AuthContext'
 import ProfileSection from './ProfileSection'
 import ChangePasswordSection from './ChangePasswordSection'
 
