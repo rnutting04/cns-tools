@@ -9,6 +9,7 @@ Run manually or from a cron job / docker-compose scheduled service:
   # Override retention period for a one-off run:
   AUDIT_RETENTION_DAYS=90 python scripts/purge_audit.py
 """
+
 import sys
 from pathlib import Path
 

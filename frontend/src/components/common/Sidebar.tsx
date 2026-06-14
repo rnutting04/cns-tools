@@ -67,17 +67,13 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
   const { user } = useAuth()
   const location = useLocation()
 
-  const visible = NAV_ITEMS.filter(
-    (item) => !item.roles || (user && hasRole(user, item.roles)),
-  )
+  const visible = NAV_ITEMS.filter((item) => !item.roles || (user && hasRole(user, item.roles)))
 
   return (
     <List dense sx={{ pt: 1 }}>
       {visible.map((item) => {
         const active =
-          item.to === '/'
-            ? location.pathname === '/'
-            : location.pathname.startsWith(item.to)
+          item.to === '/' ? location.pathname === '/' : location.pathname.startsWith(item.to)
         return (
           <ListItemButton
             key={item.to}

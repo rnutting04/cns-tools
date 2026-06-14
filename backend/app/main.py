@@ -2,8 +2,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import auth, user, association
-from app.routers import templates, managers, audit
+from app.routers import association, audit, auth, managers, templates, user
 
 app = FastAPI(title="C&S Tool Hub")
 

@@ -1,19 +1,20 @@
 # scripts/seed.py
-import sys
 import os
+import sys
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import bcrypt
+
 from app.database import SessionLocal
-from app.models.user import User, UserRole
 from app.models.association import Association, UserAssociation
 from app.models.letter_job import LetterJob
+from app.models.user import User, UserRole
+
 
 def hash_password(password: str) -> str:
-    return bcrypt.hashpw(
-        password.encode('utf-8'),
-        bcrypt.gensalt()
-    ).decode('utf-8')
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
 
 def seed():
     db = SessionLocal()
@@ -78,8 +79,16 @@ def seed():
     )
 
     all_associations = [
-        sunset, lakewood, pine, maplewood, riverstone,
-        harbor, clearwater, magnolia, cypress, emerald
+        sunset,
+        lakewood,
+        pine,
+        maplewood,
+        riverstone,
+        harbor,
+        clearwater,
+        magnolia,
+        cypress,
+        emerald,
     ]
     db.add_all(all_associations)
     db.flush()
@@ -223,9 +232,20 @@ def seed():
     )
 
     all_users = [
-        dev_admin, patricia, michael, sandra,
-        jane, robert, maria, kevin, lisa, carlos, david,
-        amy, james, rachel
+        dev_admin,
+        patricia,
+        michael,
+        sandra,
+        jane,
+        robert,
+        maria,
+        kevin,
+        lisa,
+        carlos,
+        david,
+        amy,
+        james,
+        rachel,
     ]
     db.add_all(all_users)
     db.flush()
@@ -263,7 +283,7 @@ def seed():
     print(f"  {db.query(User).filter(User.role == UserRole.admin).count()} admins")
     print(f"  {db.query(User).filter(User.role == UserRole.manager).count()} managers")
     print(f"  {db.query(User).filter(User.role == UserRole.employee).count()} employees")
-    print(f"  {db.query(User).filter(User.is_active == False).count()} inactive users")
+    print(f"  {db.query(User).filter(User.is_active.is_(False)).count()} inactive users")
     print(f"  {db.query(UserAssociation).count()} manager assignments")
     print("")
     print("Test credentials:")
@@ -276,6 +296,7 @@ def seed():
     print("  employee     awallace@cands.com    employee123 (no associations)")
     print("  inactive     dbrown@cands.com      manager123  (login rejected)")
     db.close()
+
 
 if __name__ == "__main__":
     seed()

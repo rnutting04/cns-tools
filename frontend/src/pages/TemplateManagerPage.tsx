@@ -21,13 +21,15 @@ import useMediaQuery from '@mui/material/useMediaQuery'
 import { useTheme } from '@mui/material/styles'
 import AddIcon from '@mui/icons-material/Add'
 import BlockIcon from '@mui/icons-material/Block'
+import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import DeleteIcon from '@mui/icons-material/Delete'
+import EditIcon from '@mui/icons-material/Edit'
 import UploadFileIcon from '@mui/icons-material/UploadFile'
 import { DataGrid } from '@mui/x-data-grid'
 import type { GridColDef, GridRenderCellParams } from '@mui/x-data-grid'
 import apiClient from '../api/client'
 import ErrorAlert from '../components/layout/ErrorAlert'
-import type {FieldRow, FieldDefinition, Template, RendererType} from '../types'
+import type { FieldRow, FieldDefinition, Template, RendererType } from '../types'
 
 const EMPTY_FIELD: Omit<FieldDefinition, 'options'> & { options: string; auto_populate: boolean } =
   {
@@ -137,14 +139,34 @@ function FieldBuilder({
   )
 }
 
-function UploadDialog({
+type DialogMode = 'create' | 'edit' | 'duplicate'
+
+function fieldDefToRow(f: FieldDefinition): FieldRow {
+  return {
+    key: f.key,
+    label: f.label,
+    type: f.type,
+    options: (f.options ?? []).join(', '),
+    auto_populate: f.auto_populate ?? false,
+  }
+}
+
+function fileNameFromPath(path: string): string {
+  return path.split('/').pop() ?? path
+}
+
+function TemplateDialog({
   open,
+  mode,
+  template,
   onClose,
-  onCreated,
+  onSaved,
 }: {
   open: boolean
+  mode: DialogMode
+  template?: Template
   onClose: () => void
-  onCreated: (t: Template) => void
+  onSaved: (t: Template, mode: DialogMode) => void
 }) {
   const theme = useTheme()
   const fullScreen = useMediaQuery(theme.breakpoints.down('sm'))
@@ -158,27 +180,39 @@ function UploadDialog({
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const reset = () => {
-    setName('')
-    setCategory('')
-    setRendererType('simple')
+  // Prefill from the source template whenever the dialog is (re)opened for a
+  // given template, so edit/duplicate show existing values and stale data from
+  // a previously opened template never leaks in.
+  useEffect(() => {
+    if (!open) return
+    if ((mode === 'edit' || mode === 'duplicate') && template) {
+      setName(mode === 'duplicate' ? `${template.name} (Copy)` : template.name)
+      setCategory(template.category)
+      setRendererType(template.renderer_type ?? 'simple')
+      setFields(template.fields.map(fieldDefToRow))
+    } else {
+      setName('')
+      setCategory('')
+      setRendererType('simple')
+      setFields([])
+    }
     setFile(null)
-    setFields([])
     setError(null)
-
     if (fileRef.current) {
       fileRef.current.value = ''
     }
-  }
+  }, [open, mode, template])
 
   const handleClose = () => {
-    reset()
     onClose()
   }
 
   const handleSubmit = async () => {
-    if (!name.trim() || !category.trim() || !file) {
-      setError('Name, category, and file are required.')
+    const fileRequired = mode === 'create'
+    if (!name.trim() || !category.trim() || (fileRequired && !file)) {
+      setError(
+        fileRequired ? 'Name, category, and file are required.' : 'Name and category are required.',
+      )
       return
     }
 
@@ -210,23 +244,48 @@ function UploadDialog({
     form.append('category', category.trim())
     form.append('renderer_type', rendererType)
     form.append('fields', JSON.stringify(fieldsPayload))
-    form.append('file', file)
+    if (file) {
+      form.append('file', file)
+    }
+
+    const config = { headers: { 'Content-Type': 'multipart/form-data' } }
 
     try {
-      const res = await apiClient.post<Template>('/api/templates', form, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      })
-      onCreated(res.data)
+      let res
+      if (mode === 'edit' && template) {
+        res = await apiClient.patch<Template>(`/api/templates/${template.id}`, form, config)
+      } else if (mode === 'duplicate' && template) {
+        res = await apiClient.post<Template>(
+          `/api/templates/${template.id}/duplicate`,
+          form,
+          config,
+        )
+      } else {
+        res = await apiClient.post<Template>('/api/templates', form, config)
+      }
+      onSaved(res.data, mode)
       handleClose()
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ??
-        'Upload failed.'
+        'Save failed.'
       setError(msg)
     } finally {
       setSubmitting(false)
     }
   }
+
+  const titleText =
+    mode === 'edit'
+      ? 'Edit template'
+      : mode === 'duplicate'
+        ? 'Duplicate template'
+        : 'Upload template'
+  const submitText =
+    mode === 'edit' ? 'Save changes' : mode === 'duplicate' ? 'Create duplicate' : 'Upload'
+  const submittingText =
+    mode === 'edit' ? 'Saving…' : mode === 'duplicate' ? 'Creating…' : 'Uploading…'
+  const currentFileName = template ? fileNameFromPath(template.docx_path) : null
 
   const helperText =
     rendererType === 'proxy'
@@ -241,7 +300,7 @@ function UploadDialog({
 
   return (
     <Dialog open={open} onClose={handleClose} fullScreen={fullScreen} maxWidth="md" fullWidth>
-      <DialogTitle>Upload template</DialogTitle>
+      <DialogTitle>{titleText}</DialogTitle>
 
       <DialogContent>
         <Box display="flex" flexDirection="column" gap={2} pt={1}>
@@ -284,7 +343,7 @@ function UploadDialog({
 
           <Box>
             <Typography variant="subtitle2" color="text.secondary" mb={0.5}>
-              .docx file
+              {mode === 'create' ? '.docx file' : 'Replace .docx (optional)'}
             </Typography>
             <Button
               variant="outlined"
@@ -301,6 +360,12 @@ function UploadDialog({
                 onChange={(e) => setFile(e.target.files?.[0] ?? null)}
               />
             </Button>
+            {!file && currentFileName && mode !== 'create' && (
+              <Typography variant="caption" color="text.secondary" display="block" mt={0.5}>
+                {mode === 'edit' ? 'Current file: ' : 'Will copy: '}
+                {currentFileName}
+              </Typography>
+            )}
           </Box>
 
           <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2 }}>
@@ -329,7 +394,7 @@ function UploadDialog({
           disabled={submitting}
           startIcon={submitting ? <CircularProgress size={16} color="inherit" /> : undefined}
         >
-          {submitting ? 'Uploading…' : 'Upload'}
+          {submitting ? submittingText : submitText}
         </Button>
       </DialogActions>
     </Dialog>
@@ -339,10 +404,14 @@ function UploadDialog({
 function TemplateRow({
   template,
   isLast,
+  onEdit,
+  onDuplicate,
   onDeactivate,
 }: {
   template: Template
   isLast: boolean
+  onEdit: (t: Template) => void
+  onDuplicate: (t: Template) => void
   onDeactivate: (id: string) => void
 }) {
   return (
@@ -380,13 +449,25 @@ function TemplateRow({
           </Box>
         </Box>
 
-        {template.is_active && (
-          <Tooltip title="Deactivate">
-            <IconButton size="small" onClick={() => onDeactivate(template.id)}>
-              <BlockIcon fontSize="small" />
+        <Box display="flex" gap={0.5}>
+          <Tooltip title="Edit">
+            <IconButton size="small" onClick={() => onEdit(template)}>
+              <EditIcon fontSize="small" />
             </IconButton>
           </Tooltip>
-        )}
+          <Tooltip title="Duplicate">
+            <IconButton size="small" onClick={() => onDuplicate(template)}>
+              <ContentCopyIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          {template.is_active && (
+            <Tooltip title="Deactivate">
+              <IconButton size="small" onClick={() => onDeactivate(template.id)}>
+                <BlockIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
+        </Box>
       </Box>
 
       {!isLast && <Divider />}
@@ -401,7 +482,7 @@ export default function TemplateManagerPage() {
   const [templates, setTemplates] = useState<Template[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [uploadOpen, setUploadOpen] = useState(false)
+  const [dialog, setDialog] = useState<{ mode: DialogMode; template?: Template } | null>(null)
 
   const fetchTemplates = () => {
     setLoading(true)
@@ -429,8 +510,12 @@ export default function TemplateManagerPage() {
     }
   }
 
-  const handleCreated = (t: Template) => {
-    setTemplates((prev) => [t, ...prev])
+  const handleSaved = (t: Template, mode: DialogMode) => {
+    if (mode === 'edit') {
+      setTemplates((prev) => prev.map((existing) => (existing.id === t.id ? t : existing)))
+    } else {
+      setTemplates((prev) => [t, ...prev])
+    }
   }
 
   const columns: GridColDef<Template>[] = [
@@ -478,15 +563,34 @@ export default function TemplateManagerPage() {
       headerName: '',
       sortable: false,
       filterable: false,
-      width: 90,
-      renderCell: (params: GridRenderCellParams<Template>) =>
-        params.row.is_active ? (
-          <Tooltip title="Deactivate">
-            <IconButton size="small" onClick={() => handleDeactivate(params.row.id)}>
-              <BlockIcon fontSize="small" />
+      width: 150,
+      renderCell: (params: GridRenderCellParams<Template>) => (
+        <Box>
+          <Tooltip title="Edit">
+            <IconButton
+              size="small"
+              onClick={() => setDialog({ mode: 'edit', template: params.row })}
+            >
+              <EditIcon fontSize="small" />
             </IconButton>
           </Tooltip>
-        ) : null,
+          <Tooltip title="Duplicate">
+            <IconButton
+              size="small"
+              onClick={() => setDialog({ mode: 'duplicate', template: params.row })}
+            >
+              <ContentCopyIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          {params.row.is_active && (
+            <Tooltip title="Deactivate">
+              <IconButton size="small" onClick={() => handleDeactivate(params.row.id)}>
+                <BlockIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
+        </Box>
+      ),
     },
   ]
 
@@ -509,7 +613,11 @@ export default function TemplateManagerPage() {
           </Typography>
         </Box>
 
-        <Button variant="contained" startIcon={<AddIcon />} onClick={() => setUploadOpen(true)}>
+        <Button
+          variant="contained"
+          startIcon={<AddIcon />}
+          onClick={() => setDialog({ mode: 'create' })}
+        >
           Upload template
         </Button>
       </Box>
@@ -535,6 +643,8 @@ export default function TemplateManagerPage() {
               key={template.id}
               template={template}
               isLast={index === templates.length - 1}
+              onEdit={(t) => setDialog({ mode: 'edit', template: t })}
+              onDuplicate={(t) => setDialog({ mode: 'duplicate', template: t })}
               onDeactivate={handleDeactivate}
             />
           ))}
@@ -558,10 +668,12 @@ export default function TemplateManagerPage() {
         </Paper>
       )}
 
-      <UploadDialog
-        open={uploadOpen}
-        onClose={() => setUploadOpen(false)}
-        onCreated={handleCreated}
+      <TemplateDialog
+        open={dialog !== null}
+        mode={dialog?.mode ?? 'create'}
+        template={dialog?.template}
+        onClose={() => setDialog(null)}
+        onSaved={handleSaved}
       />
     </Box>
   )

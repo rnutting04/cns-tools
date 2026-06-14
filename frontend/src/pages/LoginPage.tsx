@@ -47,7 +47,16 @@ export default function LoginPage() {
         background: 'linear-gradient(145deg, #0F2057 0%, #1E3D8F 45%, #1D7834 100%)',
       }}
     >
-      <Card sx={{ width: '100%', maxWidth: 420, mx: 2, borderRadius: 3, overflow: 'hidden', boxShadow: '0 8px 40px rgba(0,0,0,0.28)' }}>
+      <Card
+        sx={{
+          width: '100%',
+          maxWidth: 420,
+          mx: 2,
+          borderRadius: 3,
+          overflow: 'hidden',
+          boxShadow: '0 8px 40px rgba(0,0,0,0.28)',
+        }}
+      >
         {/* Brand header bar */}
         <Box
           sx={{
@@ -88,7 +97,13 @@ export default function LoginPage() {
 
           {error && <ErrorAlert message={error} onClose={() => setError(null)} />}
 
-          <Box component="form" onSubmit={handleSubmit} display="flex" flexDirection="column" gap={2}>
+          <Box
+            component="form"
+            onSubmit={handleSubmit}
+            display="flex"
+            flexDirection="column"
+            gap={2}
+          >
             <TextField
               label="Email"
               type="email"

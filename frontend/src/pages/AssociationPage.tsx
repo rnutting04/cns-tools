@@ -75,7 +75,15 @@ interface AssocRowProps {
   onDeactivate: (a: Association) => void
 }
 
-function AssocRow({ assoc, isAdmin, isSuperAdmin, isLast, onEdit, onManageManagers, onDeactivate }: AssocRowProps) {
+function AssocRow({
+  assoc,
+  isAdmin,
+  isSuperAdmin,
+  isLast,
+  onEdit,
+  onManageManagers,
+  onDeactivate,
+}: AssocRowProps) {
   return (
     <>
       <Box sx={{ p: 2 }}>
@@ -104,7 +112,9 @@ function AssocRow({ assoc, isAdmin, isSuperAdmin, isLast, onEdit, onManageManage
               {assoc.managers.length === 0 ? (
                 <Box display="flex" alignItems="center" gap={0.5}>
                   <PersonIcon sx={{ fontSize: 13, color: 'text.disabled' }} />
-                  <Typography variant="body2" color="text.disabled">Unassigned</Typography>
+                  <Typography variant="body2" color="text.disabled">
+                    Unassigned
+                  </Typography>
                 </Box>
               ) : (
                 assoc.managers.map((m) => (
@@ -192,7 +202,9 @@ export default function AssociationPage() {
     }
   }, [])
 
-  useEffect(() => { fetchAssociations() }, [fetchAssociations])
+  useEffect(() => {
+    fetchAssociations()
+  }, [fetchAssociations])
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase()
@@ -211,7 +223,11 @@ export default function AssociationPage() {
 
   function openEdit(assoc: Association) {
     setEditTarget(assoc)
-    setFormData({ legal_name: assoc.legal_name, filter_name: assoc.filter_name, location_name: assoc.location_name })
+    setFormData({
+      legal_name: assoc.legal_name,
+      filter_name: assoc.filter_name,
+      location_name: assoc.location_name,
+    })
     setFormError(null)
     setFormOpen(true)
   }
@@ -229,7 +245,8 @@ export default function AssociationPage() {
       fetchAssociations()
     } catch (err: unknown) {
       setFormError(
-        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Save failed.',
+        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ??
+          'Save failed.',
       )
     } finally {
       setFormLoading(false)
@@ -265,14 +282,17 @@ export default function AssociationPage() {
     setManagerLoading(true)
     setManagerError(null)
     try {
-      await apiClient.post(`/api/associations/${managerDialogAssoc.id}/managers`, { user_id: selectedUserId })
+      await apiClient.post(`/api/associations/${managerDialogAssoc.id}/managers`, {
+        user_id: selectedUserId,
+      })
       const updated = await apiClient.get<Association[]>('/api/associations')
       setRows(updated.data)
       setManagerDialogAssoc(updated.data.find((a) => a.id === managerDialogAssoc.id) ?? null)
       setSelectedUserId('')
     } catch (err: unknown) {
       setManagerError(
-        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Failed to assign manager.',
+        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ??
+          'Failed to assign manager.',
       )
     } finally {
       setManagerLoading(false)
@@ -299,7 +319,11 @@ export default function AssociationPage() {
     { field: 'filter_name', headerName: 'Filter name', flex: 1, minWidth: 130 },
     { field: 'location_name', headerName: 'Location', flex: 1, minWidth: 130 },
     {
-      field: 'managers', headerName: 'Managers', flex: 1.5, minWidth: 180, sortable: false,
+      field: 'managers',
+      headerName: 'Managers',
+      flex: 1.5,
+      minWidth: 180,
+      sortable: false,
       renderCell: (params: GridRenderCellParams<Association, User[]>) => (
         <Box display="flex" flexWrap="wrap" gap={0.5} alignItems="center" py={0.5}>
           {(params.value ?? []).map((m) => (
@@ -309,31 +333,52 @@ export default function AssociationPage() {
       ),
     },
     {
-      field: 'is_active', headerName: 'Status', width: 100,
+      field: 'is_active',
+      headerName: 'Status',
+      width: 100,
       renderCell: (params) => (
-        <Chip label={params.value ? 'Active' : 'Inactive'} color={params.value ? 'success' : 'default'} size="small" />
+        <Chip
+          label={params.value ? 'Active' : 'Inactive'}
+          color={params.value ? 'success' : 'default'}
+          size="small"
+        />
       ),
     },
-    ...(isAdmin ? ([{
-      field: 'actions', headerName: 'Actions', width: 140, sortable: false,
-      renderCell: (params: GridRenderCellParams<Association>) => (
-        <Box display="flex" gap={0.5}>
-          <Tooltip title="Edit">
-            <IconButton size="small" onClick={() => openEdit(params.row)}><EditIcon fontSize="small" /></IconButton>
-          </Tooltip>
-          <Tooltip title="Manage managers">
-            <IconButton size="small" onClick={() => openManagerDialog(params.row)}><GroupAddIcon fontSize="small" /></IconButton>
-          </Tooltip>
-          {isSuperAdmin && params.row.is_active && (
-            <Tooltip title="Deactivate">
-              <IconButton size="small" color="error" onClick={() => setDeactivateTarget(params.row)}>
-                <BlockIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-          )}
-        </Box>
-      ),
-    }] as GridColDef<Association>[]) : []),
+    ...(isAdmin
+      ? ([
+          {
+            field: 'actions',
+            headerName: 'Actions',
+            width: 140,
+            sortable: false,
+            renderCell: (params: GridRenderCellParams<Association>) => (
+              <Box display="flex" gap={0.5}>
+                <Tooltip title="Edit">
+                  <IconButton size="small" onClick={() => openEdit(params.row)}>
+                    <EditIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+                <Tooltip title="Manage managers">
+                  <IconButton size="small" onClick={() => openManagerDialog(params.row)}>
+                    <GroupAddIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+                {isSuperAdmin && params.row.is_active && (
+                  <Tooltip title="Deactivate">
+                    <IconButton
+                      size="small"
+                      color="error"
+                      onClick={() => setDeactivateTarget(params.row)}
+                    >
+                      <BlockIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                )}
+              </Box>
+            ),
+          },
+        ] as GridColDef<Association>[])
+      : []),
   ]
 
   return (
@@ -408,21 +453,44 @@ export default function AssociationPage() {
       )}
 
       {/* Create / edit dialog */}
-      <Dialog open={formOpen} onClose={() => setFormOpen(false)} fullScreen={fullScreen} maxWidth="sm" fullWidth>
+      <Dialog
+        open={formOpen}
+        onClose={() => setFormOpen(false)}
+        fullScreen={fullScreen}
+        maxWidth="sm"
+        fullWidth
+      >
         <DialogTitle>{editTarget ? 'Edit association' : 'New association'}</DialogTitle>
         <DialogContent>
           <Box display="flex" flexDirection="column" gap={2} pt={1}>
             {formError && <ErrorAlert message={formError} onClose={() => setFormError(null)} />}
-            <TextField label="Legal name" value={formData.legal_name} fullWidth required
-              onChange={(e) => setFormData((p) => ({ ...p, legal_name: e.target.value }))} />
-            <TextField label="Filter name" value={formData.filter_name} fullWidth required
-              onChange={(e) => setFormData((p) => ({ ...p, filter_name: e.target.value }))} />
-            <TextField label="Location" value={formData.location_name} fullWidth required
-              onChange={(e) => setFormData((p) => ({ ...p, location_name: e.target.value }))} />
+            <TextField
+              label="Legal name"
+              value={formData.legal_name}
+              fullWidth
+              required
+              onChange={(e) => setFormData((p) => ({ ...p, legal_name: e.target.value }))}
+            />
+            <TextField
+              label="Filter name"
+              value={formData.filter_name}
+              fullWidth
+              required
+              onChange={(e) => setFormData((p) => ({ ...p, filter_name: e.target.value }))}
+            />
+            <TextField
+              label="Location"
+              value={formData.location_name}
+              fullWidth
+              required
+              onChange={(e) => setFormData((p) => ({ ...p, location_name: e.target.value }))}
+            />
           </Box>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setFormOpen(false)} disabled={formLoading}>Cancel</Button>
+          <Button onClick={() => setFormOpen(false)} disabled={formLoading}>
+            Cancel
+          </Button>
           <Button
             variant="contained"
             onClick={handleFormSubmit}
@@ -462,12 +530,18 @@ export default function AssociationPage() {
         <Divider />
         <DialogContent>
           <Box display="flex" flexDirection="column" gap={2} pt={1}>
-            {managerError && <ErrorAlert message={managerError} onClose={() => setManagerError(null)} />}
+            {managerError && (
+              <ErrorAlert message={managerError} onClose={() => setManagerError(null)} />
+            )}
 
-            <Typography variant="body2" color="text.secondary">Current managers</Typography>
+            <Typography variant="body2" color="text.secondary">
+              Current managers
+            </Typography>
             <Box display="flex" flexWrap="wrap" gap={1} minHeight={32}>
               {(managerDialogAssoc?.managers ?? []).length === 0 && (
-                <Typography variant="body2" color="text.disabled">None assigned</Typography>
+                <Typography variant="body2" color="text.disabled">
+                  None assigned
+                </Typography>
               )}
               {(managerDialogAssoc?.managers ?? []).map((m) => (
                 <Chip
@@ -481,11 +555,16 @@ export default function AssociationPage() {
             </Box>
 
             <Divider />
-            <Typography variant="body2" color="text.secondary">Assign a manager</Typography>
+            <Typography variant="body2" color="text.secondary">
+              Assign a manager
+            </Typography>
             <FormControl fullWidth size="small">
               <InputLabel>Select user</InputLabel>
-              <Select value={selectedUserId} label="Select user"
-                onChange={(e) => setSelectedUserId(e.target.value)}>
+              <Select
+                value={selectedUserId}
+                label="Select user"
+                onChange={(e) => setSelectedUserId(e.target.value)}
+              >
                 {allUsers
                   .filter((u) => !managerDialogAssoc?.managers.some((m) => m.id === u.id))
                   .map((u) => (
@@ -500,7 +579,9 @@ export default function AssociationPage() {
               onClick={handleAssignManager}
               disabled={!selectedUserId || managerLoading}
               fullWidth
-              startIcon={managerLoading ? <CircularProgress size={16} color="inherit" /> : undefined}
+              startIcon={
+                managerLoading ? <CircularProgress size={16} color="inherit" /> : undefined
+              }
             >
               {managerLoading ? 'Assigning…' : 'Assign'}
             </Button>

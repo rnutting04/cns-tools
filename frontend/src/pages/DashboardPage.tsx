@@ -111,9 +111,7 @@ export default function DashboardPage() {
     <Box>
       <Box display="flex" alignItems="center" gap={1.5} mb={3}>
         <Box>
-          <Typography variant="h5">
-            Welcome back, {user.fname}
-          </Typography>
+          <Typography variant="h5">Welcome back, {user.fname}</Typography>
           <Box display="flex" alignItems="center" gap={1} mt={0.5}>
             <Typography variant="body2" color="text.secondary">
               {user.title}
@@ -139,12 +137,7 @@ export default function DashboardPage() {
         )}
         {isAdmin && (
           <Grid size={{ xs: 12, sm: 6, md: 4 }}>
-            <StatCard
-              icon={<PeopleIcon />}
-              label="Users"
-              value={userCount ?? '—'}
-              to="/users"
-            />
+            <StatCard icon={<PeopleIcon />} label="Users" value={userCount ?? '—'} to="/users" />
           </Grid>
         )}
       </Grid>

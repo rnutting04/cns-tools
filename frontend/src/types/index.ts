@@ -2,8 +2,6 @@ export type UserRole = 'super_admin' | 'admin' | 'manager' | 'employee'
 export type RendererType = 'simple' | 'proxy' | 'ballot' | 'electronic_ballot' | 'notice_candidacy'
 export type FieldType = 'text' | 'date' | 'dropdown' | 'association' | 'manager' | 'time'
 
-
-
 export type ProxyVoteType =
   | 'waive_financial_one_year'
   | 'lower_financial_level'
@@ -28,7 +26,6 @@ export type ProxyVote = {
   tax_year?: string
 }
 
-
 export interface FieldDefinition {
   key: string
   label: string
@@ -38,12 +35,12 @@ export interface FieldDefinition {
 }
 
 export interface FieldRow {
-    key: string
-    label: string
-    type: FieldType
-    options: string
-    auto_populate: boolean
-  }
+  key: string
+  label: string
+  type: FieldType
+  options: string
+  auto_populate: boolean
+}
 
 export interface Template {
   id: string

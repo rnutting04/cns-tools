@@ -26,10 +26,7 @@ export default function TopBar({ onMenuClick }: Props) {
     navigate('/login', { replace: true })
   }
   return (
-    <AppBar
-      position="fixed"
-      sx={{ zIndex: (t) => t.zIndex.drawer + 1, bgcolor: 'primary.main' }}
-    >
+    <AppBar position="fixed" sx={{ zIndex: (t) => t.zIndex.drawer + 1, bgcolor: 'primary.main' }}>
       <Toolbar>
         {isMobile && (
           <IconButton
@@ -48,10 +45,26 @@ export default function TopBar({ onMenuClick }: Props) {
           <CnsLogo height={32} />
           {!isMobile && (
             <Box>
-              <Typography variant="subtitle2" sx={{ color: 'primary.contrastText', fontWeight: 700, lineHeight: 1.1, fontSize: '0.85rem' }}>
+              <Typography
+                variant="subtitle2"
+                sx={{
+                  color: 'primary.contrastText',
+                  fontWeight: 700,
+                  lineHeight: 1.1,
+                  fontSize: '0.85rem',
+                }}
+              >
                 C&amp;S Community Management
               </Typography>
-              <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.7)', lineHeight: 1, fontSize: '0.65rem', letterSpacing: '0.5px' }}>
+              <Typography
+                variant="caption"
+                sx={{
+                  color: 'rgba(255,255,255,0.7)',
+                  lineHeight: 1,
+                  fontSize: '0.65rem',
+                  letterSpacing: '0.5px',
+                }}
+              >
                 Services, Inc.
               </Typography>
             </Box>
@@ -66,12 +79,7 @@ export default function TopBar({ onMenuClick }: Props) {
                 {user.fname} {user.lname}
               </Typography>
             )}
-            <Button
-              color="inherit"
-              size="small"
-              startIcon={<LogoutIcon />}
-              onClick={handleLogout}
-            >
+            <Button color="inherit" size="small" startIcon={<LogoutIcon />} onClick={handleLogout}>
               {isMobile ? '' : 'Log out'}
             </Button>
           </Box>

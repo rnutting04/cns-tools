@@ -14,9 +14,7 @@ export default function NotFoundPage() {
       gap={2}
     >
       <Typography variant="h4">Page not found</Typography>
-      <Typography color="text.secondary">
-        The page you're looking for doesn't exist.
-      </Typography>
+      <Typography color="text.secondary">The page you're looking for doesn't exist.</Typography>
       <Button variant="contained" component={Link} to="/">
         Go to dashboard
       </Button>

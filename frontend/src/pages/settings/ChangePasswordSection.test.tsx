@@ -58,7 +58,9 @@ describe('ChangePasswordSection', () => {
   })
 
   it('shows the API error message on failure', async () => {
-    mockClient.post.mockRejectedValue({ response: { data: { detail: 'Current password is incorrect' } } })
+    mockClient.post.mockRejectedValue({
+      response: { data: { detail: 'Current password is incorrect' } },
+    })
     const user = userEvent.setup()
     render(<ChangePasswordSection />)
 

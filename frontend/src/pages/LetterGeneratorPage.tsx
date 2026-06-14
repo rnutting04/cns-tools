@@ -32,9 +32,7 @@ import type { Association, Template, ProxyVote } from '../types'
 import ProxyVoteEditor from '../components/letters/ProxyVoteEditor'
 const STEPS = ['Select template', 'Fill in fields', 'Generate']
 
-const AUTO_POPULATE_KEYS = new Set([
-  's0ke'
-])
+const AUTO_POPULATE_KEYS = new Set(['s0ke'])
 
 type RendererType = 'simple' | 'proxy' | 'ballot' | 'electronic_ballot' | 'notice_candidacy'
 type FieldValueMap = Record<string, unknown>
@@ -528,14 +526,16 @@ function GenerateStep({
           </Box>
 
           <Box display="flex" gap={2} flexWrap="wrap">
-          <Button
-            variant="contained"
-            startIcon={downloading ? <CircularProgress size={16} color="inherit" /> : <DownloadIcon />}
-            onClick={onDownload}
-            disabled={downloading}
-          >
-            {downloading ? 'Downloading…' : 'Download letter'}
-          </Button>
+            <Button
+              variant="contained"
+              startIcon={
+                downloading ? <CircularProgress size={16} color="inherit" /> : <DownloadIcon />
+              }
+              onClick={onDownload}
+              disabled={downloading}
+            >
+              {downloading ? 'Downloading…' : 'Download letter'}
+            </Button>
 
             <Button variant="outlined" startIcon={<RestartAltIcon />} onClick={onReset}>
               Generate another
@@ -550,14 +550,14 @@ function GenerateStep({
             </Typography>
           )}
 
-        <Button
-          variant="contained"
-          onClick={onGenerate}
-          disabled={generating}
-          startIcon={generating ? <CircularProgress size={16} color="inherit" /> : undefined}
-        >
-          {generating ? 'Generating…' : 'Generate letter'}
-        </Button>
+          <Button
+            variant="contained"
+            onClick={onGenerate}
+            disabled={generating}
+            startIcon={generating ? <CircularProgress size={16} color="inherit" /> : undefined}
+          >
+            {generating ? 'Generating…' : 'Generate letter'}
+          </Button>
         </Box>
       )}
     </Box>
@@ -572,7 +572,8 @@ function isProxyVoteComplete(vote: ProxyVote): boolean {
       return has(vote.fiscal_year)
 
     case 'lower_financial_level':
-      return ( has(vote.from_level) &&
+      return (
+        has(vote.from_level) &&
         has(vote.to_level) &&
         has(vote.fiscal_year) &&
         vote.from_level !== vote.to_level
@@ -661,17 +662,17 @@ export default function LetterGeneratorPage() {
       // Ballot renderers require a year selection and at least one non-empty candidate
       if (rendererType === 'ballot' || rendererType === 'electronic_ballot') {
         if (rendererType === 'ballot' && !fieldValues.ballot_year) return false
-      
+
         const candidates = Array.isArray(fieldValues.candidates)
           ? (fieldValues.candidates as string[])
           : []
-      
+
         if (candidates.length === 0 || candidates.some((c) => !c.trim())) return false
       }
 
       if (rendererType === 'proxy') {
         const votes = Array.isArray(fieldValues.votes) ? (fieldValues.votes as ProxyVote[]) : []
-      
+
         if (votes.length === 0) return false
         if (votes.some((vote) => !isProxyVoteComplete(vote))) return false
       }
@@ -703,25 +704,25 @@ export default function LetterGeneratorPage() {
 
   const handleDownload = async () => {
     if (!downloadUrl) return
-  
+
     try {
       setDownloading(true)
-  
+
       const response = await fetch(downloadUrl)
       if (!response.ok) {
         throw new Error('Failed to download file.')
       }
-  
+
       const blob = await response.blob()
       const blobUrl = window.URL.createObjectURL(blob)
-  
+
       const a = document.createElement('a')
       a.href = blobUrl
       a.download = `${selectedTemplate?.name ?? 'letter'}.docx`
       document.body.appendChild(a)
       a.click()
       a.remove()
-  
+
       window.URL.revokeObjectURL(blobUrl)
     } catch {
       setGenError('Failed to download file.')

@@ -1,17 +1,18 @@
 # app/routers/users.py
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session, joinedload
-from uuid import UUID
 
 from app.database import get_db
-from app.models.user import User, UserRole
+from app.dependencies import get_current_user, require_admin, require_super_admin
 from app.models.association import UserAssociation
-from app.schemas.user import UserCreate, UserUpdate, UserResponse, UserWithAssociations
+from app.models.user import User, UserRole
 from app.schemas.association import AssociationResponse
+from app.schemas.user import UserCreate, UserResponse, UserUpdate, UserWithAssociations
 from app.services.audit import log_event
 from app.utils.auth import hash_password, verify_password
-from app.dependencies import get_current_user, require_admin, require_super_admin
 
 # Resolve forward reference: UserWithAssociations.associations -> AssociationResponse
 UserWithAssociations.model_rebuild(_types_namespace={"AssociationResponse": AssociationResponse})

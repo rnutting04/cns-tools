@@ -1,5 +1,8 @@
-from app.models.user import User, UserRole
-from app.models.association import Association, UserAssociation
-from app.models.template import Template
-from app.models.letter_job import LetterJob, JobStatus
-from app.models.audit_event import AuditEvent
+from app.models.association import Association as Association
+from app.models.association import UserAssociation as UserAssociation
+from app.models.audit_event import AuditEvent as AuditEvent
+from app.models.letter_job import JobStatus as JobStatus
+from app.models.letter_job import LetterJob as LetterJob
+from app.models.template import Template as Template
+from app.models.user import User as User
+from app.models.user import UserRole as UserRole

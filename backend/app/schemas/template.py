@@ -1,14 +1,15 @@
 # app/schemas/template.py
-from pydantic import BaseModel
-from typing import Any, Optional
 from datetime import datetime
+from typing import Any
 from uuid import UUID
+
+from pydantic import BaseModel
 
 
 class FieldDefinition(BaseModel):
     key: str
     label: str
-    type: str  # "text" | "date" | "dropdown"
+    type: str  # "text" | "date" | "dropdown" | "association" | "manager" | "time"
     options: list[str] = []
     auto_populate: bool = False
 
@@ -25,7 +26,7 @@ class TemplateResponse(BaseModel):
     category: str
     docx_path: str
     fields: list[FieldDefinition]
-    renderer_type: str = "simple" 
+    renderer_type: str = "simple"
     is_active: bool
     created_at: datetime
     updated_at: datetime
@@ -44,7 +45,7 @@ class LetterJobResponse(BaseModel):
     template_id: UUID
     association_id: UUID
     status: str
-    output_path: Optional[str]
+    output_path: str | None
     created_at: datetime
 
     class Config:

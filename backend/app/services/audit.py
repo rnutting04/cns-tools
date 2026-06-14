@@ -1,6 +1,8 @@
 # app/services/audit.py
 from typing import Any
+
 from sqlalchemy.orm import Session
+
 from app.models.audit_event import AuditEvent
 from app.models.user import User
 
@@ -17,7 +19,7 @@ def log_event(
 ) -> None:
     """
     Record an audit event. Call from service layer after a successful action.
-    
+
     IMPORTANT: Never pass passwords, tokens, or other secrets in metadata.
     """
     event = AuditEvent(

@@ -2,10 +2,10 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models.user import User
-from app.models.association import UserAssociation
-from app.schemas.user import UserResponse
 from app.dependencies import get_current_user
+from app.models.association import UserAssociation
+from app.models.user import User
+from app.schemas.user import UserResponse
 
 router = APIRouter(prefix="/managers", tags=["managers"])
 
@@ -19,7 +19,7 @@ def list_managers(
     return (
         db.query(User)
         .join(UserAssociation, UserAssociation.user_id == User.id)
-        .filter(User.is_active == True)
+        .filter(User.is_active.is_(True))
         .distinct()
         .all()
     )

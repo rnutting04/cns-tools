@@ -1,10 +1,12 @@
 # app/models/template.py
-from sqlalchemy import Column, String, Boolean, DateTime, JSON
-from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import relationship
-from app.database import Base
 import uuid
 from datetime import datetime
+
+from sqlalchemy import JSON, Boolean, Column, DateTime, String
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import relationship
+
+from app.database import Base
 
 
 class Template(Base):

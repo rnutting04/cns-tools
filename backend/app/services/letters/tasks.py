@@ -13,6 +13,7 @@ When you're ready to move generation to a worker, the HTTP route will:
 
 The frontend polls /letters/{job_id} or subscribes via websocket for status.
 """
+
 from typing import Any
 from uuid import UUID
 

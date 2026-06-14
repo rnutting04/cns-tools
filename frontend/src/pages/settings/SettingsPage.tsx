@@ -18,8 +18,8 @@ export default function SettingsPage() {
 
       {mustChange && (
         <Alert severity="warning" icon={<LockIcon fontSize="inherit" />} sx={{ mb: 3 }}>
-          You must set a new password before you can access the app. Please choose a password
-          that is at least 12 characters long.
+          You must set a new password before you can access the app. Please choose a password that
+          is at least 12 characters long.
         </Alert>
       )}
 

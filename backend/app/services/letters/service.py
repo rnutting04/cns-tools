@@ -15,6 +15,7 @@ Responsibilities:
   - Dispatch to the appropriate renderer
   - Upload the output and return a presigned download URL
 """
+
 from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
@@ -59,9 +60,7 @@ def _get_field_key_by_type(template: Template, field_type: str) -> str | None:
 # --- Lookup helpers -----------------------------------------------------
 def _load_template(db: Session, template_id: UUID) -> Template:
     template = (
-        db.query(Template)
-        .filter(Template.id == template_id, Template.is_active.is_(True))
-        .first()
+        db.query(Template).filter(Template.id == template_id, Template.is_active.is_(True)).first()
     )
     if not template:
         raise TemplateNotFound(f"Template {template_id} not found")
@@ -80,19 +79,13 @@ def _load_association(db: Session, association_id: UUID) -> Association:
 
 
 def _load_manager(db: Session, manager_id: UUID) -> User:
-    manager = (
-        db.query(User)
-        .filter(User.id == manager_id, User.is_active.is_(True))
-        .first()
-    )
+    manager = db.query(User).filter(User.id == manager_id, User.is_active.is_(True)).first()
     if not manager:
         raise ManagerNotFound(f"Manager {manager_id} not found")
     return manager
 
 
-def _assert_user_can_access_association(
-    db: Session, user: User, association: Association
-) -> None:
+def _assert_user_can_access_association(db: Session, user: User, association: Association) -> None:
     if user.role != UserRole.manager:
         return
     link = (
@@ -127,15 +120,11 @@ def generate_letter(
     # 2. Resolve association (required for all templates)
     association_key = _get_field_key_by_type(template, "association")
     if not association_key:
-        raise InvalidTemplateConfiguration(
-            "Template is missing an association field."
-        )
+        raise InvalidTemplateConfiguration("Template is missing an association field.")
 
     association_id = field_values.get(association_key)
     if not association_id:
-        raise MissingRequiredField(
-            f"Association field '{association_key}' is required."
-        )
+        raise MissingRequiredField(f"Association field '{association_key}' is required.")
     association = _load_association(db, association_id)
 
     # 3. Authorization
@@ -147,9 +136,7 @@ def generate_letter(
     if manager_key:
         manager_id = field_values.get(manager_key)
         if not manager_id:
-            raise MissingRequiredField(
-                f"Manager field '{manager_key}' is required."
-            )
+            raise MissingRequiredField(f"Manager field '{manager_key}' is required.")
         manager = _load_manager(db, manager_id)
 
     # 5. Build full field context (pure function)
@@ -183,8 +170,7 @@ def generate_letter(
             output_bytes,
             output_key,
             content_type=(
-                "application/vnd.openxmlformats-officedocument"
-                ".wordprocessingml.document"
+                "application/vnd.openxmlformats-officedocument" ".wordprocessingml.document"
             ),
         )
 

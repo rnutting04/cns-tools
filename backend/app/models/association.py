@@ -1,10 +1,13 @@
 # app/models/association.py
-from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey
-from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import relationship
-from app.database import Base
 import uuid
 from datetime import datetime
+
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import relationship
+
+from app.database import Base
+
 
 class Association(Base):
     __tablename__ = "associations"
@@ -19,12 +22,15 @@ class Association(Base):
 
     managers = relationship("UserAssociation", back_populates="association")
 
+
 class UserAssociation(Base):
     __tablename__ = "user_associations"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
-    association_id = Column(UUID(as_uuid=True), ForeignKey("associations.id"), nullable=False, unique=True)
+    association_id = Column(
+        UUID(as_uuid=True), ForeignKey("associations.id"), nullable=False, unique=True
+    )
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User", back_populates="associations")

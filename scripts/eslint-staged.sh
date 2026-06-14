@@ -15,4 +15,4 @@ done
 # Nothing to do if the (already filtered) list is somehow empty.
 [ ${#files[@]} -eq 0 ] && exit 0
 
-exec npx eslint --fix "${files[@]}"
+exec npx eslint "${files[@]}"

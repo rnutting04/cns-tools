@@ -1,5 +1,6 @@
 # app/routes/templates.py
 import json
+import os
 import uuid
 from typing import Any
 
@@ -31,8 +32,23 @@ from app.services.letters.exceptions import (
 )
 from app.services.storage import storage_service
 
-
 router = APIRouter(tags=["templates"])
+
+DOCX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+
+def _validate_docx(file: UploadFile) -> None:
+    if not file.filename or not file.filename.endswith(".docx"):
+        raise HTTPException(status_code=400, detail="File must be a .docx")
+
+
+def _parse_fields(fields: str) -> list[dict[str, Any]]:
+    try:
+        fields_data: list[dict[str, Any]] = json.loads(fields)
+        field_defs = [FieldDefinition(**f) for f in fields_data]
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid fields JSON") from None
+    return [f.model_dump() for f in field_defs]
 
 
 @router.post("/templates", response_model=TemplateResponse, status_code=201)
@@ -45,34 +61,21 @@ async def create_template(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
-    if not file.filename or not file.filename.endswith(".docx"):
-        raise HTTPException(status_code=400, detail="File must be a .docx")
-
-    try:
-        fields_data: list[dict[str, Any]] = json.loads(fields)
-        field_defs = [FieldDefinition(**f) for f in fields_data]
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid fields JSON")
+    _validate_docx(file)
+    fields_payload = _parse_fields(fields)
 
     template_id = uuid.uuid4()
     key = f"templates/{template_id}/{file.filename}"
     file_bytes = await file.read()
 
-    storage_service.upload_file(
-        file_bytes,
-        key,
-        content_type=(
-            "application/vnd.openxmlformats-officedocument"
-            ".wordprocessingml.document"
-        ),
-    )
+    storage_service.upload_file(file_bytes, key, content_type=DOCX_CONTENT_TYPE)
 
     template = Template(
         id=template_id,
         name=name,
         category=category,
         docx_path=key,
-        fields=[f.model_dump() for f in field_defs],
+        fields=fields_payload,
         renderer_type=renderer_type,
     )
     db.add(template)
@@ -95,6 +98,116 @@ def list_templates(
     _: User = Depends(get_current_user),
 ):
     return db.query(Template).filter(Template.is_active.is_(True)).all()
+
+
+@router.patch("/templates/{template_id}", response_model=TemplateResponse)
+async def update_template(
+    template_id: uuid.UUID,
+    name: str | None = Form(None),
+    category: str | None = Form(None),
+    renderer_type: str | None = Form(None),
+    fields: str | None = Form(None),
+    file: UploadFile | None = File(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    template = db.query(Template).filter(Template.id == template_id).first()
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    changes: dict[str, Any] = {}
+    if name is not None:
+        template.name = name
+        changes["name"] = name
+    if category is not None:
+        template.category = category
+        changes["category"] = category
+    if renderer_type is not None:
+        template.renderer_type = renderer_type
+        changes["renderer_type"] = renderer_type
+    if fields is not None:
+        template.fields = _parse_fields(fields)
+        changes["fields"] = len(template.fields)
+
+    if file is not None:
+        _validate_docx(file)
+        old_path = template.docx_path
+        new_key = f"templates/{template_id}/{file.filename}"
+        file_bytes = await file.read()
+        storage_service.upload_file(file_bytes, new_key, content_type=DOCX_CONTENT_TYPE)
+        template.docx_path = new_key
+        if new_key != old_path:
+            storage_service.delete_file(old_path)
+        changes["docx_path"] = new_key
+
+    log_event(
+        db,
+        actor=current_user,
+        action="template.updated",
+        target_type="template",
+        target_id=str(template_id),
+        metadata=changes,
+    )
+    db.commit()
+    db.refresh(template)
+    return template
+
+
+@router.post(
+    "/templates/{template_id}/duplicate",
+    response_model=TemplateResponse,
+    status_code=201,
+)
+async def duplicate_template(
+    template_id: uuid.UUID,
+    name: str | None = Form(None),
+    category: str | None = Form(None),
+    renderer_type: str | None = Form(None),
+    fields: str | None = Form(None),
+    file: UploadFile | None = File(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    source = db.query(Template).filter(Template.id == template_id).first()
+    if not source:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    new_id = uuid.uuid4()
+
+    if file is not None:
+        _validate_docx(file)
+        new_key = f"templates/{new_id}/{file.filename}"
+        file_bytes = await file.read()
+        storage_service.upload_file(file_bytes, new_key, content_type=DOCX_CONTENT_TYPE)
+    else:
+        filename = os.path.basename(source.docx_path)
+        new_key = f"templates/{new_id}/{filename}"
+        data = storage_service.download_file(source.docx_path)
+        storage_service.upload_file(data, new_key, content_type=DOCX_CONTENT_TYPE)
+
+    new_name = name if name is not None else f"{source.name} (Copy)"
+    new_fields = _parse_fields(fields) if fields is not None else source.fields
+
+    template = Template(
+        id=new_id,
+        name=new_name,
+        category=category if category is not None else source.category,
+        docx_path=new_key,
+        fields=new_fields,
+        renderer_type=(renderer_type if renderer_type is not None else source.renderer_type),
+    )
+    db.add(template)
+    log_event(
+        db,
+        actor=current_user,
+        action="template.duplicated",
+        target_type="template",
+        target_id=str(new_id),
+        metadata={"source_template_id": str(template_id), "name": new_name},
+    )
+    db.commit()
+    db.refresh(template)
+    return template
 
 
 @router.delete("/templates/{template_id}", status_code=204)

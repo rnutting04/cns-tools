@@ -40,8 +40,12 @@ import ErrorAlert from '../components/layout/ErrorAlert'
 const ROLES: UserRole[] = ['super_admin', 'admin', 'manager', 'employee']
 
 const emptyCreateForm = {
-  fname: '', lname: '', email: '', title: '',
-  role: 'manager' as UserRole, password: '',
+  fname: '',
+  lname: '',
+  email: '',
+  title: '',
+  role: 'manager' as UserRole,
+  password: '',
 }
 const emptyEditForm = { fname: '', lname: '', email: '', title: '', is_active: true }
 
@@ -186,7 +190,9 @@ export default function UsersPage() {
     }
   }, [])
 
-  useEffect(() => { fetchUsers() }, [fetchUsers])
+  useEffect(() => {
+    fetchUsers()
+  }, [fetchUsers])
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase()
@@ -211,7 +217,8 @@ export default function UsersPage() {
       fetchUsers()
     } catch (err: unknown) {
       setCreateError(
-        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Failed to create user.',
+        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ??
+          'Failed to create user.',
       )
     } finally {
       setCreateLoading(false)
@@ -220,7 +227,13 @@ export default function UsersPage() {
 
   function openEdit(u: User) {
     setEditTarget(u)
-    setEditForm({ fname: u.fname, lname: u.lname, email: u.email, title: u.title, is_active: u.is_active })
+    setEditForm({
+      fname: u.fname,
+      lname: u.lname,
+      email: u.email,
+      title: u.title,
+      is_active: u.is_active,
+    })
     setEditError(null)
   }
 
@@ -234,7 +247,8 @@ export default function UsersPage() {
       fetchUsers()
     } catch (err: unknown) {
       setEditError(
-        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Failed to update user.',
+        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ??
+          'Failed to update user.',
       )
     } finally {
       setEditLoading(false)
@@ -257,7 +271,8 @@ export default function UsersPage() {
       fetchUsers()
     } catch (err: unknown) {
       setRoleError(
-        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Failed to change role.',
+        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ??
+          'Failed to change role.',
       )
     } finally {
       setRoleLoading(false)
@@ -280,36 +295,62 @@ export default function UsersPage() {
 
   const columns: GridColDef<User>[] = [
     {
-      field: 'name', headerName: 'Name', flex: 1, minWidth: 160,
+      field: 'name',
+      headerName: 'Name',
+      flex: 1,
+      minWidth: 160,
       valueGetter: (_v, row) => `${row.fname} ${row.lname}`,
     },
     { field: 'email', headerName: 'Email', flex: 1.5, minWidth: 200 },
     { field: 'title', headerName: 'Title', flex: 1, minWidth: 160 },
     {
-      field: 'role', headerName: 'Role', width: 130,
-      renderCell: (params: GridRenderCellParams<User, UserRole>) => <RoleBadge role={params.value!} />,
-    },
-    {
-      field: 'is_active', headerName: 'Status', width: 100,
-      renderCell: (params) => (
-        <Chip label={params.value ? 'Active' : 'Inactive'} color={params.value ? 'success' : 'default'} size="small" />
+      field: 'role',
+      headerName: 'Role',
+      width: 130,
+      renderCell: (params: GridRenderCellParams<User, UserRole>) => (
+        <RoleBadge role={params.value!} />
       ),
     },
     {
-      field: 'actions', headerName: 'Actions', width: 140, sortable: false,
+      field: 'is_active',
+      headerName: 'Status',
+      width: 100,
+      renderCell: (params) => (
+        <Chip
+          label={params.value ? 'Active' : 'Inactive'}
+          color={params.value ? 'success' : 'default'}
+          size="small"
+        />
+      ),
+    },
+    {
+      field: 'actions',
+      headerName: 'Actions',
+      width: 140,
+      sortable: false,
       renderCell: (params: GridRenderCellParams<User>) => (
         <Box display="flex" gap={0.5}>
           <Tooltip title="Edit">
-            <IconButton size="small" onClick={() => openEdit(params.row)}><EditIcon fontSize="small" /></IconButton>
+            <IconButton size="small" onClick={() => openEdit(params.row)}>
+              <EditIcon fontSize="small" />
+            </IconButton>
           </Tooltip>
           {isSuperAdmin && (
             <>
               <Tooltip title="Change role">
-                <IconButton size="small" onClick={() => openRoleChange(params.row)}><ManageAccountsIcon fontSize="small" /></IconButton>
+                <IconButton size="small" onClick={() => openRoleChange(params.row)}>
+                  <ManageAccountsIcon fontSize="small" />
+                </IconButton>
               </Tooltip>
               {params.row.is_active && (
                 <Tooltip title="Deactivate">
-                  <IconButton size="small" color="error" onClick={() => setDeactivateTarget(params.row)}><BlockIcon fontSize="small" /></IconButton>
+                  <IconButton
+                    size="small"
+                    color="error"
+                    onClick={() => setDeactivateTarget(params.row)}
+                  >
+                    <BlockIcon fontSize="small" />
+                  </IconButton>
                 </Tooltip>
               )}
             </>
@@ -387,35 +428,79 @@ export default function UsersPage() {
       )}
 
       {/* Create user dialog */}
-      <Dialog open={createOpen} onClose={() => setCreateOpen(false)} fullScreen={fullScreen} maxWidth="sm" fullWidth>
+      <Dialog
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        fullScreen={fullScreen}
+        maxWidth="sm"
+        fullWidth
+      >
         <DialogTitle>New user</DialogTitle>
         <DialogContent>
           <Box display="flex" flexDirection="column" gap={2} pt={1}>
-            {createError && <ErrorAlert message={createError} onClose={() => setCreateError(null)} />}
+            {createError && (
+              <ErrorAlert message={createError} onClose={() => setCreateError(null)} />
+            )}
             <Box display="flex" flexDirection={{ xs: 'column', sm: 'row' }} gap={2}>
-              <TextField label="First name" value={createForm.fname} fullWidth required
-                onChange={(e) => setCreateForm((p) => ({ ...p, fname: e.target.value }))} />
-              <TextField label="Last name" value={createForm.lname} fullWidth required
-                onChange={(e) => setCreateForm((p) => ({ ...p, lname: e.target.value }))} />
+              <TextField
+                label="First name"
+                value={createForm.fname}
+                fullWidth
+                required
+                onChange={(e) => setCreateForm((p) => ({ ...p, fname: e.target.value }))}
+              />
+              <TextField
+                label="Last name"
+                value={createForm.lname}
+                fullWidth
+                required
+                onChange={(e) => setCreateForm((p) => ({ ...p, lname: e.target.value }))}
+              />
             </Box>
-            <TextField label="Email" type="email" value={createForm.email} fullWidth required
-              onChange={(e) => setCreateForm((p) => ({ ...p, email: e.target.value }))} />
-            <TextField label="Title" value={createForm.title} fullWidth required
-              onChange={(e) => setCreateForm((p) => ({ ...p, title: e.target.value }))} />
+            <TextField
+              label="Email"
+              type="email"
+              value={createForm.email}
+              fullWidth
+              required
+              onChange={(e) => setCreateForm((p) => ({ ...p, email: e.target.value }))}
+            />
+            <TextField
+              label="Title"
+              value={createForm.title}
+              fullWidth
+              required
+              onChange={(e) => setCreateForm((p) => ({ ...p, title: e.target.value }))}
+            />
             <FormControl fullWidth required>
               <InputLabel>Role</InputLabel>
-              <Select value={createForm.role} label="Role"
-                onChange={(e) => setCreateForm((p) => ({ ...p, role: e.target.value as UserRole }))}>
-                {ROLES.map((r) => <MenuItem key={r} value={r}>{r.replace('_', ' ')}</MenuItem>)}
+              <Select
+                value={createForm.role}
+                label="Role"
+                onChange={(e) => setCreateForm((p) => ({ ...p, role: e.target.value as UserRole }))}
+              >
+                {ROLES.map((r) => (
+                  <MenuItem key={r} value={r}>
+                    {r.replace('_', ' ')}
+                  </MenuItem>
+                ))}
               </Select>
             </FormControl>
-            <TextField label="Password" type="password" value={createForm.password} fullWidth required
+            <TextField
+              label="Password"
+              type="password"
+              value={createForm.password}
+              fullWidth
+              required
               autoComplete="new-password"
-              onChange={(e) => setCreateForm((p) => ({ ...p, password: e.target.value }))} />
+              onChange={(e) => setCreateForm((p) => ({ ...p, password: e.target.value }))}
+            />
           </Box>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setCreateOpen(false)} disabled={createLoading}>Cancel</Button>
+          <Button onClick={() => setCreateOpen(false)} disabled={createLoading}>
+            Cancel
+          </Button>
           <Button
             variant="contained"
             onClick={handleCreate}
@@ -428,25 +513,53 @@ export default function UsersPage() {
       </Dialog>
 
       {/* Edit user dialog */}
-      <Dialog open={!!editTarget} onClose={() => setEditTarget(null)} fullScreen={fullScreen} maxWidth="sm" fullWidth>
+      <Dialog
+        open={!!editTarget}
+        onClose={() => setEditTarget(null)}
+        fullScreen={fullScreen}
+        maxWidth="sm"
+        fullWidth
+      >
         <DialogTitle>Edit user</DialogTitle>
         <DialogContent>
           <Box display="flex" flexDirection="column" gap={2} pt={1}>
             {editError && <ErrorAlert message={editError} onClose={() => setEditError(null)} />}
             <Box display="flex" flexDirection={{ xs: 'column', sm: 'row' }} gap={2}>
-              <TextField label="First name" value={editForm.fname} fullWidth
-                onChange={(e) => setEditForm((p) => ({ ...p, fname: e.target.value }))} />
-              <TextField label="Last name" value={editForm.lname} fullWidth
-                onChange={(e) => setEditForm((p) => ({ ...p, lname: e.target.value }))} />
+              <TextField
+                label="First name"
+                value={editForm.fname}
+                fullWidth
+                onChange={(e) => setEditForm((p) => ({ ...p, fname: e.target.value }))}
+              />
+              <TextField
+                label="Last name"
+                value={editForm.lname}
+                fullWidth
+                onChange={(e) => setEditForm((p) => ({ ...p, lname: e.target.value }))}
+              />
             </Box>
-            <TextField label="Email" type="email" value={editForm.email} fullWidth
-              onChange={(e) => setEditForm((p) => ({ ...p, email: e.target.value }))} />
-            <TextField label="Title" value={editForm.title} fullWidth
-              onChange={(e) => setEditForm((p) => ({ ...p, title: e.target.value }))} />
+            <TextField
+              label="Email"
+              type="email"
+              value={editForm.email}
+              fullWidth
+              onChange={(e) => setEditForm((p) => ({ ...p, email: e.target.value }))}
+            />
+            <TextField
+              label="Title"
+              value={editForm.title}
+              fullWidth
+              onChange={(e) => setEditForm((p) => ({ ...p, title: e.target.value }))}
+            />
             <FormControl fullWidth>
               <InputLabel>Status</InputLabel>
-              <Select value={editForm.is_active ? 'active' : 'inactive'} label="Status"
-                onChange={(e) => setEditForm((p) => ({ ...p, is_active: e.target.value === 'active' }))}>
+              <Select
+                value={editForm.is_active ? 'active' : 'inactive'}
+                label="Status"
+                onChange={(e) =>
+                  setEditForm((p) => ({ ...p, is_active: e.target.value === 'active' }))
+                }
+              >
                 <MenuItem value="active">Active</MenuItem>
                 <MenuItem value="inactive">Inactive</MenuItem>
               </Select>
@@ -454,7 +567,9 @@ export default function UsersPage() {
           </Box>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setEditTarget(null)} disabled={editLoading}>Cancel</Button>
+          <Button onClick={() => setEditTarget(null)} disabled={editLoading}>
+            Cancel
+          </Button>
           <Button
             variant="contained"
             onClick={handleEdit}
@@ -467,7 +582,13 @@ export default function UsersPage() {
       </Dialog>
 
       {/* Change role dialog */}
-      <Dialog open={!!roleTarget} onClose={() => setRoleTarget(null)} fullScreen={fullScreen} maxWidth="xs" fullWidth>
+      <Dialog
+        open={!!roleTarget}
+        onClose={() => setRoleTarget(null)}
+        fullScreen={fullScreen}
+        maxWidth="xs"
+        fullWidth
+      >
         <DialogTitle>Change role</DialogTitle>
         <DialogContent>
           <Box pt={0.5} pb={1}>
@@ -478,15 +599,24 @@ export default function UsersPage() {
             {roleError && <ErrorAlert message={roleError} onClose={() => setRoleError(null)} />}
             <FormControl fullWidth>
               <InputLabel>Role</InputLabel>
-              <Select value={selectedRole} label="Role"
-                onChange={(e) => setSelectedRole(e.target.value as UserRole)}>
-                {ROLES.map((r) => <MenuItem key={r} value={r}>{r.replace('_', ' ')}</MenuItem>)}
+              <Select
+                value={selectedRole}
+                label="Role"
+                onChange={(e) => setSelectedRole(e.target.value as UserRole)}
+              >
+                {ROLES.map((r) => (
+                  <MenuItem key={r} value={r}>
+                    {r.replace('_', ' ')}
+                  </MenuItem>
+                ))}
               </Select>
             </FormControl>
           </Box>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setRoleTarget(null)} disabled={roleLoading}>Cancel</Button>
+          <Button onClick={() => setRoleTarget(null)} disabled={roleLoading}>
+            Cancel
+          </Button>
           <Button
             variant="contained"
             onClick={handleRoleChange}
