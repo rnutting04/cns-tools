@@ -5,7 +5,7 @@ import Divider from '@mui/material/Divider'
 import Typography from '@mui/material/Typography'
 import EmailIcon from '@mui/icons-material/Email'
 import WorkIcon from '@mui/icons-material/Work'
-import { useAuth } from '../../hooks/useAuth'
+import { useAuth } from '../../context/AuthContext'
 import RoleBadge from '../../components/layout/RoleBadge'
 
 export default function ProfileSection() {
