@@ -1,3 +1,4 @@
+import Badge from '@mui/material/Badge'
 import Drawer from '@mui/material/Drawer'
 import List from '@mui/material/List'
 import ListItemButton from '@mui/material/ListItemButton'
@@ -10,12 +11,14 @@ import DashboardIcon from '@mui/icons-material/Dashboard'
 import ApartmentIcon from '@mui/icons-material/Apartment'
 import PeopleIcon from '@mui/icons-material/People'
 import DescriptionIcon from '@mui/icons-material/Description'
+import HistoryIcon from '@mui/icons-material/History'
 import FolderIcon from '@mui/icons-material/Folder'
 import TableChartIcon from '@mui/icons-material/TableChart'
 import SettingsIcon from '@mui/icons-material/Settings'
 import SecurityIcon from '@mui/icons-material/Security'
 import { NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
+import { useLetterJobs } from '../../context/LetterJobsContext'
 import { hasRole } from '../../utils/auth'
 
 const DRAWER_WIDTH = 220
@@ -25,6 +28,8 @@ interface NavItem {
   to: string
   icon: React.ReactNode
   roles?: Array<'super_admin' | 'admin' | 'manager' | 'employee'>
+  // Match this route exactly (so e.g. /letters isn't "active" on /letters/generated).
+  exact?: boolean
 }
 
 const NAV_ITEMS: NavItem[] = [
@@ -41,7 +46,17 @@ const NAV_ITEMS: NavItem[] = [
     icon: <PeopleIcon fontSize="small" />,
     roles: ['admin', 'super_admin'],
   },
-  { label: 'Letter generator', to: '/letters', icon: <DescriptionIcon fontSize="small" /> },
+  {
+    label: 'Letter generator',
+    to: '/letters',
+    icon: <DescriptionIcon fontSize="small" />,
+    exact: true,
+  },
+  {
+    label: 'Generated letters',
+    to: '/letters/generated',
+    icon: <HistoryIcon fontSize="small" />,
+  },
   {
     label: 'Template manager',
     to: '/templates',
@@ -66,6 +81,7 @@ interface Props {
 function NavList({ onNavigate }: { onNavigate?: () => void }) {
   const { user } = useAuth()
   const location = useLocation()
+  const { inFlightCount } = useLetterJobs()
 
   const visible = NAV_ITEMS.filter((item) => !item.roles || (user && hasRole(user, item.roles)))
 
@@ -73,7 +89,9 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
     <List dense sx={{ pt: 1 }}>
       {visible.map((item) => {
         const active =
-          item.to === '/' ? location.pathname === '/' : location.pathname.startsWith(item.to)
+          item.to === '/' || item.exact
+            ? location.pathname === item.to
+            : location.pathname.startsWith(item.to)
         return (
           <ListItemButton
             key={item.to}
@@ -93,7 +111,15 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
               },
             }}
           >
-            <ListItemIcon sx={{ minWidth: 36 }}>{item.icon}</ListItemIcon>
+            <ListItemIcon sx={{ minWidth: 36 }}>
+              {item.to === '/letters/generated' && inFlightCount > 0 ? (
+                <Badge badgeContent={inFlightCount} color="primary" max={9}>
+                  {item.icon}
+                </Badge>
+              ) : (
+                item.icon
+              )}
+            </ListItemIcon>
             <ListItemText primary={item.label} slotProps={{ primary: { variant: 'body2' } }} />
           </ListItemButton>
         )

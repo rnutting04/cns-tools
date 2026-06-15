@@ -1,8 +1,13 @@
-.PHONY: dev seed migrate reset stop logs ps install test test-backend test-frontend help
+.PHONY: dev worker seed migrate reset stop logs ps install test test-backend test-frontend help
 
 dev:
 	docker compose up -d
 	cd backend && venv/bin/python -m uvicorn app.main:app --reload --port 8000
+
+# Run in a second shell alongside `make dev`. On WSL/macOS, if the prefork
+# pool misbehaves, add --pool=solo.
+worker:
+	cd backend && venv/bin/celery -A app.celery_app.celery_app worker --loglevel=info --concurrency=2
 
 seed:
 	./scripts/seed.sh
@@ -37,6 +42,7 @@ test: test-backend test-frontend
 help:
 	@echo "Available commands:"
 	@echo "  make dev           - start docker + uvicorn"
+	@echo "  make worker        - start the Celery letter-generation worker"
 	@echo "  make seed          - seed the database"
 	@echo "  make migrate       - run alembic migrations"
 	@echo "  make reset         - nuke and rebuild local DB"

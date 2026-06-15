@@ -28,8 +28,10 @@ import { useAuth } from '../context/AuthContext'
 import ErrorAlert from '../components/layout/ErrorAlert'
 import BallotCandidateEditor from '../components/letters/BallotCandidateEditor'
 import NoticeCandidacyWarningDialog from '../components/letters/NoticeCandidacyWarningDialog'
-import type { Association, Template, ProxyVote } from '../types'
+import type { Association, Template, ProxyVote, GenerateAccepted } from '../types'
 import ProxyVoteEditor from '../components/letters/ProxyVoteEditor'
+import { useLetterJobs } from '../context/LetterJobsContext'
+import { downloadFromUrl } from '../utils/download'
 const STEPS = ['Select template', 'Fill in fields', 'Generate']
 
 const AUTO_POPULATE_KEYS = new Set(['s0ke'])
@@ -609,6 +611,7 @@ export default function LetterGeneratorPage() {
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
   const { user } = useAuth()
+  const { trackJob, jobs } = useLetterJobs()
   const [activeStep, setActiveStep] = useState(0)
   const [templates, setTemplates] = useState<Template[]>([])
   const [associations, setAssociations] = useState<Association[]>([])
@@ -621,6 +624,7 @@ export default function LetterGeneratorPage() {
   const [generating, setGenerating] = useState(false)
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null)
   const [genError, setGenError] = useState<string | null>(null)
+  const [jobId, setJobId] = useState<string | null>(null)
   const [noticeWarningOpen, setNoticeWarningOpen] = useState(false)
 
   useEffect(() => {
@@ -642,6 +646,8 @@ export default function LetterGeneratorPage() {
     setFieldValues({})
     setDownloadUrl(null)
     setGenError(null)
+    setJobId(null)
+    setGenerating(false)
   }, [])
 
   const handleFieldChange = useCallback((key: string, val: unknown) => {
@@ -707,23 +713,7 @@ export default function LetterGeneratorPage() {
 
     try {
       setDownloading(true)
-
-      const response = await fetch(downloadUrl)
-      if (!response.ok) {
-        throw new Error('Failed to download file.')
-      }
-
-      const blob = await response.blob()
-      const blobUrl = window.URL.createObjectURL(blob)
-
-      const a = document.createElement('a')
-      a.href = blobUrl
-      a.download = `${selectedTemplate?.name ?? 'letter'}.docx`
-      document.body.appendChild(a)
-      a.click()
-      a.remove()
-
-      window.URL.revokeObjectURL(blobUrl)
+      await downloadFromUrl(downloadUrl, `${selectedTemplate?.name ?? 'letter'}.docx`)
     } catch {
       setGenError('Failed to download file.')
     } finally {
@@ -742,27 +732,44 @@ export default function LetterGeneratorPage() {
 
     setGenerating(true)
     setGenError(null)
+    setDownloadUrl(null)
 
     try {
-      const res = await apiClient.post<{ job_id: string; download_url: string; status: string }>(
-        '/api/letters/generate',
-        {
-          template_id: selectedTemplate.id,
-          association_id: associationId,
-          field_values: fieldValues,
-        },
-      )
+      // The request is accepted immediately; the worker renders in the
+      // background and we poll GET /api/letters/{job_id} for the result.
+      const res = await apiClient.post<GenerateAccepted>('/api/letters/generate', {
+        template_id: selectedTemplate.id,
+        association_id: associationId,
+        field_values: fieldValues,
+      })
 
-      setDownloadUrl(res.data.download_url)
+      setJobId(res.data.job_id)
+      // Register with the app-wide tracker so the job keeps being polled (and
+      // raises a completion toast) even if the user navigates away.
+      trackJob(res.data.job_id)
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ??
         'Generation failed.'
       setGenError(msg)
-    } finally {
       setGenerating(false)
     }
   }
+
+  // The app-wide tracker polls the queued job; surface its outcome inline here.
+  const jobStatus = jobId ? jobs[jobId] : undefined
+  useEffect(() => {
+    if (!jobStatus) return
+    if (jobStatus.status === 'complete') {
+      setDownloadUrl(jobStatus.download_url)
+      setGenerating(false)
+      setJobId(null)
+    } else if (jobStatus.status === 'failed') {
+      setGenError('Generation failed.')
+      setGenerating(false)
+      setJobId(null)
+    }
+  }, [jobStatus])
 
   // 60-day notice check for notice_candidacy renderer.
   // Finds the first date-type field value and checks if it's < 60 days from today.
@@ -797,6 +804,8 @@ export default function LetterGeneratorPage() {
     setFieldValues({})
     setDownloadUrl(null)
     setGenError(null)
+    setJobId(null)
+    setGenerating(false)
   }
 
   const userName = user ? `${user.fname} ${user.lname}` : ''

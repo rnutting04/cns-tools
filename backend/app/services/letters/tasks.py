@@ -1,66 +1,39 @@
 # app/services/letters/tasks.py
 """
-Worker-friendly wrapper around generate_letter().
+Celery task for background letter generation.
 
-This is the entry point for async execution (Dramatiq, Celery, RQ, etc.).
-It handles its own database session lifecycle since workers don't get
-one injected the way HTTP routes do.
+The HTTP route (app/routers/templates.py) does the validation/authorization and
+creates a pending LetterJob synchronously, then enqueues this task with just the
+job id. The worker re-renders from the context already stored on the job, so the
+task payload stays small and retries are safe.
 
-When you're ready to move generation to a worker, the HTTP route will:
-  1. Create a LetterJob in `pending` status
-  2. Enqueue generate_letter_task(job_id)
-  3. Return the job_id immediately
-
-The frontend polls /letters/{job_id} or subscribes via websocket for status.
+The frontend polls GET /letters/{job_id} for status and the download URL.
 """
 
 from typing import Any
 from uuid import UUID
 
-from app.database import SessionLocal  # adjust if your session factory lives elsewhere
-from app.models.user import User
-from app.services.letters.service import generate_letter
+from app.celery_app import celery_app
+from app.database import SessionLocal
+from app.services.letters.exceptions import RenderFailed
+from app.services.letters.service import render_letter_job
 
 
-def generate_letter_task(
-    user_id: UUID,
-    template_id: UUID,
-    field_values: dict[str, Any],
-) -> dict[str, Any]:
+@celery_app.task(bind=True, max_retries=3, acks_late=True)
+def generate_letter_task(self, job_id: str) -> dict[str, Any]:
     """
-    Synchronous function suitable for wrapping with @dramatiq.actor
-    or @celery.task. Creates its own DB session.
+    Render an already-prepared LetterJob. Creates its own DB session since
+    workers don't get one injected the way HTTP routes do.
 
-    Returns a serializable dict so task result backends can store it.
+    Retries transient render/upload failures (e.g. MinIO blips) with
+    exponential backoff. ``render_letter_job`` is idempotent, so a retry that
+    runs after a partial success is safe.
     """
     db = SessionLocal()
     try:
-        user = db.query(User).filter(User.id == user_id).first()
-        if not user:
-            raise ValueError(f"User {user_id} not found")
-
-        result = generate_letter(
-            db=db,
-            current_user=user,
-            template_id=template_id,
-            field_values=field_values,
-        )
-        return {
-            "job_id": str(result.job_id),
-            "download_url": result.download_url,
-            "status": result.status,
-        }
+        result = render_letter_job(db, UUID(job_id))
+        return {"job_id": str(result.job_id), "status": result.status}
+    except RenderFailed as exc:
+        raise self.retry(exc=exc, countdown=2**self.request.retries) from exc
     finally:
         db.close()
-
-
-# --- When you wire up Dramatiq, uncomment this ---------------------------
-# import dramatiq
-#
-# @dramatiq.actor(max_retries=3, time_limit=60_000)
-# def generate_letter_actor(user_id: str, template_id: str, field_values: dict):
-#     return generate_letter_task(
-#         user_id=UUID(user_id),
-#         template_id=UUID(template_id),
-#         field_values=field_values,
-#     )

@@ -5,36 +5,58 @@ import uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
 from app.dependencies import get_current_user, require_admin
-from app.models.letter_job import LetterJob
+from app.models.letter_job import JobStatus, LetterJob
 from app.models.template import Template
 from app.models.user import User, UserRole
 from app.schemas.template import (
     FieldDefinition,
-    GenerateResponse,
+    GenerateAcceptedResponse,
+    LetterDerivedEntry,
+    LetterFieldEntry,
     LetterGenerateRequest,
+    LetterJobDetailResponse,
     LetterJobResponse,
+    LetterJobStatusResponse,
     TemplateResponse,
 )
 from app.services.audit import log_event
-from app.services.letters import generate_letter
+from app.services.letters import prepare_letter_job
 from app.services.letters.exceptions import (
     AccessDenied,
     AssociationNotFound,
     InvalidTemplateConfiguration,
     ManagerNotFound,
     MissingRequiredField,
-    RenderFailed,
     TemplateNotFound,
 )
+from app.services.letters.tasks import generate_letter_task
 from app.services.storage import storage_service
 
 router = APIRouter(tags=["templates"])
 
 DOCX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+# Curated auto-resolved fields surfaced in the letter detail view, in display
+# order. Keys come from the enriched context stored in LetterJob.field_values
+# (see services/letters + utils/field_enrichment); the many string/date variants
+# (_upper, _iso, ...) are intentionally excluded as noise.
+DERIVED_FIELD_LABELS: list[tuple[str, str]] = [
+    ("legal_association_name", "Legal name"),
+    ("association_location_name", "Location"),
+    ("assn_city", "City"),
+    ("manager_full_name", "Manager"),
+    ("manager_titles", "Manager title"),
+    ("manager_email", "Manager email"),
+    ("office_street", "Office street"),
+    ("office_city_state_zip", "Office city/state/zip"),
+    ("office_phone", "Office phone"),
+    ("notice_deadline", "Notice deadline"),
+    ("today_date", "Letter date"),
+]
 
 
 def _validate_docx(file: UploadFile) -> None:
@@ -231,14 +253,16 @@ def deactivate_template(
     db.commit()
 
 
-@router.post("/letters/generate", response_model=GenerateResponse, status_code=201)
+@router.post("/letters/generate", response_model=GenerateAcceptedResponse, status_code=202)
 def generate_letter_route(
     body: LetterGenerateRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    # Validation + authorization happen synchronously so bad/unauthorized
+    # requests fail fast and never reach the worker queue.
     try:
-        result = generate_letter(
+        job = prepare_letter_job(
             db=db,
             current_user=current_user,
             template_id=body.template_id,
@@ -250,14 +274,16 @@ def generate_letter_route(
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     except (InvalidTemplateConfiguration, MissingRequiredField) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except RenderFailed as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
-    return GenerateResponse(
-        job_id=result.job_id,
-        download_url=result.download_url,
-        status=result.status,
-    )
+    # Capture the submission-time state before enqueuing: under Celery's eager
+    # (test) mode .delay() runs the task inline and would mutate job.status.
+    job_id = job.id
+    status = job.status.value
+
+    # Hand off the heavy render/upload to the background worker.
+    generate_letter_task.delay(str(job_id))
+
+    return GenerateAcceptedResponse(job_id=job_id, status=status)
 
 
 @router.get("/letters/history", response_model=list[LetterJobResponse])
@@ -265,7 +291,108 @@ def letter_history(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    query = db.query(LetterJob)
-    if current_user.role == UserRole.manager:
+    # Each user's personal "Generated Letters" list is scoped to their own jobs.
+    # Super-admins get the full cross-user list for auditing.
+    query = db.query(LetterJob).options(
+        joinedload(LetterJob.template),
+        joinedload(LetterJob.association),
+        joinedload(LetterJob.creator),
+    )
+    if current_user.role != UserRole.super_admin:
         query = query.filter(LetterJob.created_by == current_user.id)
-    return query.order_by(LetterJob.created_at.desc()).all()
+    jobs = query.order_by(LetterJob.created_at.desc()).all()
+
+    return [
+        LetterJobResponse(
+            id=job.id,
+            template_id=job.template_id,
+            template_name=job.template.name,
+            association_id=job.association_id,
+            association_name=job.association.legal_name,
+            created_by=job.created_by,
+            created_by_name=f"{job.creator.fname} {job.creator.lname}",
+            status=job.status.value,
+            output_path=job.output_path,
+            # Download URLs are minted lazily (on demand via GET /letters/{id})
+            # so a long history list doesn't generate a presigned URL per row.
+            created_at=job.created_at,
+        )
+        for job in jobs
+    ]
+
+
+@router.get("/letters/{job_id}", response_model=LetterJobStatusResponse)
+def get_letter_job(
+    job_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    job = db.query(LetterJob).filter(LetterJob.id == job_id).first()
+    if not job or not _can_view_job(job, current_user):
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    # Presigned URLs expire, so generate a fresh one on each poll once ready.
+    download_url = None
+    if job.status == JobStatus.complete and job.output_path:
+        download_url = storage_service.generate_presigned_url(job.output_path, expires=3600)
+
+    return LetterJobStatusResponse(
+        job_id=job.id,
+        status=job.status.value,
+        download_url=download_url,
+    )
+
+
+def _can_view_job(job: LetterJob, user: User) -> bool:
+    """A job is visible to its creator or to any super-admin (cross-user
+    auditing). Callers return 404 (not 403) so the existence of other users'
+    jobs is never leaked."""
+    return job.created_by == user.id or user.role == UserRole.super_admin
+
+
+@router.get("/letters/{job_id}/details", response_model=LetterJobDetailResponse)
+def get_letter_job_details(
+    job_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    job = (
+        db.query(LetterJob)
+        .options(
+            joinedload(LetterJob.template),
+            joinedload(LetterJob.association),
+            joinedload(LetterJob.creator),
+        )
+        .filter(LetterJob.id == job_id)
+        .first()
+    )
+    if not job or not _can_view_job(job, current_user):
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    values = job.field_values or {}
+
+    # "Your entries" — the template fields the user actually filled in, in the
+    # template's declared order, skipping blanks.
+    entries = [
+        LetterFieldEntry(key=field["key"], label=field["label"], value=str(values[field["key"]]))
+        for field in (job.template.fields or [])
+        if values.get(field["key"]) not in (None, "")
+    ]
+
+    # "Resolved details" — curated auto-derived fields that are present.
+    derived = [
+        LetterDerivedEntry(label=label, value=str(values[key]))
+        for key, label in DERIVED_FIELD_LABELS
+        if values.get(key) not in (None, "")
+    ]
+
+    return LetterJobDetailResponse(
+        id=job.id,
+        template_name=job.template.name,
+        association_name=job.association.legal_name,
+        created_by_name=f"{job.creator.fname} {job.creator.lname}",
+        status=job.status.value,
+        created_at=job.created_at,
+        entries=entries,
+        derived=derived,
+    )

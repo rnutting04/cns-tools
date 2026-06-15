@@ -117,6 +117,39 @@ def client(app_instance, db_session):
 
 
 @pytest.fixture
+def celery_eager(db_session, monkeypatch):
+    """
+    Run Celery tasks inline (eager) and make them reuse the test's session.
+
+    The real task opens its own ``SessionLocal()`` on a fresh connection, which
+    cannot see the rows the test transaction has not committed. We swap it for a
+    thin proxy over ``db_session`` whose ``close()`` is a no-op, so the eager
+    task runs inside the same rolled-back transaction.
+    """
+    from app.celery_app import celery_app
+
+    class _NonClosingSession:
+        def __init__(self, session):
+            self._session = session
+
+        def __getattr__(self, name):
+            return getattr(self._session, name)
+
+        def close(self):  # don't close the shared test session
+            pass
+
+    monkeypatch.setattr(
+        "app.services.letters.tasks.SessionLocal",
+        lambda: _NonClosingSession(db_session),
+    )
+    celery_app.conf.task_always_eager = True
+    celery_app.conf.task_eager_propagates = True
+    yield
+    celery_app.conf.task_always_eager = False
+    celery_app.conf.task_eager_propagates = False
+
+
+@pytest.fixture
 def as_user(app_instance, db_session, client):
     """
     Factory: create a user of the given role and authenticate the client as them
