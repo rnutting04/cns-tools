@@ -6,8 +6,7 @@ FastAPI + PostgreSQL with background letter rendering on Celery; the frontend is
 MUI. Generated DOCX files are stored in an S3-compatible object store (MinIO locally).
 
 This README covers getting a **local development** environment running. For testing
-details see [TESTING.md](TESTING.md), and for architecture/conventions see
-[CLAUDE.md](CLAUDE.md).
+details see [TESTING.md](TESTING.md).
 
 ## Tech stack
 
