@@ -45,17 +45,20 @@ cd frontend
 npm install
 cd ..
 
-# 4. Start Docker services (Postgres, MinIO, Redis, pgAdmin) and the API
+# 4. Install pre-commit hooks (runs ruff + eslint on staged files automatically)
+pre-commit install
+
+# 5. Start Docker services (Postgres, MinIO, Redis, pgAdmin) and the API
 make dev                # runs `docker compose up -d` then uvicorn on :8000
 
-# 5. In a second shell — run migrations and seed initial data
+# 6. In a second shell — run migrations and seed initial data
 make migrate            # alembic upgrade head
 make seed               # creates the initial super_admin + sample data
 
-# 6. In a second/third shell — start the Celery worker (background letter rendering)
+# 7. In a second/third shell — start the Celery worker (background letter rendering)
 make worker
 
-# 7. In another shell — start the frontend dev server
+# 8. In another shell — start the frontend dev server
 cd frontend && npm run dev
 ```
 
