@@ -17,15 +17,20 @@ repos:
     hooks:
       - id: ruff
         name: ruff lint (backend)
-        args: [--fix]
         files: ^backend/.*\.py$
       - id: ruff-format
         name: ruff format (backend)
         files: ^backend/.*\.py$
 
-  # --- Frontend: eslint on staged TS/TSX, run from the frontend/ package ----
+  # --- Frontend: prettier format then eslint lint on staged TS/TSX -----------
   - repo: local
     hooks:
+      - id: frontend-prettier
+        name: prettier (frontend)
+        language: system
+        entry: scripts/prettier-staged.sh
+        files: ^frontend/src/.*\.(ts|tsx)$
+        require_serial: true
       - id: frontend-eslint
         name: eslint (frontend)
         language: system

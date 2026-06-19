@@ -1,12 +1,13 @@
 import Chip from '@mui/material/Chip'
 import type { UserRole } from '../../types'
 
-const config: Record<UserRole, { label: string; color: 'error' | 'warning' | 'info' | 'default' }> = {
-  super_admin: { label: 'Super admin', color: 'error' },
-  admin: { label: 'Admin', color: 'warning' },
-  manager: { label: 'Manager', color: 'info' },
-  employee: { label: 'Employee', color: 'default' },
-}
+const config: Record<UserRole, { label: string; color: 'error' | 'warning' | 'info' | 'default' }> =
+  {
+    super_admin: { label: 'Super admin', color: 'error' },
+    admin: { label: 'Admin', color: 'warning' },
+    manager: { label: 'Manager', color: 'info' },
+    employee: { label: 'Employee', color: 'default' },
+  }
 
 interface Props {
   role: UserRole

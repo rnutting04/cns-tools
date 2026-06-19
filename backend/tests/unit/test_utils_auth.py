@@ -52,7 +52,9 @@ class TestTokens:
             decode_token(token + "tamper")
 
     def test_token_signed_with_wrong_secret_raises(self):
-        forged = jwt.encode({"sub": "x"}, "not-the-real-secret-key-definitely-wrong", algorithm="HS256")
+        forged = jwt.encode(
+            {"sub": "x"}, "not-the-real-secret-key-definitely-wrong", algorithm="HS256"
+        )
         assert settings.SECRET_KEY != "not-the-real-secret-key-definitely-wrong"
         with pytest.raises(jwt.InvalidTokenError):
             decode_token(forged)

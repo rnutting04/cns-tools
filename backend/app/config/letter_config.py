@@ -9,13 +9,13 @@ Python because they're tied to code paths.
 All YAML files are loaded once per process and cached. Restart the server
 to pick up changes.
 """
+
 from collections import defaultdict
 from functools import lru_cache
 from pathlib import Path
 from typing import TypedDict
 
 import yaml
-
 
 CONFIG_DIR = Path(__file__).parent
 

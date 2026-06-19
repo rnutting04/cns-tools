@@ -34,12 +34,7 @@ export default function ConfirmDialog({
         <Button onClick={onCancel} disabled={loading}>
           Cancel
         </Button>
-        <Button
-          variant="contained"
-          color="error"
-          onClick={onConfirm}
-          disabled={loading}
-        >
+        <Button variant="contained" color="error" onClick={onConfirm} disabled={loading}>
           {loading ? 'Processing…' : confirmLabel}
         </Button>
       </DialogActions>

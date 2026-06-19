@@ -1,16 +1,18 @@
 # alembic/env.py
 from logging.config import fileConfig
+
 from sqlalchemy import engine_from_config, pool
+
 from alembic import context
 from app.config import settings
 from app.database import Base
 
-# import all models so alembic can detect them
-from app.models.user import User
-from app.models.association import Association, UserAssociation
-from app.models.template import Template
-from app.models.letter_job import LetterJob
-from app.models.audit_event import AuditEvent
+# import all models so alembic can detect them (side-effect: populates Base.metadata)
+from app.models.association import Association, UserAssociation  # noqa: F401
+from app.models.audit_event import AuditEvent  # noqa: F401
+from app.models.letter_job import LetterJob  # noqa: F401
+from app.models.template import Template  # noqa: F401
+from app.models.user import User  # noqa: F401
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
@@ -19,6 +21,7 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 target_metadata = Base.metadata
+
 
 def run_migrations_offline():
     url = config.get_main_option("sqlalchemy.url")
@@ -31,6 +34,7 @@ def run_migrations_offline():
     with context.begin_transaction():
         context.run_migrations()
 
+
 def run_migrations_online():
     connectable = engine_from_config(
         config.get_section(config.config_ini_section),
@@ -38,12 +42,10 @@ def run_migrations_online():
         poolclass=pool.NullPool,
     )
     with connectable.connect() as connection:
-        context.configure(
-            connection=connection,
-            target_metadata=target_metadata
-        )
+        context.configure(connection=connection, target_metadata=target_metadata)
         with context.begin_transaction():
             context.run_migrations()
+
 
 if context.is_offline_mode():
     run_migrations_offline()

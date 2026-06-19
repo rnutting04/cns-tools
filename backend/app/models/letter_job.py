@@ -1,9 +1,9 @@
 # app/models/letter_job.py
 import enum
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
-from sqlalchemy import Column, DateTime, Enum, ForeignKey, JSON, String
+from sqlalchemy import JSON, Column, DateTime, Enum, ForeignKey, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -12,6 +12,7 @@ from app.database import Base
 
 class JobStatus(str, enum.Enum):
     pending = "pending"
+    processing = "processing"
     complete = "complete"
     failed = "failed"
 
@@ -26,7 +27,7 @@ class LetterJob(Base):
     field_values = Column(JSON, nullable=False, default=dict)
     output_path = Column(String(500), nullable=True)
     status = Column(Enum(JobStatus), nullable=False, default=JobStatus.pending)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
 
     template = relationship("Template", back_populates="letter_jobs")
     association = relationship("Association")

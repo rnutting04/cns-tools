@@ -24,7 +24,9 @@ class StorageService:
         except ClientError:
             self._client.create_bucket(Bucket=self._bucket)
 
-    def upload_file(self, file_bytes: bytes, key: str, content_type: str = "application/octet-stream") -> str:
+    def upload_file(
+        self, file_bytes: bytes, key: str, content_type: str = "application/octet-stream"
+    ) -> str:
         self._client.put_object(
             Bucket=self._bucket,
             Key=key,

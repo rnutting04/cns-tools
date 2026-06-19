@@ -1,10 +1,8 @@
 # app/services/letter_generator.py
-import re
 from io import BytesIO
 from typing import Any
 
 from docx import Document
-from docx.oxml.ns import qn
 
 
 def _replace_in_paragraph(paragraph, field_values: dict[str, Any]) -> None:
@@ -16,17 +14,11 @@ def _replace_in_paragraph(paragraph, field_values: dict[str, Any]) -> None:
         for key, value in field_values.items():
             placeholder = f"{{{{{key}}}}}"
             if placeholder in run.text:
-                run.text = run.text.replace(
-                    placeholder,
-                    str(value) if value is not None else ""
-                )
-
+                run.text = run.text.replace(placeholder, str(value) if value is not None else "")
 
     remaining = "".join(run.text for run in paragraph.runs)
     if "{{" in remaining:
-        raise ValueError(
-            f"Unresolved placeholder (likely split across runs): {remaining}"
-        )
+        raise ValueError(f"Unresolved placeholder (likely split across runs): {remaining}")
 
 
 def replace_placeholders(doc: Document, field_values: dict[str, Any]) -> Document:

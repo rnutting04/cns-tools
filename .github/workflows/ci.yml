@@ -40,6 +40,9 @@ jobs:
       - name: Lint frontend
         run: npm run lint
 
+      - name: Format check frontend (prettier)
+        run: npx prettier --check "src/**/*.{ts,tsx}"
+
   backend:
     runs-on: ubuntu-latest
     defaults:
@@ -117,8 +120,11 @@ jobs:
       - name: Backend import check
         run: python -c "from app.main import app; print('Backend import OK')"
 
-      - name: Lint backend tests (ruff)
-        run: ruff check tests
+      - name: Lint backend (ruff)
+        run: ruff check .
+
+      - name: Format check backend (ruff)
+        run: ruff format --check .
 
       - name: Run backend tests
         # The test suite creates and uses a separate `cs_tool_hub_test` database

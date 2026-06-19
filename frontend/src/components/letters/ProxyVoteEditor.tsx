@@ -13,14 +13,20 @@ import DeleteIcon from '@mui/icons-material/Delete'
 import type { ProxyVote, ProxyVoteType } from '../../types'
 
 const VOTE_OPTIONS: { value: ProxyVoteType; label: string }[] = [
-  { value: 'waive_financial_one_year', label: 'Waiving the financial reporting requirement for one year' },
+  {
+    value: 'waive_financial_one_year',
+    label: 'Waiving the financial reporting requirement for one year',
+  },
   { value: 'lower_financial_level', label: 'Lowering the financial reporting requirement level' },
   { value: 'cross_utilization_reserves', label: 'Cross utilization of reserves' },
   { value: 'straight_line_to_pooled', label: 'Changing reserves from Straight Line to Pooled' },
   { value: 'partial_reserve_funding', label: 'Partially Funding the Reserves as one vote' },
   { value: 'waive_reserves', label: 'Waiving Reserves' },
   { value: 'use_reserves_other_purpose', label: 'Using reserves for other than intended purposes' },
-  { value: 'move_reserve_line_items', label: 'Moving Reserve Funds from One Line Item to Another Line Item' },
+  {
+    value: 'move_reserve_line_items',
+    label: 'Moving Reserve Funds from One Line Item to Another Line Item',
+  },
   { value: 'irs_rollover', label: 'IRS Rollover surplus Funds' },
 ]
 
@@ -110,9 +116,7 @@ export default function ProxyVoteEditor({
 
       {safeVotes.length === 0 && (
         <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
-          <Typography color="text.secondary">
-            No vote items added yet.
-          </Typography>
+          <Typography color="text.secondary">No vote items added yet.</Typography>
         </Paper>
       )}
 

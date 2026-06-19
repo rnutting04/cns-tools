@@ -1,8 +1,10 @@
-from pydantic import BaseModel, EmailStr
-from typing import Optional
 from datetime import datetime
 from uuid import UUID
+
+from pydantic import BaseModel, EmailStr
+
 from app.models.user import UserRole
+
 
 # what you accept when creating a user
 class UserCreate(BaseModel):
@@ -13,14 +15,16 @@ class UserCreate(BaseModel):
     role: UserRole
     password: str
 
+
 # what you accept when updating a user
 class UserUpdate(BaseModel):
-    fname: Optional[str] = None
-    lname: Optional[str] = None
-    email: Optional[EmailStr] = None
-    title: Optional[str] = None
-    role: Optional[UserRole] = None
-    is_active: Optional[bool] = None
+    fname: str | None = None
+    lname: str | None = None
+    email: EmailStr | None = None
+    title: str | None = None
+    role: UserRole | None = None
+    is_active: bool | None = None
+
 
 # what you return in responses - notice no password_hash
 class UserResponse(BaseModel):
@@ -38,9 +42,10 @@ class UserResponse(BaseModel):
     class Config:
         from_attributes = True
 
+
 # what you return with associations included
 class UserWithAssociations(UserResponse):
-    associations: list["AssociationResponse"] = []
+    associations: list["AssociationResponse"] = []  # noqa: F821
 
     class Config:
         from_attributes = True

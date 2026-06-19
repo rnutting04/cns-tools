@@ -89,7 +89,14 @@ function DetailDialog({ event, onClose }: { event: AuditEvent; onClose: () => vo
           <TableBody>
             {rows.map(([label, value]) => (
               <TableRow key={label}>
-                <TableCell sx={{ width: 140, color: 'text.secondary', fontWeight: 500, whiteSpace: 'nowrap' }}>
+                <TableCell
+                  sx={{
+                    width: 140,
+                    color: 'text.secondary',
+                    fontWeight: 500,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
                   {label}
                 </TableCell>
                 <TableCell sx={{ wordBreak: 'break-all' }}>{value}</TableCell>
@@ -291,7 +298,10 @@ export default function AuditPage() {
   }, [queryParams])
 
   useEffect(() => {
-    apiClient.get<string[]>('/api/audit/actions').then(({ data }) => setAllActions(data)).catch(() => {})
+    apiClient
+      .get<string[]>('/api/audit/actions')
+      .then(({ data }) => setAllActions(data))
+      .catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -341,7 +351,9 @@ export default function AuditPage() {
             <Button
               variant="outlined"
               size="small"
-              startIcon={exporting ? <CircularProgress size={14} color="inherit" /> : <DownloadIcon />}
+              startIcon={
+                exporting ? <CircularProgress size={14} color="inherit" /> : <DownloadIcon />
+              }
               onClick={handleExport}
               disabled={exporting}
             >
@@ -396,16 +408,14 @@ export default function AuditPage() {
                     <TableCell sx={{ whiteSpace: 'nowrap', color: 'text.secondary', fontSize: 13 }}>
                       {new Date(event.created_at).toLocaleString()}
                     </TableCell>
-                    <TableCell sx={{ fontSize: 13 }}>
-                      {actorLabel(event)}
-                    </TableCell>
+                    <TableCell sx={{ fontSize: 13 }}>{actorLabel(event)}</TableCell>
                     <TableCell>
                       <Chip label={event.action} size="small" color={actionColor(event.action)} />
                     </TableCell>
                     <TableCell sx={{ fontSize: 13, color: 'text.secondary' }}>
                       {event.target_type && event.target_id
                         ? `${event.target_type} / ${event.target_id.slice(0, 8)}…`
-                        : event.target_type ?? '—'}
+                        : (event.target_type ?? '—')}
                     </TableCell>
                   </TableRow>
                 ))
@@ -423,10 +433,18 @@ export default function AuditPage() {
                 {data.total} events · page {data.page} of {data.pages}
               </Typography>
               <Box display="flex" gap={0.5}>
-                <IconButton size="small" disabled={page === 1} onClick={() => setPage((p) => p - 1)}>
+                <IconButton
+                  size="small"
+                  disabled={page === 1}
+                  onClick={() => setPage((p) => p - 1)}
+                >
                   <NavigateBeforeIcon fontSize="small" />
                 </IconButton>
-                <IconButton size="small" disabled={page >= data.pages} onClick={() => setPage((p) => p + 1)}>
+                <IconButton
+                  size="small"
+                  disabled={page >= data.pages}
+                  onClick={() => setPage((p) => p + 1)}
+                >
                   <NavigateNextIcon fontSize="small" />
                 </IconButton>
               </Box>

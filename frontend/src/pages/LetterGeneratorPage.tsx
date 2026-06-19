@@ -28,13 +28,13 @@ import { useAuth } from '../context/AuthContext'
 import ErrorAlert from '../components/layout/ErrorAlert'
 import BallotCandidateEditor from '../components/letters/BallotCandidateEditor'
 import NoticeCandidacyWarningDialog from '../components/letters/NoticeCandidacyWarningDialog'
-import type { Association, Template, ProxyVote } from '../types'
+import type { Association, Template, ProxyVote, GenerateAccepted } from '../types'
 import ProxyVoteEditor from '../components/letters/ProxyVoteEditor'
+import { useLetterJobs } from '../context/LetterJobsContext'
+import { downloadFromUrl } from '../utils/download'
 const STEPS = ['Select template', 'Fill in fields', 'Generate']
 
-const AUTO_POPULATE_KEYS = new Set([
-  's0ke'
-])
+const AUTO_POPULATE_KEYS = new Set(['s0ke'])
 
 type RendererType = 'simple' | 'proxy' | 'ballot' | 'electronic_ballot' | 'notice_candidacy'
 type FieldValueMap = Record<string, unknown>
@@ -528,14 +528,16 @@ function GenerateStep({
           </Box>
 
           <Box display="flex" gap={2} flexWrap="wrap">
-          <Button
-            variant="contained"
-            startIcon={downloading ? <CircularProgress size={16} color="inherit" /> : <DownloadIcon />}
-            onClick={onDownload}
-            disabled={downloading}
-          >
-            {downloading ? 'Downloading…' : 'Download letter'}
-          </Button>
+            <Button
+              variant="contained"
+              startIcon={
+                downloading ? <CircularProgress size={16} color="inherit" /> : <DownloadIcon />
+              }
+              onClick={onDownload}
+              disabled={downloading}
+            >
+              {downloading ? 'Downloading…' : 'Download letter'}
+            </Button>
 
             <Button variant="outlined" startIcon={<RestartAltIcon />} onClick={onReset}>
               Generate another
@@ -550,14 +552,14 @@ function GenerateStep({
             </Typography>
           )}
 
-        <Button
-          variant="contained"
-          onClick={onGenerate}
-          disabled={generating}
-          startIcon={generating ? <CircularProgress size={16} color="inherit" /> : undefined}
-        >
-          {generating ? 'Generating…' : 'Generate letter'}
-        </Button>
+          <Button
+            variant="contained"
+            onClick={onGenerate}
+            disabled={generating}
+            startIcon={generating ? <CircularProgress size={16} color="inherit" /> : undefined}
+          >
+            {generating ? 'Generating…' : 'Generate letter'}
+          </Button>
         </Box>
       )}
     </Box>
@@ -572,7 +574,8 @@ function isProxyVoteComplete(vote: ProxyVote): boolean {
       return has(vote.fiscal_year)
 
     case 'lower_financial_level':
-      return ( has(vote.from_level) &&
+      return (
+        has(vote.from_level) &&
         has(vote.to_level) &&
         has(vote.fiscal_year) &&
         vote.from_level !== vote.to_level
@@ -608,6 +611,7 @@ export default function LetterGeneratorPage() {
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
   const { user } = useAuth()
+  const { trackJob, jobs } = useLetterJobs()
   const [activeStep, setActiveStep] = useState(0)
   const [templates, setTemplates] = useState<Template[]>([])
   const [associations, setAssociations] = useState<Association[]>([])
@@ -620,6 +624,7 @@ export default function LetterGeneratorPage() {
   const [generating, setGenerating] = useState(false)
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null)
   const [genError, setGenError] = useState<string | null>(null)
+  const [jobId, setJobId] = useState<string | null>(null)
   const [noticeWarningOpen, setNoticeWarningOpen] = useState(false)
 
   useEffect(() => {
@@ -641,6 +646,8 @@ export default function LetterGeneratorPage() {
     setFieldValues({})
     setDownloadUrl(null)
     setGenError(null)
+    setJobId(null)
+    setGenerating(false)
   }, [])
 
   const handleFieldChange = useCallback((key: string, val: unknown) => {
@@ -661,17 +668,17 @@ export default function LetterGeneratorPage() {
       // Ballot renderers require a year selection and at least one non-empty candidate
       if (rendererType === 'ballot' || rendererType === 'electronic_ballot') {
         if (rendererType === 'ballot' && !fieldValues.ballot_year) return false
-      
+
         const candidates = Array.isArray(fieldValues.candidates)
           ? (fieldValues.candidates as string[])
           : []
-      
+
         if (candidates.length === 0 || candidates.some((c) => !c.trim())) return false
       }
 
       if (rendererType === 'proxy') {
         const votes = Array.isArray(fieldValues.votes) ? (fieldValues.votes as ProxyVote[]) : []
-      
+
         if (votes.length === 0) return false
         if (votes.some((vote) => !isProxyVoteComplete(vote))) return false
       }
@@ -703,26 +710,10 @@ export default function LetterGeneratorPage() {
 
   const handleDownload = async () => {
     if (!downloadUrl) return
-  
+
     try {
       setDownloading(true)
-  
-      const response = await fetch(downloadUrl)
-      if (!response.ok) {
-        throw new Error('Failed to download file.')
-      }
-  
-      const blob = await response.blob()
-      const blobUrl = window.URL.createObjectURL(blob)
-  
-      const a = document.createElement('a')
-      a.href = blobUrl
-      a.download = `${selectedTemplate?.name ?? 'letter'}.docx`
-      document.body.appendChild(a)
-      a.click()
-      a.remove()
-  
-      window.URL.revokeObjectURL(blobUrl)
+      await downloadFromUrl(downloadUrl, `${selectedTemplate?.name ?? 'letter'}.docx`)
     } catch {
       setGenError('Failed to download file.')
     } finally {
@@ -741,27 +732,44 @@ export default function LetterGeneratorPage() {
 
     setGenerating(true)
     setGenError(null)
+    setDownloadUrl(null)
 
     try {
-      const res = await apiClient.post<{ job_id: string; download_url: string; status: string }>(
-        '/api/letters/generate',
-        {
-          template_id: selectedTemplate.id,
-          association_id: associationId,
-          field_values: fieldValues,
-        },
-      )
+      // The request is accepted immediately; the worker renders in the
+      // background and we poll GET /api/letters/{job_id} for the result.
+      const res = await apiClient.post<GenerateAccepted>('/api/letters/generate', {
+        template_id: selectedTemplate.id,
+        association_id: associationId,
+        field_values: fieldValues,
+      })
 
-      setDownloadUrl(res.data.download_url)
+      setJobId(res.data.job_id)
+      // Register with the app-wide tracker so the job keeps being polled (and
+      // raises a completion toast) even if the user navigates away.
+      trackJob(res.data.job_id)
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ??
         'Generation failed.'
       setGenError(msg)
-    } finally {
       setGenerating(false)
     }
   }
+
+  // The app-wide tracker polls the queued job; surface its outcome inline here.
+  const jobStatus = jobId ? jobs[jobId] : undefined
+  useEffect(() => {
+    if (!jobStatus) return
+    if (jobStatus.status === 'complete') {
+      setDownloadUrl(jobStatus.download_url)
+      setGenerating(false)
+      setJobId(null)
+    } else if (jobStatus.status === 'failed') {
+      setGenError('Generation failed.')
+      setGenerating(false)
+      setJobId(null)
+    }
+  }, [jobStatus])
 
   // 60-day notice check for notice_candidacy renderer.
   // Finds the first date-type field value and checks if it's < 60 days from today.
@@ -796,6 +804,8 @@ export default function LetterGeneratorPage() {
     setFieldValues({})
     setDownloadUrl(null)
     setGenError(null)
+    setJobId(null)
+    setGenerating(false)
   }
 
   const userName = user ? `${user.fname} ${user.lname}` : ''

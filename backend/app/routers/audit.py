@@ -141,19 +141,30 @@ def export_csv(
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow(
-        ["timestamp", "actor_email", "action", "target_type", "target_id", "ip_address", "user_agent", "metadata"]
+        [
+            "timestamp",
+            "actor_email",
+            "action",
+            "target_type",
+            "target_id",
+            "ip_address",
+            "user_agent",
+            "metadata",
+        ]
     )
     for e in events:
-        writer.writerow([
-            e.created_at.isoformat(),
-            e.actor.email if e.actor else "",
-            e.action,
-            e.target_type or "",
-            e.target_id or "",
-            str(e.ip_address) if e.ip_address else "",
-            e.user_agent or "",
-            str(e.event_metadata or {}),
-        ])
+        writer.writerow(
+            [
+                e.created_at.isoformat(),
+                e.actor.email if e.actor else "",
+                e.action,
+                e.target_type or "",
+                e.target_id or "",
+                str(e.ip_address) if e.ip_address else "",
+                e.user_agent or "",
+                str(e.event_metadata or {}),
+            ]
+        )
 
     output.seek(0)
     return StreamingResponse(

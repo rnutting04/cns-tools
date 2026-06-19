@@ -61,12 +61,7 @@ export default function ChangePasswordSection({ onSuccess }: Props) {
     }
   }
 
-  function field(
-    id: keyof typeof form,
-    label: string,
-    show: boolean,
-    toggle: () => void,
-  ) {
+  function field(id: keyof typeof form, label: string, show: boolean, toggle: () => void) {
     return (
       <TextField
         id={id}
@@ -75,10 +70,7 @@ export default function ChangePasswordSection({ onSuccess }: Props) {
         value={form[id]}
         fullWidth
         autoComplete={id === 'current_password' ? 'current-password' : 'new-password'}
-        error={
-          (id === 'confirm_password' && mismatch) ||
-          (id === 'new_password' && tooShort)
-        }
+        error={(id === 'confirm_password' && mismatch) || (id === 'new_password' && tooShort)}
         helperText={
           id === 'new_password' && tooShort
             ? 'Must be at least 12 characters'
@@ -96,7 +88,11 @@ export default function ChangePasswordSection({ onSuccess }: Props) {
             endAdornment: (
               <InputAdornment position="end">
                 <IconButton size="small" edge="end" onClick={toggle} tabIndex={-1}>
-                  {show ? <VisibilityOffIcon fontSize="small" /> : <VisibilityIcon fontSize="small" />}
+                  {show ? (
+                    <VisibilityOffIcon fontSize="small" />
+                  ) : (
+                    <VisibilityIcon fontSize="small" />
+                  )}
                 </IconButton>
               </InputAdornment>
             ),
@@ -126,7 +122,9 @@ export default function ChangePasswordSection({ onSuccess }: Props) {
             </Alert>
           )}
 
-          {field('current_password', 'Current password', showCurrent, () => setShowCurrent((v) => !v))}
+          {field('current_password', 'Current password', showCurrent, () =>
+            setShowCurrent((v) => !v),
+          )}
           {field('new_password', 'New password', showNew, () => setShowNew((v) => !v))}
           {field('confirm_password', 'Confirm new password', showNew, () => setShowNew((v) => !v))}
 

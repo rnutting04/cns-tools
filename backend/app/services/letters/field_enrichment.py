@@ -7,6 +7,7 @@ All functions here are pure: they take inputs and return new dicts
 rather than mutating in place. This makes them trivial to unit test
 and safe to call from any context (HTTP route, worker, batch job).
 """
+
 from datetime import date, datetime, timedelta
 from typing import Any
 
@@ -59,8 +60,7 @@ def _date_variants(key: str, value: str) -> dict[str, str]:
         f"{key}_short": parsed.strftime("%m/%d/%Y"),
         f"{key}_long": f"{parsed.strftime('%B')} {parsed.day}, {parsed.year}",
         f"{key}_formal": (
-            f"{_ordinal_number(parsed.day)} day of "
-            f"{parsed.strftime('%B')} {parsed.year}"
+            f"{_ordinal_number(parsed.day)} day of " f"{parsed.strftime('%B')} {parsed.year}"
         ),
         f"{key}_month_year": parsed.strftime("%B %Y"),
     }

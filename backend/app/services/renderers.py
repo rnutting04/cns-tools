@@ -12,8 +12,8 @@ from app.config.letter_config import (
 )
 from app.services.letter_generator import replace_placeholders
 
-
 # ─── SIMPLE RENDERER ─────────────────────────────────────────
+
 
 def simple_renderer(template_bytes: bytes, field_values: dict) -> bytes:
     doc = Document(BytesIO(template_bytes))
@@ -25,6 +25,7 @@ def simple_renderer(template_bytes: bytes, field_values: dict) -> bytes:
 
 
 # ─── PROXY RENDERER ──────────────────────────────────────────
+
 
 def _build_proxy_vote_table(doc: Document, vote_texts: list[str]):
     tmp = doc.add_table(rows=0, cols=2)
@@ -104,8 +105,16 @@ def proxy_renderer(template_bytes: bytes, field_values: dict) -> bytes:
 # ─── COUNT WORD HELPERS ───────────────────────────────────────
 
 _COUNT_WORDS = {
-    1: "ONE", 2: "TWO", 3: "THREE", 4: "FOUR", 5: "FIVE",
-    6: "SIX", 7: "SEVEN", 8: "EIGHT", 9: "NINE", 10: "TEN",
+    1: "ONE",
+    2: "TWO",
+    3: "THREE",
+    4: "FOUR",
+    5: "FIVE",
+    6: "SIX",
+    7: "SEVEN",
+    8: "EIGHT",
+    9: "NINE",
+    10: "TEN",
 }
 
 
@@ -122,6 +131,7 @@ def _word_num_lower(n: int) -> str:
 
 
 # ─── TABLE HELPERS ────────────────────────────────────────────
+
 
 def _set_no_borders(tbl_element) -> None:
     """Strip all visible borders from a table element."""
@@ -281,7 +291,6 @@ def _build_ballot_table(doc: Document, candidates: list[str], two_col_threshold:
 
 
 def ballot_renderer(template_bytes: bytes, field_values: dict) -> bytes:
-
     candidates, fv = _build_ballot_field_values(field_values)
 
     doc = Document(BytesIO(template_bytes))
@@ -306,6 +315,7 @@ def ballot_renderer(template_bytes: bytes, field_values: dict) -> bytes:
 #   {{BLOCK:ELECTRONIC_BALLOT_CANDIDATES}} – replaced with candidate table
 #
 # field_values["candidates"] must be a list of candidate full-name strings.
+
 
 def _build_electronic_ballot_table(doc: Document, candidates: list[str]):
     """
@@ -374,9 +384,9 @@ def _build_electronic_ballot_table(doc: Document, candidates: list[str]):
 
         # Tight widths so the layout resembles the sample more closely
         _set_cell_width(row[0], 3000)  # left name
-        _set_cell_width(row[1], 450)   # left checkbox
+        _set_cell_width(row[1], 450)  # left checkbox
         _set_cell_width(row[2], 3000)  # right name
-        _set_cell_width(row[3], 450)   # right checkbox
+        _set_cell_width(row[3], 450)  # right checkbox
 
     _set_no_borders(tmp._tbl)
 
@@ -416,6 +426,7 @@ def electronic_ballot_renderer(template_bytes: bytes, field_values: dict) -> byt
 # Currently behaves like simple_renderer. Registered separately so
 # the frontend and backend dispatch are both renderer-type-aware and
 # ready for future customization without architectural changes.
+
 
 def notice_candidacy_renderer(template_bytes: bytes, field_values: dict) -> bytes:
     doc = Document(BytesIO(template_bytes))

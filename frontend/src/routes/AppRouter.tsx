@@ -6,6 +6,7 @@ import DashboardPage from '../pages/DashboardPage'
 import AssociationPage from '../pages/AssociationPage'
 import UsersPage from '../pages/UsersPage'
 import LetterGeneratorPage from '../pages/LetterGeneratorPage'
+import GeneratedLettersPage from '../pages/GeneratedLettersPage'
 import TemplateManagerPage from '../pages/TemplateManagerPage'
 import ExcelToolsPage from '../pages/ExcelToolsPage'
 import NotFoundPage from '../pages/NotFoundPage'
@@ -43,6 +44,7 @@ export default function AppRouter() {
             }
           />
           <Route path="letters" element={<LetterGeneratorPage />} />
+          <Route path="letters/generated" element={<GeneratedLettersPage />} />
           <Route
             path="templates"
             element={

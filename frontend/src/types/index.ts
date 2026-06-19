@@ -2,8 +2,6 @@ export type UserRole = 'super_admin' | 'admin' | 'manager' | 'employee'
 export type RendererType = 'simple' | 'proxy' | 'ballot' | 'electronic_ballot' | 'notice_candidacy'
 export type FieldType = 'text' | 'date' | 'dropdown' | 'association' | 'manager' | 'time'
 
-
-
 export type ProxyVoteType =
   | 'waive_financial_one_year'
   | 'lower_financial_level'
@@ -28,7 +26,6 @@ export type ProxyVote = {
   tax_year?: string
 }
 
-
 export interface FieldDefinition {
   key: string
   label: string
@@ -38,12 +35,12 @@ export interface FieldDefinition {
 }
 
 export interface FieldRow {
-    key: string
-    label: string
-    type: FieldType
-    options: string
-    auto_populate: boolean
-  }
+  key: string
+  label: string
+  type: FieldType
+  options: string
+  auto_populate: boolean
+}
 
 export interface Template {
   id: string
@@ -114,17 +111,61 @@ export interface AuditPage {
   pages: number
 }
 
+export type JobStatus = 'pending' | 'processing' | 'complete' | 'failed'
+
 export interface LetterJob {
   id: string
   template_id: string
+  template_name: string
   association_id: string
-  status: 'pending' | 'complete' | 'failed'
+  association_name: string
+  created_by: string
+  created_by_name: string
+  status: JobStatus
   output_path: string | null
   created_at: string
+}
+
+/** A single template field the user filled in when generating a letter. */
+export interface LetterFieldEntry {
+  key: string
+  label: string
+  value: string
+}
+
+/** An auto-resolved field surfaced in the letter detail view. */
+export interface LetterDerivedEntry {
+  label: string
+  value: string
+}
+
+/** Response from GET /api/letters/{job_id}/details. */
+export interface LetterJobDetail {
+  id: string
+  template_name: string
+  association_name: string
+  created_by_name: string
+  status: JobStatus
+  created_at: string
+  entries: LetterFieldEntry[]
+  derived: LetterDerivedEntry[]
 }
 
 export interface LetterGenerateRequest {
   template_id: string
   association_id: string
   field_values: Record<string, string>
+}
+
+/** Response from POST /api/letters/generate — the job is queued. */
+export interface GenerateAccepted {
+  job_id: string
+  status: JobStatus
+}
+
+/** Response from GET /api/letters/{job_id} while polling for completion. */
+export interface LetterJobStatus {
+  job_id: string
+  status: JobStatus
+  download_url: string | null
 }

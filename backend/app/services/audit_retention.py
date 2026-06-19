@@ -1,5 +1,5 @@
 # app/services/audit_retention.py
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.orm import Session
 
@@ -12,7 +12,7 @@ def purge_old_events(db: Session, retention_days: int) -> int:
     Returns the number of rows deleted.
     Commits the deletion itself — call outside of any open transaction.
     """
-    cutoff = datetime.now(tz=timezone.utc) - timedelta(days=retention_days)
+    cutoff = datetime.now(tz=UTC) - timedelta(days=retention_days)
     deleted = (
         db.query(AuditEvent)
         .filter(AuditEvent.created_at < cutoff)
