@@ -4,6 +4,6 @@ dockerfilePath = "Dockerfile"
 
 [deploy]
 preDeployCommand = "alembic upgrade head"
-startCommand = "sh -c 'gunicorn app.main:app --bind 0.0.0.0:$PORT --workers 2 --worker-class uvicorn.workers.UvicornWorker --access-logfile - --error-logfile - --timeout 60'"
+startCommand = "gunicorn app.main:app --bind 0.0.0.0:$PORT --workers 2 --worker-class uvicorn.workers.UvicornWorker --access-logfile - --error-logfile - --timeout 60"
 healthcheckPath = "/health"
 healthcheckTimeout = 30
