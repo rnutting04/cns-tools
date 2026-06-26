@@ -1,0 +1,112 @@
+# GL account → budget line crosswalk
+#
+# Each entry maps one GL account from the CSC financial report to one budget
+# line code defined in the schema. Update this file when the chart of accounts
+# changes — never add new entries in code.
+#
+# Fields:
+#   code     — stable slug matching BudgetLine.code in schema.py
+#   label    — display label (must match BudgetLine.label)
+#   section  — BudgetSection enum value
+#   annualization_review — true for lines where straight YTD ÷ N × 12 misleads
+#                          (e.g. annual insurance premiums, lump-sum contracts)
+
+mappings:
+  # --- Revenue ---------------------------------------------------------------
+  "4000":
+    code: assessments_operating
+    label: Assessments - Operating
+    section: REVENUE_OPERATING
+
+  "4100":
+    code: assessments_reserves
+    label: Assessments - Reserves
+    section: REVENUE_RESERVES
+
+  "4200":
+    code: interest_income
+    label: Interest Income
+    section: REVENUE_OPERATING
+
+  # --- Administration --------------------------------------------------------
+  "6010":
+    code: cpa_fees
+    label: CPA Fees
+    section: ADMINISTRATION
+    annualization_review: true
+
+  "6020":
+    code: management_fees
+    label: Management Fees
+    section: ADMINISTRATION
+
+  "6030":
+    code: legal_fees
+    label: Legal Fees
+    section: ADMINISTRATION
+
+  "6040":
+    code: postage_printing
+    label: Postage & Printing
+    section: ADMINISTRATION
+
+  "6050":
+    code: office_supplies
+    label: Office Supplies
+    section: ADMINISTRATION
+
+  # --- Maintenance -----------------------------------------------------------
+  "6110":
+    code: landscaping
+    label: Landscaping
+    section: MAINTENANCE
+
+  "6120":
+    code: pest_control
+    label: Pest Control
+    section: MAINTENANCE
+
+  "6130":
+    code: pool_maintenance
+    label: Pool Maintenance
+    section: MAINTENANCE
+
+  "6140":
+    code: general_repairs
+    label: General Repairs & Maintenance
+    section: MAINTENANCE
+
+  # --- Utilities -------------------------------------------------------------
+  "6610":
+    code: electric
+    label: Electric
+    section: UTILITIES
+
+  "6620":
+    code: gas
+    label: Gas
+    section: UTILITIES
+
+  "6640":
+    code: water_sewer_trash
+    label: Water / Sewer / Trash
+    section: UTILITIES
+
+  # --- Insurance -------------------------------------------------------------
+  "6500":
+    code: insurance
+    label: Insurance
+    section: ADMINISTRATION
+    annualization_review: true
+
+  # --- Cable -----------------------------------------------------------------
+  "6700":
+    code: cable
+    label: Cable
+    section: UTILITIES
+
+  # --- Reserves --------------------------------------------------------------
+  "7000":
+    code: reserve_contribution
+    label: Reserve Contribution
+    section: RESERVES
