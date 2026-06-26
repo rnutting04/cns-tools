@@ -63,7 +63,7 @@ EXPOSE 8000
 
 # Healthcheck hits the /health endpoint (add one to your FastAPI app if missing)
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+    CMD curl -f http://localhost:${PORT:-8000}/health || exit 1
 
 # Gunicorn with uvicorn workers. 2 workers is safe for a 2GB droplet; tune later.
 # --access-logfile - pipes access logs to stdout so Docker captures them.
