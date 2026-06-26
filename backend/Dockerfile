@@ -25,7 +25,7 @@ WORKDIR /build
 COPY requirements.txt .
 
 # Build wheels for all dependencies
-RUN pip wheel --no-deps --wheel-dir /wheels -r requirements.txt
+RUN pip wheel --wheel-dir /wheels -r requirements.txt
 
 
 # ─── STAGE 2: runtime ────────────────────────────────────────────
