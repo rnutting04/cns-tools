@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     SPACES_BUCKET: str
     ANTHROPIC_API_KEY: str
 
+    FRONTEND_URL: str = "http://localhost:5173"
+
     AUDIT_RETENTION_DAYS: int = 365
 
     # Celery / Redis. Defaults target a host-run worker against the
