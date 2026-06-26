@@ -9,6 +9,8 @@ import LetterGeneratorPage from '../pages/LetterGeneratorPage'
 import GeneratedLettersPage from '../pages/GeneratedLettersPage'
 import TemplateManagerPage from '../pages/TemplateManagerPage'
 import ExcelToolsPage from '../pages/ExcelToolsPage'
+import AiToolsPage from '../pages/ai/AiToolsPage'
+import BudgetGeneratorPage from '../pages/ai/BudgetGeneratorPage'
 import NotFoundPage from '../pages/NotFoundPage'
 import SettingsPage from '../pages/settings/SettingsPage'
 import AuditPage from '../pages/AuditPage'
@@ -54,6 +56,8 @@ export default function AppRouter() {
             }
           />
           <Route path="excel" element={<ExcelToolsPage />} />
+          <Route path="ai" element={<AiToolsPage />} />
+          <Route path="ai/budget" element={<BudgetGeneratorPage />} />
           <Route
             path="audit"
             element={

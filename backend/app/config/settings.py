@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     SPACES_KEY: str
     SPACES_SECRET: str
     SPACES_BUCKET: str
+    ANTHROPIC_API_KEY: str
+
     AUDIT_RETENTION_DAYS: int = 365
 
     # Celery / Redis. Defaults target a host-run worker against the

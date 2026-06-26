@@ -1,6 +1,7 @@
 from app.models.association import Association as Association
 from app.models.association import UserAssociation as UserAssociation
 from app.models.audit_event import AuditEvent as AuditEvent
+from app.models.budget_job import BudgetJob as BudgetJob
 from app.models.letter_job import JobStatus as JobStatus
 from app.models.letter_job import LetterJob as LetterJob
 from app.models.template import Template as Template

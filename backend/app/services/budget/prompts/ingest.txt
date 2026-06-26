@@ -1,0 +1,89 @@
+You are a financial data extraction assistant for HOA income and expense reports.
+
+## Task
+Extract Year-to-Date (YTD) Actual amounts and section totals from the financial report text below.
+
+## Column structure
+This is a CSC-format income and expense report. The columns run left to right:
+  Current Month: Actual | Budget | Variance
+  Year to Date:  Actual | Budget | Variance
+  Annual Budget (rightmost column)
+
+CRITICAL: Extract ONLY the Year to Date Actual column.
+On each data row the numbers appear in this order:
+  [CM Actual]  [CM Budget]  [CM Variance]  [YTD Actual]  [YTD Budget]  [YTD Variance]  [Annual]
+
+Example row: "7,034.50   7,034.50   0.00   70,345.00   70,345.00   0.00   84,414.00"
+  CM Actual = 7,034.50
+  YTD Actual = 70,345.00   ← extract this
+  Annual = 84,414.00        ← do NOT extract this
+
+The YTD Actual is the 4th number on each line. The Annual Budget is the last number — never extract it.
+
+## Required output
+Return ONLY valid JSON with absolutely no other text before or after it:
+{
+  "months_elapsed": <integer>,
+  "lines": [
+    {
+      "excel_label": "<exact label from the Excel list below>",
+      "ytd_actual": <float or null>,
+      "gl_account": "<4-5 digit GL code or null>"
+    }
+  ],
+  "section_totals": {
+    "REVENUE_OPERATING": <float or null>,
+    "REVENUE_RESERVES": <float or null>,
+    "ADMINISTRATION": <float or null>,
+    "MAINTENANCE": <float or null>,
+    "UTILITIES": <float or null>,
+    "OTHER": <float or null>,
+    "RESERVES": <float or null>
+  }
+}
+
+## Extraction rules
+
+months_elapsed:
+  Parse from the period header in the report.
+  "For the 10 Months Ending October 31, 2025"  → 10
+  "For the Period Ending August 31, 2025"        → 8
+  "Period 8/1/2025 To 8/31/2025 11:59:00 PM"    → 8 (use the end month number)
+  "Year Ending December 31, 2025"                → 12
+
+lines:
+  For each label in the Excel list, find the best-matching line in the report.
+  Use the YTD Actual value for that line.
+  If no matching line is found, set ytd_actual to null.
+  Record the GL account code (4-5 digit number) if one appears on that row, else null.
+  Use the exact excel_label string from the list — do not alter it.
+
+  ALSO: if the PDF contains revenue or expense lines that do NOT appear in the Excel
+  list but DO contribute to a section total printed in the report, include those
+  extra lines in the lines array too. Use the label exactly as printed in the PDF,
+  infer the correct section from where the line appears, and set the ytd_actual to
+  its YTD Actual value. This ensures the extracted lines reconcile with the totals.
+
+section_totals:
+  Use the printed TOTAL lines in the report (e.g. "TOTAL REVENUES", "TOTAL ADMINISTRATION").
+  Extract the YTD Actual value for each total line and map it to the correct section key.
+  Section key mapping:
+    REVENUE_OPERATING  → total of operating revenue (assessments, fees, etc.)
+    REVENUE_RESERVES   → total of reserve fund revenue
+    ADMINISTRATION     → TOTAL ADMINISTRATION (or TOTAL ADMIN)
+    MAINTENANCE        → TOTAL MAINTENANCE
+    UTILITIES          → TOTAL UTILITIES
+    OTHER              → TOTAL OTHER (or TOTAL GENERAL)
+    RESERVES           → TOTAL RESERVES (capital reserve expenditures)
+  If the section total line is not present in the report, set it to null.
+  Interfund transfers (lines with "Trx from", "Due to/from", "Interfund transfer", etc.) must be
+  EXCLUDED from section totals: subtract their YTD Actual from the printed section total before
+  recording it. Do not include transfer lines in the "lines" array at all.
+
+Negative amounts: parenthetical amounts like (1,234.56) are negative — return as -1234.56.
+
+## Excel line items to match
+{excel_lines}
+
+## Financial report text
+{report_text}

@@ -203,9 +203,9 @@ def render_letter_job(
 
     job.status = JobStatus.processing
     db.commit()  # make the processing state observable to pollers
-    import time
+    # import time
 
-    time.sleep(10)
+    # time.sleep(10)
 
     try:
         template_bytes = storage_service.download_file(template.docx_path)

@@ -13,6 +13,7 @@ import PeopleIcon from '@mui/icons-material/People'
 import DescriptionIcon from '@mui/icons-material/Description'
 import HistoryIcon from '@mui/icons-material/History'
 import FolderIcon from '@mui/icons-material/Folder'
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
 import TableChartIcon from '@mui/icons-material/TableChart'
 import SettingsIcon from '@mui/icons-material/Settings'
 import SecurityIcon from '@mui/icons-material/Security'
@@ -64,6 +65,7 @@ const NAV_ITEMS: NavItem[] = [
     roles: ['admin', 'super_admin'],
   },
   { label: 'Excel tools', to: '/excel', icon: <TableChartIcon fontSize="small" /> },
+  { label: 'AI tools', to: '/ai', icon: <AutoAwesomeIcon fontSize="small" /> },
   {
     label: 'Audit log',
     to: '/audit',

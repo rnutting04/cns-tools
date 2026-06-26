@@ -39,5 +39,8 @@ celery_app.conf.update(
     task_always_eager=settings.CELERY_TASK_ALWAYS_EAGER,
     task_eager_propagates=True,
     # Where to find @celery_app.task definitions.
-    imports=("app.services.letters.tasks",),
+    imports=(
+        "app.services.letters.tasks",
+        "app.services.budget.tasks",
+    ),
 )
