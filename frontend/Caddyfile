@@ -1,27 +1,30 @@
 :80 {
-    handle_path /api/* {
-        reverse_proxy http://{$BACKEND_URL} {
-            header_up Host {$BACKEND_URL}
-        }
-    }
+	# Reverse proxy /api/* to the backend service.
+	# Set BACKEND_URL to JUST host:port, e.g.
+	#   imaginative-peace.railway.internal:8080
+	# (no http://, no trailing slash)
+	handle_path /api/* {
+		reverse_proxy http://{$BACKEND_URL}
+	}
 
-    handle {
-        root * /srv
-        try_files {path} /index.html
-        file_server
-    }
+	# Serve the SPA. Falls back to index.html for client-side routing.
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
 
-    encode zstd gzip
+	encode zstd gzip
 
-    header {
-        X-Content-Type-Options "nosniff"
-        X-Frame-Options "DENY"
-        Referrer-Policy "strict-origin-when-cross-origin"
-        -Server
-    }
+	header {
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
 
-    log {
-        output stdout
-        format console
-    }
+	log {
+		output stdout
+		format console
+	}
 }
