@@ -87,6 +87,7 @@ jobs:
       SPACES_KEY: local_access_key
       SPACES_SECRET: local_secret_key
       SPACES_BUCKET: cs-tool-hub
+      ANTHROPIC_API_KEY: sk-ant-ci-placeholder
 
     steps:
       - name: Checkout
