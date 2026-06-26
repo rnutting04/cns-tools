@@ -176,7 +176,6 @@ export default function BudgetGeneratorPage() {
 
   const [jobId, setJobId] = useState<string | null>(null)
   const [generating, setGenerating] = useState(false)
-  const [currentStep, setCurrentStep] = useState<string | null>(null)
   const [reviewFlagCount, setReviewFlagCount] = useState<number | null>(null)
   const [error, setError] = useState<JobError | null>(null)
   const [done, setDone] = useState(false)
@@ -200,10 +199,10 @@ export default function BudgetGeneratorPage() {
 
   const { data: pollData } = usePolling(jobId, fetchJobStatus, isTerminal)
 
+  const currentStep = pollData?.current_step ?? null
+
   useEffect(() => {
     if (!pollData) return
-
-    setCurrentStep(pollData.current_step ?? null)
 
     if (pollData.status === 'complete') {
       if (pollData.download_url) {
@@ -215,13 +214,11 @@ export default function BudgetGeneratorPage() {
         a.remove()
       }
       setReviewFlagCount(pollData.review_flag_count)
-      setCurrentStep(null)
       setDone(true)
       setGenerating(false)
       setJobId(null)
     } else if (pollData.status === 'failed') {
       setError({ error_code: pollData.error_code, error_detail: pollData.error_detail })
-      setCurrentStep(null)
       setGenerating(false)
       setJobId(null)
     }
@@ -265,7 +262,6 @@ export default function BudgetGeneratorPage() {
     setDone(false)
     setError(null)
     setReviewFlagCount(null)
-    setCurrentStep(null)
     setJobId(null)
   }
 
