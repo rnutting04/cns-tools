@@ -1,6 +1,8 @@
 :80 {
     handle_path /api/* {
-        reverse_proxy {$BACKEND_URL}
+        reverse_proxy https://{$BACKEND_URL} {
+            header_up Host {$BACKEND_URL}
+        }
     }
 
     handle {
