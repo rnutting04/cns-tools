@@ -3,7 +3,7 @@
 	# Set BACKEND_URL to JUST host:port, e.g.
 	#   imaginative-peace.railway.internal:8080
 	# (no http://, no trailing slash)
-	handle_path /api/* {
+	handle /api/* {
 		reverse_proxy http://{$BACKEND_URL}
 	}
 
