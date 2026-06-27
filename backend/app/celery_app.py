@@ -28,6 +28,9 @@ celery_app.conf.update(
     accept_content=["json"],
     # Reliability: re-deliver if a worker dies mid-task (tasks are idempotent).
     task_acks_late=True,
+    # Reject (re-queue) the message if the worker process is lost so stuck-pending
+    # jobs don't require a cleanup service. Requires task_acks_late=True to work.
+    task_reject_on_worker_lost=True,
     # Fair dispatch for long-running render tasks instead of greedy prefetch.
     worker_prefetch_multiplier=1,
     # Guard against runaway renders.

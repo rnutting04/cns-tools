@@ -343,6 +343,24 @@ def get_letter_job(
     )
 
 
+@router.post("/letters/{job_id}/retry", response_model=GenerateAcceptedResponse)
+def retry_letter_job(
+    job_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    job = db.query(LetterJob).filter(LetterJob.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.status == JobStatus.complete:
+        raise HTTPException(status_code=409, detail="Job already completed")
+
+    job.status = JobStatus.pending
+    db.commit()
+    generate_letter_task.delay(str(job.id))
+    return GenerateAcceptedResponse(job_id=job.id, status=JobStatus.pending.value)
+
+
 def _can_view_job(job: LetterJob, user: User) -> bool:
     """A job is visible to its creator or to any super-admin (cross-user
     auditing). Callers return 404 (not 403) so the existence of other users'
