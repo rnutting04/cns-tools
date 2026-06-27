@@ -174,6 +174,21 @@ export interface LetterJobDetail {
   derived: LetterDerivedEntry[]
 }
 
+export interface BudgetJobDetail {
+  job_id: string
+  association_name: string
+  budget_year: number
+  financial_report_filename: string
+  prior_budget_filename: string
+  status: JobStatus
+  current_step: string | null
+  review_flag_count: number | null
+  error_code: string | null
+  error_detail: Record<string, unknown> | null
+  created_by_name: string
+  created_at: string
+}
+
 export interface LetterGenerateRequest {
   template_id: string
   association_id: string

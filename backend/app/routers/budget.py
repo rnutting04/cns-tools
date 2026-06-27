@@ -8,7 +8,8 @@ from app.dependencies import get_current_user
 from app.models.budget_job import BudgetJob
 from app.models.letter_job import JobStatus
 from app.models.user import User
-from app.schemas.budget import BudgetJobAcceptedResponse, BudgetJobStatusResponse
+from app.schemas.budget import BudgetJobAcceptedResponse, BudgetJobDetailResponse, BudgetJobStatusResponse
+from app.services.audit import log_event
 from app.services.budget.tasks import generate_budget_task
 from app.services.storage import storage_service
 
@@ -55,6 +56,19 @@ async def generate_budget(
         created_by=current_user.id,
     )
     db.add(job)
+    log_event(
+        db,
+        actor=current_user,
+        action="budget.job.created",
+        target_type="budget_job",
+        target_id=str(job_id),
+        metadata={
+            "association_name": association_name,
+            "budget_year": budget_year,
+            "financial_report_filename": financial_report.filename,
+            "prior_budget_filename": prior_budget.filename,
+        },
+    )
     db.commit()
 
     generate_budget_task.delay(str(job_id))
@@ -78,10 +92,50 @@ def retry_budget_job(
     job.current_step = None
     job.error_code = None
     job.error_detail = None
+    log_event(
+        db,
+        actor=current_user,
+        action="budget.job.retried",
+        target_type="budget_job",
+        target_id=str(job.id),
+        metadata={"association_name": job.association_name, "budget_year": job.budget_year},
+    )
     db.commit()
 
     generate_budget_task.delay(str(job.id))
     return BudgetJobAcceptedResponse(job_id=job.id, status=JobStatus.pending.value)
+
+
+@router.get("/jobs/{job_id}/details", response_model=BudgetJobDetailResponse)
+def get_budget_job_details(
+    job_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> BudgetJobDetailResponse:
+    from sqlalchemy.orm import joinedload
+    job = (
+        db.query(BudgetJob)
+        .options(joinedload(BudgetJob.creator))
+        .filter(BudgetJob.id == job_id)
+        .first()
+    )
+    if not job or job.created_by != current_user.id:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    return BudgetJobDetailResponse(
+        job_id=job.id,
+        association_name=job.association_name,
+        budget_year=job.budget_year,
+        financial_report_filename=job.financial_report_filename,
+        prior_budget_filename=job.prior_budget_filename,
+        status=job.status.value,
+        current_step=job.current_step,
+        review_flag_count=job.review_flag_count,
+        error_code=job.error_code,
+        error_detail=job.error_detail,
+        created_by_name=f"{job.creator.fname} {job.creator.lname}",
+        created_at=job.created_at,
+    )
 
 
 @router.get("/jobs/{job_id}", response_model=BudgetJobStatusResponse)
