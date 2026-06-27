@@ -62,6 +62,28 @@ async def generate_budget(
     return BudgetJobAcceptedResponse(job_id=job_id, status=JobStatus.pending.value)
 
 
+@router.post("/jobs/{job_id}/retry", response_model=BudgetJobAcceptedResponse)
+def retry_budget_job(
+    job_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> BudgetJobAcceptedResponse:
+    job = db.query(BudgetJob).filter(BudgetJob.id == job_id).first()
+    if not job or job.created_by != current_user.id:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.status == JobStatus.complete:
+        raise HTTPException(status_code=409, detail="Job already completed")
+
+    job.status = JobStatus.pending
+    job.current_step = None
+    job.error_code = None
+    job.error_detail = None
+    db.commit()
+
+    generate_budget_task.delay(str(job.id))
+    return BudgetJobAcceptedResponse(job_id=job.id, status=JobStatus.pending.value)
+
+
 @router.get("/jobs/{job_id}", response_model=BudgetJobStatusResponse)
 def get_budget_job(
     job_id: uuid.UUID,

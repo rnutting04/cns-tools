@@ -15,6 +15,7 @@ import useMediaQuery from '@mui/material/useMediaQuery'
 import { useTheme } from '@mui/material/styles'
 import DownloadIcon from '@mui/icons-material/Download'
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'
+import ReplayIcon from '@mui/icons-material/Replay'
 import { DataGrid } from '@mui/x-data-grid'
 import type { GridColDef, GridRenderCellParams } from '@mui/x-data-grid'
 import apiClient from '../api/client'
@@ -134,6 +135,7 @@ export default function JobsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
+  const [retryingId, setRetryingId] = useState<string | null>(null)
   const [detailJobId, setDetailJobId] = useState<string | null>(null)
   const [tab, setTab] = useState<TabValue>('all')
   const { jobs: liveJobs, inFlightCount } = useJobs()
@@ -161,6 +163,18 @@ export default function JobsPage() {
       fetchJobs()
     }
   }, [inFlightCount, fetchJobs])
+
+  const handleRetry = useCallback(async (job: Job) => {
+    setRetryingId(job.id)
+    try {
+      await apiClient.post(`/api/budget/jobs/${job.id}/retry`)
+      await fetchJobs()
+    } catch {
+      setError('Failed to retry job.')
+    } finally {
+      setRetryingId(null)
+    }
+  }, [fetchJobs])
 
   const handleDownload = useCallback(async (job: Job) => {
     setDownloadingId(job.id)
@@ -213,14 +227,35 @@ export default function JobsPage() {
         width: 56,
         sortable: false,
         filterable: false,
-        renderCell: (p: GridRenderCellParams<Job>) =>
-          p.row.job_type === 'letter' ? (
-            <Tooltip title="View details">
-              <IconButton size="small" onClick={() => setDetailJobId(p.row.id)}>
-                <InfoOutlinedIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-          ) : null,
+        renderCell: (p: GridRenderCellParams<Job>) => {
+          if (p.row.job_type === 'letter') {
+            return (
+              <Tooltip title="View details">
+                <IconButton size="small" onClick={() => setDetailJobId(p.row.id)}>
+                  <InfoOutlinedIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            )
+          }
+          if (p.row.status === 'pending' || p.row.status === 'processing') {
+            return (
+              <Tooltip title="Retry job">
+                <span>
+                  <IconButton
+                    size="small"
+                    onClick={() => handleRetry(p.row)}
+                    disabled={retryingId === p.row.id}
+                  >
+                    {retryingId === p.row.id
+                      ? <CircularProgress size={14} />
+                      : <ReplayIcon fontSize="small" />}
+                  </IconButton>
+                </span>
+              </Tooltip>
+            )
+          }
+          return null
+        },
       },
       {
         field: 'download',
@@ -249,7 +284,7 @@ export default function JobsPage() {
         ),
       },
     ],
-    [downloadingId, handleDownload],
+    [downloadingId, handleDownload, handleRetry, retryingId],
   )
 
   return (
