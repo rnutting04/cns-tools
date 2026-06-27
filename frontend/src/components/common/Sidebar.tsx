@@ -11,7 +11,7 @@ import DashboardIcon from '@mui/icons-material/Dashboard'
 import ApartmentIcon from '@mui/icons-material/Apartment'
 import PeopleIcon from '@mui/icons-material/People'
 import DescriptionIcon from '@mui/icons-material/Description'
-import HistoryIcon from '@mui/icons-material/History'
+import WorkHistoryIcon from '@mui/icons-material/WorkHistory'
 import FolderIcon from '@mui/icons-material/Folder'
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
 import TableChartIcon from '@mui/icons-material/TableChart'
@@ -19,7 +19,7 @@ import SettingsIcon from '@mui/icons-material/Settings'
 import SecurityIcon from '@mui/icons-material/Security'
 import { NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
-import { useLetterJobs } from '../../context/LetterJobsContext'
+import { useJobs } from '../../context/JobsContext'
 import { hasRole } from '../../utils/auth'
 
 const DRAWER_WIDTH = 220
@@ -29,8 +29,8 @@ interface NavItem {
   to: string
   icon: React.ReactNode
   roles?: Array<'super_admin' | 'admin' | 'manager' | 'employee'>
-  // Match this route exactly (so e.g. /letters isn't "active" on /letters/generated).
   exact?: boolean
+  showBadge?: boolean
 }
 
 const NAV_ITEMS: NavItem[] = [
@@ -54,9 +54,10 @@ const NAV_ITEMS: NavItem[] = [
     exact: true,
   },
   {
-    label: 'Generated letters',
-    to: '/letters/generated',
-    icon: <HistoryIcon fontSize="small" />,
+    label: 'My Jobs',
+    to: '/jobs',
+    icon: <WorkHistoryIcon fontSize="small" />,
+    showBadge: true,
   },
   {
     label: 'Template manager',
@@ -83,7 +84,7 @@ interface Props {
 function NavList({ onNavigate }: { onNavigate?: () => void }) {
   const { user } = useAuth()
   const location = useLocation()
-  const { inFlightCount } = useLetterJobs()
+  const { inFlightCount } = useJobs()
 
   const visible = NAV_ITEMS.filter((item) => !item.roles || (user && hasRole(user, item.roles)))
 
@@ -114,7 +115,7 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
             }}
           >
             <ListItemIcon sx={{ minWidth: 36 }}>
-              {item.to === '/letters/generated' && inFlightCount > 0 ? (
+              {item.showBadge && inFlightCount > 0 ? (
                 <Badge badgeContent={inFlightCount} color="primary" max={9}>
                   {item.icon}
                 </Badge>

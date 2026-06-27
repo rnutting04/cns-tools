@@ -19,6 +19,7 @@ import RestartAltIcon from '@mui/icons-material/RestartAlt'
 import WarningAmberIcon from '@mui/icons-material/WarningAmber'
 import apiClient from '../../api/client'
 import { usePolling } from '../../hooks/usePolling'
+import { useJobs } from '../../context/JobsContext'
 import type { Association } from '../../types'
 
 // --- Types -------------------------------------------------------------------
@@ -167,6 +168,7 @@ const isTerminal = (data: BudgetJobStatus) =>
 
 export default function BudgetGeneratorPage() {
   const navigate = useNavigate()
+  const { trackJob } = useJobs()
 
   const [associations, setAssociations] = useState<Association[]>([])
   const [selectedAssoc, setSelectedAssoc] = useState<Association | null>(null)
@@ -246,6 +248,7 @@ export default function BudgetGeneratorPage() {
     try {
       const res = await apiClient.post<{ job_id: string }>('/api/budget/generate', formData)
       setJobId(res.data.job_id)
+      trackJob(res.data.job_id, 'budget')
     } catch {
       setError({
         error_code: 'unexpected_error',

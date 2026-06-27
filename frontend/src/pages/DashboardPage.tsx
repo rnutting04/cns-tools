@@ -2,7 +2,10 @@ import { useEffect, useState } from 'react'
 import Box from '@mui/material/Box'
 import Card from '@mui/material/Card'
 import CardContent from '@mui/material/CardContent'
+import Chip from '@mui/material/Chip'
+import Divider from '@mui/material/Divider'
 import Grid from '@mui/material/Grid'
+import Skeleton from '@mui/material/Skeleton'
 import Typography from '@mui/material/Typography'
 import Button from '@mui/material/Button'
 import ApartmentIcon from '@mui/icons-material/Apartment'
@@ -13,8 +16,16 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { hasRole } from '../utils/auth'
 import apiClient from '../api/client'
-import type { Association, User } from '../types'
+import type { Association, Job, JobType, User } from '../types'
 import RoleBadge from '../components/layout/RoleBadge'
+import LetterStatusChip from '../components/letters/LetterStatusChip'
+import { formatDateTime } from '../utils/formatDate'
+
+const TYPE_LABEL: Record<JobType, string> = { letter: 'Letter', budget: 'Budget' }
+const TYPE_COLOR: Record<JobType, 'primary' | 'secondary'> = {
+  letter: 'primary',
+  budget: 'secondary',
+}
 
 interface StatCardProps {
   icon: React.ReactNode
@@ -91,13 +102,38 @@ function QuickLink({ icon, label, description, to }: QuickLinkProps) {
   )
 }
 
+function RecentJobsSkeleton() {
+  return (
+    <>
+      {[0, 1, 2].map((i) => (
+        <Box key={i}>
+          {i > 0 && <Divider />}
+          <Box sx={{ px: 2, py: 1.5, display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Skeleton variant="rounded" width={56} height={22} />
+            <Box flex={1}>
+              <Skeleton variant="text" width="50%" height={20} />
+            </Box>
+            <Skeleton variant="rounded" width={72} height={22} />
+            <Skeleton variant="text" width={90} height={18} />
+          </Box>
+        </Box>
+      ))}
+    </>
+  )
+}
+
 export default function DashboardPage() {
   const { user } = useAuth()
   const [assocCount, setAssocCount] = useState<number | null>(null)
   const [userCount, setUserCount] = useState<number | null>(null)
+  const [recentJobs, setRecentJobs] = useState<Job[] | null>(null)
 
   useEffect(() => {
     apiClient.get<Association[]>('/api/associations').then((r) => setAssocCount(r.data.length))
+    apiClient
+      .get<Job[]>('/api/jobs')
+      .then((r) => setRecentJobs(r.data.slice(0, 5)))
+      .catch(() => setRecentJobs([]))
     if (user && hasRole(user, ['admin', 'super_admin'])) {
       apiClient.get<User[]>('/api/users').then((r) => setUserCount(r.data.length))
     }
@@ -141,6 +177,55 @@ export default function DashboardPage() {
           </Grid>
         )}
       </Grid>
+
+      <Box display="flex" justifyContent="space-between" alignItems="center" mb={1.5}>
+        <Typography variant="subtitle1" color="text.secondary">
+          Recent jobs
+        </Typography>
+        <Button component={Link} to="/jobs" size="small">
+          View all
+        </Button>
+      </Box>
+      <Card variant="outlined" sx={{ mb: 4 }}>
+        {recentJobs === null ? (
+          <RecentJobsSkeleton />
+        ) : recentJobs.length === 0 ? (
+          <Typography color="text.secondary" textAlign="center" py={3} variant="body2">
+            No jobs yet.
+          </Typography>
+        ) : (
+          recentJobs.map((job, i) => (
+            <Box key={job.id}>
+              {i > 0 && <Divider />}
+              <Box
+                sx={{
+                  px: 2,
+                  py: 1.5,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 2,
+                  flexWrap: 'wrap',
+                }}
+              >
+                <Chip
+                  label={TYPE_LABEL[job.job_type]}
+                  size="small"
+                  color={TYPE_COLOR[job.job_type]}
+                  variant="outlined"
+                  sx={{ flexShrink: 0 }}
+                />
+                <Typography variant="body2" flex={1} noWrap>
+                  {job.title}
+                </Typography>
+                <LetterStatusChip status={job.status} />
+                <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0 }}>
+                  {formatDateTime(job.created_at)}
+                </Typography>
+              </Box>
+            </Box>
+          ))
+        )}
+      </Card>
 
       <Typography variant="subtitle1" mb={1.5} color="text.secondary">
         Tools

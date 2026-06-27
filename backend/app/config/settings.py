@@ -17,6 +17,9 @@ class Settings(BaseSettings):
 
     FRONTEND_URL: str = "http://localhost:5173"
 
+    # Set True in production (requires HTTPS). False allows http-only local dev.
+    COOKIE_SECURE: bool = False
+
     AUDIT_RETENTION_DAYS: int = 365
 
     # Celery / Redis. Defaults target a host-run worker against the
@@ -29,6 +32,7 @@ class Settings(BaseSettings):
     class Config:
         env_file = ENV_FILE
         env_file_encoding = "utf-8"
+        extra = "ignore"
 
 
 settings = Settings()

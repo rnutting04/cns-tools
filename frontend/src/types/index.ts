@@ -112,6 +112,29 @@ export interface AuditPage {
 }
 
 export type JobStatus = 'pending' | 'processing' | 'complete' | 'failed'
+export type JobType = 'letter' | 'budget'
+
+export interface Job {
+  id: string
+  job_type: JobType
+  title: string
+  association_name: string
+  status: JobStatus
+  created_at: string
+  created_by: string
+  created_by_name: string
+}
+
+export interface JobDetail {
+  id: string
+  job_type: JobType
+  title: string
+  association_name: string
+  status: JobStatus
+  created_at: string
+  current_step: string | null
+  download_url: string | null
+}
 
 export interface LetterJob {
   id: string

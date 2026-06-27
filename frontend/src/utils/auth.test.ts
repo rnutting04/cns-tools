@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { decodeToken, getStoredToken, hasRole, isTokenExpired } from './auth'
+import { decodeToken, hasRole, isTokenExpired } from './auth'
 import type { TokenPayload, User } from '../types'
 
 function makeJwt(payload: Record<string, unknown>): string {
@@ -39,13 +39,5 @@ describe('hasRole', () => {
 
   it('is false when the role is not allowed', () => {
     expect(hasRole(user, ['admin', 'super_admin'])).toBe(false)
-  })
-})
-
-describe('getStoredToken', () => {
-  it('returns the token from localStorage, or null', () => {
-    expect(getStoredToken()).toBeNull()
-    localStorage.setItem('token', 'abc')
-    expect(getStoredToken()).toBe('abc')
   })
 })

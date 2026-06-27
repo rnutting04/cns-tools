@@ -77,13 +77,14 @@ function UserListSkeleton() {
 interface UserRowProps {
   user: User
   isSuperAdmin: boolean
+  isSelf: boolean
   isLast: boolean
   onEdit: (u: User) => void
   onRoleChange: (u: User) => void
   onDeactivate: (u: User) => void
 }
 
-function UserRow({ user, isSuperAdmin, isLast, onEdit, onRoleChange, onDeactivate }: UserRowProps) {
+function UserRow({ user, isSuperAdmin, isSelf, isLast, onEdit, onRoleChange, onDeactivate }: UserRowProps) {
   return (
     <>
       <Box sx={{ p: 2 }}>
@@ -129,10 +130,17 @@ function UserRow({ user, isSuperAdmin, isLast, onEdit, onRoleChange, onDeactivat
                   </IconButton>
                 </Tooltip>
                 {user.is_active && (
-                  <Tooltip title="Deactivate">
-                    <IconButton size="small" color="error" onClick={() => onDeactivate(user)}>
-                      <BlockIcon fontSize="small" />
-                    </IconButton>
+                  <Tooltip title={isSelf ? 'You cannot deactivate your own account' : 'Deactivate'}>
+                    <span>
+                      <IconButton
+                        size="small"
+                        color="error"
+                        disabled={isSelf}
+                        onClick={() => onDeactivate(user)}
+                      >
+                        <BlockIcon fontSize="small" />
+                      </IconButton>
+                    </span>
                   </Tooltip>
                 )}
               </>
@@ -343,14 +351,23 @@ export default function UsersPage() {
                 </IconButton>
               </Tooltip>
               {params.row.is_active && (
-                <Tooltip title="Deactivate">
-                  <IconButton
-                    size="small"
-                    color="error"
-                    onClick={() => setDeactivateTarget(params.row)}
-                  >
-                    <BlockIcon fontSize="small" />
-                  </IconButton>
+                <Tooltip
+                  title={
+                    params.row.id === currentUser?.id
+                      ? 'You cannot deactivate your own account'
+                      : 'Deactivate'
+                  }
+                >
+                  <span>
+                    <IconButton
+                      size="small"
+                      color="error"
+                      disabled={params.row.id === currentUser?.id}
+                      onClick={() => setDeactivateTarget(params.row)}
+                    >
+                      <BlockIcon fontSize="small" />
+                    </IconButton>
+                  </span>
                 </Tooltip>
               )}
             </>
@@ -406,6 +423,7 @@ export default function UsersPage() {
                 key={u.id}
                 user={u}
                 isSuperAdmin={isSuperAdmin}
+                isSelf={u.id === currentUser?.id}
                 isLast={i === filtered.length - 1}
                 onEdit={openEdit}
                 onRoleChange={openRoleChange}

@@ -30,7 +30,7 @@ import BallotCandidateEditor from '../components/letters/BallotCandidateEditor'
 import NoticeCandidacyWarningDialog from '../components/letters/NoticeCandidacyWarningDialog'
 import type { Association, Template, ProxyVote, GenerateAccepted } from '../types'
 import ProxyVoteEditor from '../components/letters/ProxyVoteEditor'
-import { useLetterJobs } from '../context/LetterJobsContext'
+import { useJobs } from '../context/JobsContext'
 import { downloadFromUrl } from '../utils/download'
 const STEPS = ['Select template', 'Fill in fields', 'Generate']
 
@@ -611,7 +611,7 @@ export default function LetterGeneratorPage() {
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
   const { user } = useAuth()
-  const { trackJob, jobs } = useLetterJobs()
+  const { trackJob, jobs } = useJobs()
   const [activeStep, setActiveStep] = useState(0)
   const [templates, setTemplates] = useState<Template[]>([])
   const [associations, setAssociations] = useState<Association[]>([])
@@ -746,7 +746,7 @@ export default function LetterGeneratorPage() {
       setJobId(res.data.job_id)
       // Register with the app-wide tracker so the job keeps being polled (and
       // raises a completion toast) even if the user navigates away.
-      trackJob(res.data.job_id)
+      trackJob(res.data.job_id, 'letter')
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ??

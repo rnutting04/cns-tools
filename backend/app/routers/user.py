@@ -141,6 +141,8 @@ def deactivate_user(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_super_admin),
 ):
+    if user_id == current_user.id:
+        raise HTTPException(status_code=403, detail="You cannot deactivate your own account")
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")

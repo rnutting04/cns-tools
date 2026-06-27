@@ -3,74 +3,79 @@ import type { ReactNode } from 'react'
 import { Alert, Button, Snackbar } from '@mui/material'
 import { useNavigate } from 'react-router-dom'
 import apiClient from '../api/client'
-import type { JobStatus, LetterJobStatus } from '../types'
+import type { JobDetail, JobStatus, JobType } from '../types'
 
-interface LetterJobsContextValue {
-  /** Live status (and download URL once ready) for every tracked job, keyed by id. */
-  jobs: Record<string, LetterJobStatus>
-  /** Start tracking a freshly-queued job so it is polled app-wide. */
-  trackJob: (jobId: string) => void
-  /** Number of tracked jobs still pending/processing. */
+interface JobsContextValue {
+  /** Live detail (status, current_step, download_url) for every tracked job. */
+  jobs: Record<string, JobDetail>
+  /** Register a freshly-queued job so it is polled app-wide. */
+  trackJob: (jobId: string, jobType: JobType) => void
+  /** Total count of pending/processing tracked jobs. */
   inFlightCount: number
 }
 
 const isInFlight = (status: JobStatus) => status === 'pending' || status === 'processing'
 
-const LetterJobsContext = createContext<LetterJobsContextValue | null>(null)
+const JobsContext = createContext<JobsContextValue | null>(null)
 
-/**
- * App-wide tracker for background letter-generation jobs.
- *
- * Lives above the routed pages so a job kicked off on the generator keeps being
- * polled after the user navigates elsewhere. It is the single poller for live
- * job status — both the generator and the Generated Letters page read from it —
- * and raises a global toast when a job finishes.
- */
-export function LetterJobsProvider({ children }: { children: ReactNode }) {
-  const [jobs, setJobs] = useState<Record<string, LetterJobStatus>>({})
-  const [notice, setNotice] = useState<{ status: 'complete' | 'failed' } | null>(null)
+export function JobsProvider({ children }: { children: ReactNode }) {
+  const [jobs, setJobs] = useState<Record<string, JobDetail>>({})
+  const [notice, setNotice] = useState<{
+    jobType: JobType
+    status: 'complete' | 'failed'
+  } | null>(null)
   const navigate = useNavigate()
 
-  // Jobs we've already toasted, so a transition only notifies once even across
-  // polling-loop restarts.
   const notifiedRef = useRef<Set<string>>(new Set())
 
-  const trackJob = useCallback((jobId: string) => {
-    setJobs((prev) =>
-      prev[jobId]
-        ? prev
-        : { ...prev, [jobId]: { job_id: jobId, status: 'pending', download_url: null } },
-    )
+  const trackJob = useCallback((jobId: string, jobType: JobType) => {
+    setJobs((prev) => {
+      if (prev[jobId]) return prev
+      return {
+        ...prev,
+        [jobId]: {
+          id: jobId,
+          job_type: jobType,
+          title: '',
+          association_name: '',
+          status: 'pending',
+          created_at: new Date().toISOString(),
+          current_step: null,
+          download_url: null,
+        },
+      }
+    })
   }, [])
 
   const inFlightIds = Object.values(jobs)
-    .filter((job) => isInFlight(job.status))
-    .map((job) => job.job_id)
+    .filter((j) => isInFlight(j.status))
+    .map((j) => j.id)
     .sort()
-  // Stable key so the polling effect restarts only when the in-flight set changes.
   const inFlightKey = inFlightIds.join(',')
 
   useEffect(() => {
     if (!inFlightKey) return
     const ids = inFlightKey.split(',')
-
     let cancelled = false
     let timer: ReturnType<typeof setTimeout>
 
     const tick = async () => {
       const results = await Promise.allSettled(
-        ids.map((id) => apiClient.get<LetterJobStatus>(`/api/letters/${id}`).then((r) => r.data)),
+        ids.map((id) => apiClient.get<JobDetail>(`/api/jobs/${id}`).then((r) => r.data)),
       )
       if (cancelled) return
 
-      const updates: Record<string, LetterJobStatus> = {}
+      const updates: Record<string, JobDetail> = {}
       results.forEach((res, i) => {
         if (res.status !== 'fulfilled') return
         const data = res.value
         updates[ids[i]] = data
         if (!isInFlight(data.status) && !notifiedRef.current.has(ids[i])) {
           notifiedRef.current.add(ids[i])
-          setNotice({ status: data.status === 'failed' ? 'failed' : 'complete' })
+          setNotice({
+            jobType: data.job_type,
+            status: data.status === 'failed' ? 'failed' : 'complete',
+          })
         }
       })
 
@@ -81,15 +86,16 @@ export function LetterJobsProvider({ children }: { children: ReactNode }) {
     }
 
     tick()
-
     return () => {
       cancelled = true
       clearTimeout(timer)
     }
   }, [inFlightKey])
 
+  const jobLabel = notice?.jobType === 'budget' ? 'budget' : 'letter'
+
   return (
-    <LetterJobsContext.Provider value={{ jobs, trackJob, inFlightCount: inFlightIds.length }}>
+    <JobsContext.Provider value={{ jobs, trackJob, inFlightCount: inFlightIds.length }}>
       {children}
       <Snackbar
         open={notice !== null}
@@ -108,7 +114,7 @@ export function LetterJobsProvider({ children }: { children: ReactNode }) {
                   size="small"
                   onClick={() => {
                     setNotice(null)
-                    navigate('/letters/generated')
+                    navigate('/jobs')
                   }}
                 >
                   View
@@ -117,18 +123,18 @@ export function LetterJobsProvider({ children }: { children: ReactNode }) {
             }
           >
             {notice.status === 'complete'
-              ? 'Your letter is ready to download.'
-              : 'A letter failed to generate.'}
+              ? `Your ${jobLabel} is ready to download.`
+              : `A ${jobLabel} failed to generate.`}
           </Alert>
         ) : undefined}
       </Snackbar>
-    </LetterJobsContext.Provider>
+    </JobsContext.Provider>
   )
 }
 
 // eslint-disable-next-line react-refresh/only-export-components
-export function useLetterJobs() {
-  const ctx = useContext(LetterJobsContext)
-  if (!ctx) throw new Error('useLetterJobs must be used within LetterJobsProvider')
+export function useJobs() {
+  const ctx = useContext(JobsContext)
+  if (!ctx) throw new Error('useJobs must be used within JobsProvider')
   return ctx
 }

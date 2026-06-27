@@ -1,7 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import apiClient from '../api/client'
-import { decodeToken, getStoredToken, isTokenExpired } from '../utils/auth'
+import apiClient, { setAccessToken } from '../api/client'
 import type { User } from '../types'
 
 interface AuthContextValue {
@@ -19,35 +18,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   const logout = useCallback(() => {
-    localStorage.removeItem('token')
+    setAccessToken(null)
     setUser(null)
+    // Best-effort server call to revoke the refresh token cookie.
+    apiClient.post('/api/auth/logout').catch(() => {})
   }, [])
 
   useEffect(() => {
-    const token = getStoredToken()
-    if (!token) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setLoading(false)
-      return
-    }
-    try {
-      const payload = decodeToken(token)
-      if (isTokenExpired(payload)) {
-        localStorage.removeItem('token')
-        setLoading(false)
-        return
-      }
-    } catch {
-      localStorage.removeItem('token')
-      setLoading(false)
-      return
-    }
-
+    // On mount, attempt to restore the session from the httpOnly refresh token
+    // cookie. If no cookie exists (or it's expired/revoked) the server returns
+    // 401 and we land at loading=false with user=null.
     apiClient
-      .get<User>('/api/auth/me')
+      .post<{ access_token: string }>('/api/auth/refresh')
+      .then((res) => {
+        setAccessToken(res.data.access_token)
+        return apiClient.get<User>('/api/auth/me')
+      })
       .then((res) => setUser(res.data))
       .catch(() => {
-        localStorage.removeItem('token')
+        setAccessToken(null)
+        setUser(null)
       })
       .finally(() => setLoading(false))
   }, [])
@@ -57,7 +47,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       '/api/auth/login',
       { email, password },
     )
-    localStorage.setItem('token', data.access_token)
+    setAccessToken(data.access_token)
     const me = await apiClient.get<User>('/api/auth/me')
     setUser(me.data)
   }, [])
