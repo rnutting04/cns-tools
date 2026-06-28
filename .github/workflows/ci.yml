@@ -134,29 +134,3 @@ jobs:
         # The test suite creates and uses a separate `cs_tool_hub_test` database
         # (see tests/conftest.py); the CI Postgres user can CREATE DATABASE.
         run: pytest --cov=app --cov-report=term-missing
-
-  deploy:
-    name: Deploy to Railway
-    needs: [frontend, backend]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Railway CLI
-        run: npm install -g @railway/cli
-
-      - name: Deploy backend
-        working-directory: backend
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-          RAILWAY_PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
-        run: railway up --project $RAILWAY_PROJECT_ID --service imaginative-peace --environment production --detach
-
-      - name: Deploy frontend
-        working-directory: frontend
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-          RAILWAY_PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
-        run: railway up --project $RAILWAY_PROJECT_ID --service cns-tools --environment production --detach
