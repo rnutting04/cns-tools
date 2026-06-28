@@ -153,11 +153,11 @@ jobs:
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
           RAILWAY_PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
-        run: railway up --service backend --environment staging --detach
+        run: railway up --project $RAILWAY_PROJECT_ID --service backend --environment production --detach
 
       - name: Deploy frontend
         working-directory: frontend
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
           RAILWAY_PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
-        run: railway up --service frontend --environment staging --detach
+        run: railway up --project $RAILWAY_PROJECT_ID --service frontend --environment production --detach
