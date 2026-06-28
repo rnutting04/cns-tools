@@ -13,7 +13,6 @@ class UserCreate(BaseModel):
     email: EmailStr
     title: str
     role: UserRole
-    password: str
 
 
 # what you accept when updating a user

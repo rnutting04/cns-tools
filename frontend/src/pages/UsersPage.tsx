@@ -46,7 +46,6 @@ const emptyCreateForm = {
   email: '',
   title: '',
   role: 'manager' as UserRole,
-  password: '',
 }
 const emptyEditForm = { fname: '', lname: '', email: '', title: '', is_active: true }
 
@@ -534,15 +533,6 @@ export default function UsersPage() {
                 ))}
               </Select>
             </FormControl>
-            <TextField
-              label="Password"
-              type="password"
-              value={createForm.password}
-              fullWidth
-              required
-              autoComplete="new-password"
-              onChange={(e) => setCreateForm((p) => ({ ...p, password: e.target.value }))}
-            />
           </Box>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>

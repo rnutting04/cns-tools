@@ -63,13 +63,15 @@ def create_user(
 ):
     if db.query(User).filter(User.email == body.email).first():
         raise HTTPException(status_code=409, detail="Email already in use")
+    import secrets
+    temp_password = secrets.token_urlsafe(12)
     user = User(
         fname=body.fname,
         lname=body.lname,
         email=body.email,
         title=body.title,
         role=body.role,
-        password_hash=hash_password(body.password),
+        password_hash=hash_password(temp_password),
     )
     db.add(user)
     db.flush()
@@ -84,7 +86,7 @@ def create_user(
     db.commit()
     db.refresh(user)
 
-    welcome_email(user.email, user.fname, body.password)
+    welcome_email(user.email, user.fname, temp_password)
 
     return user
 
