@@ -136,11 +136,10 @@ jobs:
         run: pytest --cov=app --cov-report=term-missing
 
   deploy:
-    name: Deploy to Railway (staging)
+    name: Deploy to Railway
     needs: [frontend, backend]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
-    environment: staging
 
     steps:
       - uses: actions/checkout@v4
@@ -153,11 +152,11 @@ jobs:
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
           RAILWAY_PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
-        run: railway up --project $RAILWAY_PROJECT_ID --service backend --environment production --detach
+        run: railway up --project $RAILWAY_PROJECT_ID --service imaginative-peace --environment production --detach
 
       - name: Deploy frontend
         working-directory: frontend
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
           RAILWAY_PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
-        run: railway up --project $RAILWAY_PROJECT_ID --service frontend --environment production --detach
+        run: railway up --project $RAILWAY_PROJECT_ID --service cns-tools --environment production --detach
