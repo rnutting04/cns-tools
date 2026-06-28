@@ -88,6 +88,7 @@ jobs:
       SPACES_SECRET: local_secret_key
       SPACES_BUCKET: cs-tool-hub
       ANTHROPIC_API_KEY: sk-ant-ci-placeholder
+      CELERY_TASK_ALWAYS_EAGER: true
 
     steps:
       - name: Checkout
