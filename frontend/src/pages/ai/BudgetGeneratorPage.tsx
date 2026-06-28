@@ -8,9 +8,9 @@ import CircularProgress from '@mui/material/CircularProgress'
 import Divider from '@mui/material/Divider'
 import IconButton from '@mui/material/IconButton'
 import Paper from '@mui/material/Paper'
-import Snackbar from '@mui/material/Snackbar'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
+import SessionJobsPanel from '../../components/common/SessionJobsPanel'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import AttachFileIcon from '@mui/icons-material/AttachFile'
 import ClearIcon from '@mui/icons-material/Clear'
@@ -35,6 +35,14 @@ function FileField({
   disabled?: boolean
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
+
+  // Clear the hidden input when the parent resets file to null so that
+  // re-selecting the same file still fires onChange.
+  useEffect(() => {
+    if (!file && inputRef.current) {
+      inputRef.current.value = ''
+    }
+  }, [file])
 
   return (
     <Box>
@@ -94,7 +102,6 @@ export default function BudgetGeneratorPage() {
   const [priorBudget, setPriorBudget] = useState<File | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
-  const [toastOpen, setToastOpen] = useState(false)
 
   useEffect(() => {
     apiClient
@@ -126,7 +133,6 @@ export default function BudgetGeneratorPage() {
       setSelectedAssoc(null)
       setFinancialReport(null)
       setPriorBudget(null)
-      setToastOpen(true)
     } catch {
       setSubmitError('Failed to submit. Check your connection and try again.')
     } finally {
@@ -213,17 +219,7 @@ export default function BudgetGeneratorPage() {
         </Box>
       </Paper>
 
-      <Snackbar
-        open={toastOpen}
-        autoHideDuration={8000}
-        onClose={() => setToastOpen(false)}
-        message="Budget job submitted — track progress in My Jobs"
-        action={
-          <Button color="inherit" size="small" onClick={() => navigate('/jobs')}>
-            View jobs
-          </Button>
-        }
-      />
+      <SessionJobsPanel jobType="budget" />
     </Box>
   )
 }

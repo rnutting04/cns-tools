@@ -13,7 +13,6 @@ import InputLabel from '@mui/material/InputLabel'
 import MenuItem from '@mui/material/MenuItem'
 import Paper from '@mui/material/Paper'
 import Select from '@mui/material/Select'
-import Snackbar from '@mui/material/Snackbar'
 import Step from '@mui/material/Step'
 import StepLabel from '@mui/material/StepLabel'
 import Stepper from '@mui/material/Stepper'
@@ -24,6 +23,7 @@ import { useTheme } from '@mui/material/styles'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import SendIcon from '@mui/icons-material/Send'
 import Skeleton from '@mui/material/Skeleton'
+import SessionJobsPanel from '../components/common/SessionJobsPanel'
 import apiClient from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import ErrorAlert from '../components/layout/ErrorAlert'
@@ -32,7 +32,6 @@ import NoticeCandidacyWarningDialog from '../components/letters/NoticeCandidacyW
 import type { Association, Template, ProxyVote, GenerateAccepted } from '../types'
 import ProxyVoteEditor from '../components/letters/ProxyVoteEditor'
 import { useJobs } from '../context/JobsContext'
-import { useNavigate } from 'react-router-dom'
 const STEPS = ['Select template', 'Fill in fields', 'Generate']
 
 const AUTO_POPULATE_KEYS = new Set(['s0ke'])
@@ -587,7 +586,6 @@ export default function LetterGeneratorPage() {
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
   const { user } = useAuth()
   const { trackJob } = useJobs()
-  const navigate = useNavigate()
   const [activeStep, setActiveStep] = useState(0)
   const [templates, setTemplates] = useState<Template[]>([])
   const [associations, setAssociations] = useState<Association[]>([])
@@ -598,7 +596,6 @@ export default function LetterGeneratorPage() {
   const [fieldValues, setFieldValues] = useState<FieldValueMap>({})
   const [submitting, setSubmitting] = useState(false)
   const [genError, setGenError] = useState<string | null>(null)
-  const [toastOpen, setToastOpen] = useState(false)
   const [noticeWarningOpen, setNoticeWarningOpen] = useState(false)
 
   useEffect(() => {
@@ -701,7 +698,6 @@ export default function LetterGeneratorPage() {
       })
       trackJob(res.data.job_id, 'letter')
       handleReset()
-      setToastOpen(true)
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ??
@@ -828,17 +824,7 @@ export default function LetterGeneratorPage() {
         )}
       </Box>
 
-      <Snackbar
-        open={toastOpen}
-        autoHideDuration={8000}
-        onClose={() => setToastOpen(false)}
-        message="Letter job submitted — track progress in My Jobs"
-        action={
-          <Button color="inherit" size="small" onClick={() => navigate('/jobs')}>
-            View jobs
-          </Button>
-        }
-      />
+      <SessionJobsPanel jobType="letter" />
     </Box>
   )
 }

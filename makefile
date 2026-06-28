@@ -6,8 +6,9 @@ dev:
 
 # Run in a second shell alongside `make dev`. On WSL/macOS, if the prefork
 # pool misbehaves, add --pool=solo.
+# -Q default,light: letter/email tasks route to "light", budget tasks to "default".
 worker:
-	cd backend && venv/bin/celery -A app.celery_app.celery_app worker --loglevel=info --concurrency=2
+	cd backend && venv/bin/celery -A app.celery_app.celery_app worker --loglevel=info --concurrency=2 -Q default,light
 
 seed:
 	./scripts/seed.sh

@@ -13,7 +13,7 @@ import { useTheme } from '@mui/material/styles'
 import apiClient from '../../api/client'
 import { formatDateTime } from '../../utils/formatDate'
 import ErrorAlert from '../layout/ErrorAlert'
-import LetterStatusChip from '../letters/LetterStatusChip'
+import JobStatusChip from '../common/JobStatusChip'
 import type { BudgetJobDetail } from '../../types'
 
 const ERROR_LABELS: Record<string, string> = {
@@ -114,7 +114,7 @@ export default function BudgetDetailDialog({ jobId, onClose, onRetried }: Props)
                 <Typography variant="h6">
                   {detail.association_name} {detail.budget_year}
                 </Typography>
-                <LetterStatusChip status={detail.status} />
+                <JobStatusChip status={detail.status} />
               </Box>
               <Typography variant="body2" color="text.secondary">
                 Submitted by {detail.created_by_name} · {formatDateTime(detail.created_at)}

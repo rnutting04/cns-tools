@@ -18,7 +18,7 @@ import { hasRole } from '../utils/auth'
 import apiClient from '../api/client'
 import type { Association, Job, JobType, User } from '../types'
 import RoleBadge from '../components/layout/RoleBadge'
-import LetterStatusChip from '../components/letters/LetterStatusChip'
+import JobStatusChip from '../components/common/JobStatusChip'
 import { formatDateTime } from '../utils/formatDate'
 
 const TYPE_LABEL: Record<JobType, string> = { letter: 'Letter', budget: 'Budget' }
@@ -217,7 +217,7 @@ export default function DashboardPage() {
                 <Typography variant="body2" flex={1} noWrap>
                   {job.title}
                 </Typography>
-                <LetterStatusChip status={job.status} />
+                <JobStatusChip status={job.status} />
                 <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0 }}>
                   {formatDateTime(job.created_at)}
                 </Typography>

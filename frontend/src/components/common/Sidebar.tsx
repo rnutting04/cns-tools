@@ -116,7 +116,7 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
           >
             <ListItemIcon sx={{ minWidth: 36 }}>
               {item.showBadge && inFlightCount > 0 ? (
-                <Badge badgeContent={inFlightCount} color="primary" max={9}>
+                <Badge badgeContent={inFlightCount} color="error" max={9}>
                   {item.icon}
                 </Badge>
               ) : (

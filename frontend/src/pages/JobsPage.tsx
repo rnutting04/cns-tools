@@ -20,7 +20,7 @@ import type { GridColDef, GridRenderCellParams } from '@mui/x-data-grid'
 import apiClient from '../api/client'
 import { useJobs } from '../context/JobsContext'
 import ErrorAlert from '../components/layout/ErrorAlert'
-import LetterStatusChip from '../components/letters/LetterStatusChip'
+import JobStatusChip from '../components/common/JobStatusChip'
 import LetterDetailDialog from '../components/letters/LetterDetailDialog'
 import BudgetDetailDialog from '../components/budget/BudgetDetailDialog'
 import { downloadFromUrl } from '../utils/download'
@@ -92,7 +92,7 @@ function MobileRow({ job, isLast, downloadingId, onDownload, onDetails, onBudget
               {job.association_name}
             </Typography>
             <Box mt={0.5}>
-              <LetterStatusChip status={job.status} />
+              <JobStatusChip status={job.status} />
             </Box>
             <Typography variant="caption" color="text.secondary" display="block" mt={0.5}>
               {formatDateTime(job.created_at)}
@@ -203,7 +203,7 @@ export default function JobsPage() {
         field: 'status',
         headerName: 'Status',
         width: 130,
-        renderCell: (p: GridRenderCellParams<Job>) => <LetterStatusChip status={p.row.status} />,
+        renderCell: (p: GridRenderCellParams<Job>) => <JobStatusChip status={p.row.status} />,
       },
       {
         field: 'created_at',

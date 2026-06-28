@@ -13,7 +13,7 @@ import { useTheme } from '@mui/material/styles'
 import apiClient from '../../api/client'
 import { formatDateTime } from '../../utils/formatDate'
 import ErrorAlert from '../layout/ErrorAlert'
-import LetterStatusChip from './LetterStatusChip'
+import JobStatusChip from '../common/JobStatusChip'
 import type { LetterJobDetail } from '../../types'
 
 interface Props {
@@ -84,7 +84,7 @@ export default function LetterDetailDialog({ jobId, onClose }: Props) {
             <Box>
               <Box display="flex" justifyContent="space-between" alignItems="center" gap={2}>
                 <Typography variant="h6">{detail.template_name}</Typography>
-                <LetterStatusChip status={detail.status} />
+                <JobStatusChip status={detail.status} />
               </Box>
               <Typography variant="body2" color="text.secondary">
                 {detail.association_name}
