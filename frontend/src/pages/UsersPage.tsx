@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Chip from '@mui/material/Chip'
@@ -161,6 +161,8 @@ function UserRow({ user, isSuperAdmin, isSelf, isLast, onEdit, onRoleChange, onD
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
+let userCache: User[] | null = null
+
 export default function UsersPage() {
   const { user: currentUser } = useAuth()
   const theme = useTheme()
@@ -168,8 +170,8 @@ export default function UsersPage() {
   const fullScreen = useMediaQuery(theme.breakpoints.down('sm'))
   const isSuperAdmin = currentUser?.role === 'super_admin'
 
-  const [rows, setRows] = useState<User[]>([])
-  const [loading, setLoading] = useState(true)
+  const [rows, setRows] = useState<User[]>(userCache ?? [])
+  const [loading, setLoading] = useState(userCache === null)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
 
@@ -194,22 +196,24 @@ export default function UsersPage() {
   const [resetTarget, setResetTarget] = useState<User | null>(null)
   const [resetLoading, setResetLoading] = useState(false)
 
-  const fetchUsers = useCallback(async () => {
-    setLoading(true)
+  async function fetchUsers(silent = false) {
+    if (!silent) setLoading(true)
     setError(null)
     try {
       const { data } = await apiClient.get<User[]>('/api/users')
+      userCache = data
       setRows(data)
     } catch {
       setError('Failed to load users.')
     } finally {
       setLoading(false)
     }
-  }, [])
+  }
 
   useEffect(() => {
-    fetchUsers()
-  }, [fetchUsers])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    fetchUsers(userCache !== null)
+  }, [])
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase()
@@ -231,7 +235,7 @@ export default function UsersPage() {
     try {
       await apiClient.post('/api/users', createForm)
       setCreateOpen(false)
-      fetchUsers()
+      fetchUsers(true)
     } catch (err: unknown) {
       setCreateError(
         (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ??
@@ -261,7 +265,7 @@ export default function UsersPage() {
     try {
       await apiClient.patch(`/api/users/${editTarget.id}`, editForm)
       setEditTarget(null)
-      fetchUsers()
+      fetchUsers(true)
     } catch (err: unknown) {
       setEditError(
         (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ??
@@ -285,7 +289,7 @@ export default function UsersPage() {
     try {
       await apiClient.patch(`/api/users/${roleTarget.id}/role`, { role: selectedRole })
       setRoleTarget(null)
-      fetchUsers()
+      fetchUsers(true)
     } catch (err: unknown) {
       setRoleError(
         (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ??
@@ -316,7 +320,7 @@ export default function UsersPage() {
     try {
       await apiClient.delete(`/api/users/${deactivateTarget.id}`)
       setDeactivateTarget(null)
-      fetchUsers()
+      fetchUsers(true)
     } catch {
       setError('Failed to deactivate user.')
     } finally {

@@ -475,36 +475,41 @@ function TemplateRow({
   )
 }
 
+let templateCache: Template[] | null = null
+
 export default function TemplateManagerPage() {
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('md'))
 
-  const [templates, setTemplates] = useState<Template[]>([])
-  const [loading, setLoading] = useState(true)
+  const [templates, setTemplates] = useState<Template[]>(templateCache ?? [])
+  const [loading, setLoading] = useState(templateCache === null)
   const [error, setError] = useState<string | null>(null)
   const [dialog, setDialog] = useState<{ mode: DialogMode; template?: Template } | null>(null)
 
-  const fetchTemplates = () => {
-    setLoading(true)
+  const fetchTemplates = (silent = false) => {
+    if (!silent) setLoading(true)
     setError(null)
 
     apiClient
       .get<Template[]>('/api/templates')
-      .then((res) => setTemplates(res.data))
+      .then((res) => {
+        templateCache = res.data
+        setTemplates(res.data)
+      })
       .catch(() => setError('Failed to load templates.'))
       .finally(() => setLoading(false))
   }
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    fetchTemplates()
+    fetchTemplates(templateCache !== null)
   }, [])
 
   const handleDeactivate = async (id: string) => {
     try {
       await apiClient.delete(`/api/templates/${id}`)
       // Backend list only returns active templates, so refetch to stay in sync.
-      fetchTemplates()
+      fetchTemplates(true)
     } catch {
       setError('Failed to deactivate template.')
     }

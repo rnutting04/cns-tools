@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Chip from '@mui/material/Chip'
@@ -160,6 +160,9 @@ function AssocRow({
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
+let assocCache: Association[] | null = null
+let assocUsersCache: User[] | null = null
+
 export default function AssociationPage() {
   const { user } = useAuth()
   const theme = useTheme()
@@ -169,8 +172,8 @@ export default function AssociationPage() {
   const isAdmin = user ? hasRole(user, ['admin', 'super_admin']) : false
   const isSuperAdmin = user?.role === 'super_admin'
 
-  const [rows, setRows] = useState<Association[]>([])
-  const [loading, setLoading] = useState(true)
+  const [rows, setRows] = useState<Association[]>(assocCache ?? [])
+  const [loading, setLoading] = useState(assocCache === null)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
 
@@ -189,22 +192,24 @@ export default function AssociationPage() {
   const [managerLoading, setManagerLoading] = useState(false)
   const [managerError, setManagerError] = useState<string | null>(null)
 
-  const fetchAssociations = useCallback(async () => {
-    setLoading(true)
+  async function fetchAssociations(silent = false) {
+    if (!silent) setLoading(true)
     setError(null)
     try {
       const { data } = await apiClient.get<Association[]>('/api/associations')
+      assocCache = data
       setRows(data)
     } catch {
       setError('Failed to load associations.')
     } finally {
       setLoading(false)
     }
-  }, [])
+  }
 
   useEffect(() => {
-    fetchAssociations()
-  }, [fetchAssociations])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    fetchAssociations(assocCache !== null)
+  }, [])
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase()
@@ -242,7 +247,7 @@ export default function AssociationPage() {
         await apiClient.post('/api/associations', formData)
       }
       setFormOpen(false)
-      fetchAssociations()
+      fetchAssociations(true)
     } catch (err: unknown) {
       setFormError(
         (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ??
@@ -259,7 +264,7 @@ export default function AssociationPage() {
     try {
       await apiClient.delete(`/api/associations/${deactivateTarget.id}`)
       setDeactivateTarget(null)
-      fetchAssociations()
+      fetchAssociations(true)
     } catch {
       setError('Failed to deactivate association.')
     } finally {
@@ -272,8 +277,13 @@ export default function AssociationPage() {
     setSelectedUserId('')
     setManagerError(null)
     if (isAdmin) {
-      const { data } = await apiClient.get<User[]>('/api/users')
-      setAllUsers(data.filter((u) => u.is_active))
+      if (assocUsersCache) {
+        setAllUsers(assocUsersCache.filter((u) => u.is_active))
+      } else {
+        const { data } = await apiClient.get<User[]>('/api/users')
+        assocUsersCache = data
+        setAllUsers(data.filter((u) => u.is_active))
+      }
     }
   }
 
@@ -286,6 +296,7 @@ export default function AssociationPage() {
         user_id: selectedUserId,
       })
       const updated = await apiClient.get<Association[]>('/api/associations')
+      assocCache = updated.data
       setRows(updated.data)
       setManagerDialogAssoc(updated.data.find((a) => a.id === managerDialogAssoc.id) ?? null)
       setSelectedUserId('')
@@ -305,6 +316,7 @@ export default function AssociationPage() {
     try {
       await apiClient.delete(`/api/associations/${assocId}/managers/${userId}`)
       const updated = await apiClient.get<Association[]>('/api/associations')
+      assocCache = updated.data
       setRows(updated.data)
       setManagerDialogAssoc(updated.data.find((a) => a.id === assocId) ?? null)
     } catch {
