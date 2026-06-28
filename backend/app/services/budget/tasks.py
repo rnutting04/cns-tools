@@ -13,6 +13,8 @@ Frontend polls GET /budget/jobs/{job_id} for status and a presigned download URL
 from typing import Any
 from uuid import UUID
 
+from celery.exceptions import SoftTimeLimitExceeded
+
 from app.celery_app import celery_app
 from app.database import SessionLocal
 from app.models.budget_job import BudgetJob
@@ -107,6 +109,10 @@ def generate_budget_task(self, job_id: str) -> dict[str, Any]:
     except BudgetPipelineError as exc:
         _fail(db, job, "pipeline_error", {"message": str(exc)})
         return {"job_id": job_id, "status": "failed", "error_code": "pipeline_error"}
+
+    except SoftTimeLimitExceeded:
+        _fail(db, job, "timeout", {"message": "Budget generation exceeded the time limit."})
+        return {"job_id": job_id, "status": "failed", "error_code": "timeout"}
 
     except Exception as exc:
         _fail(db, job, "unexpected_error", {"message": str(exc)})

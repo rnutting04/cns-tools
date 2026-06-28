@@ -13,6 +13,7 @@ import InputLabel from '@mui/material/InputLabel'
 import MenuItem from '@mui/material/MenuItem'
 import Paper from '@mui/material/Paper'
 import Select from '@mui/material/Select'
+import Snackbar from '@mui/material/Snackbar'
 import Step from '@mui/material/Step'
 import StepLabel from '@mui/material/StepLabel'
 import Stepper from '@mui/material/Stepper'
@@ -21,8 +22,7 @@ import Typography from '@mui/material/Typography'
 import useMediaQuery from '@mui/material/useMediaQuery'
 import { useTheme } from '@mui/material/styles'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
-import DownloadIcon from '@mui/icons-material/Download'
-import RestartAltIcon from '@mui/icons-material/RestartAlt'
+import SendIcon from '@mui/icons-material/Send'
 import apiClient from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import ErrorAlert from '../components/layout/ErrorAlert'
@@ -31,7 +31,7 @@ import NoticeCandidacyWarningDialog from '../components/letters/NoticeCandidacyW
 import type { Association, Template, ProxyVote, GenerateAccepted } from '../types'
 import ProxyVoteEditor from '../components/letters/ProxyVoteEditor'
 import { useJobs } from '../context/JobsContext'
-import { downloadFromUrl } from '../utils/download'
+import { useNavigate } from 'react-router-dom'
 const STEPS = ['Select template', 'Fill in fields', 'Generate']
 
 const AUTO_POPULATE_KEYS = new Set(['s0ke'])
@@ -416,24 +416,16 @@ function GenerateStep({
   associations,
   managers,
   onGenerate,
-  onDownload,
-  generating,
-  downloading,
-  downloadUrl,
+  submitting,
   error,
-  onReset,
 }: {
   template: Template
   values: FieldValueMap
   associations: Association[]
   managers: ManagerOption[]
   onGenerate: () => void
-  onDownload: () => void
-  generating: boolean
-  downloading: boolean
-  downloadUrl: string | null
+  submitting: boolean
   error: string | null
-  onReset: () => void
 }) {
   const rendererType = getRendererType(template)
   const selectedAssociation = getSelectedAssociation(values, associations, template)
@@ -518,50 +510,20 @@ function GenerateStep({
         )}
       </Paper>
 
-      {downloadUrl ? (
-        <Box>
-          <Box display="flex" alignItems="center" gap={1} mb={2}>
-            <CheckCircleIcon color="success" />
-            <Typography color="success.main" fontWeight={600}>
-              Letter generated successfully
-            </Typography>
-          </Box>
-
-          <Box display="flex" gap={2} flexWrap="wrap">
-            <Button
-              variant="contained"
-              startIcon={
-                downloading ? <CircularProgress size={16} color="inherit" /> : <DownloadIcon />
-              }
-              onClick={onDownload}
-              disabled={downloading}
-            >
-              {downloading ? 'Downloading…' : 'Download letter'}
-            </Button>
-
-            <Button variant="outlined" startIcon={<RestartAltIcon />} onClick={onReset}>
-              Generate another
-            </Button>
-          </Box>
-        </Box>
-      ) : (
-        <Box>
-          {error && (
-            <Typography color="error" variant="body2" mb={2}>
-              {error}
-            </Typography>
-          )}
-
-          <Button
-            variant="contained"
-            onClick={onGenerate}
-            disabled={generating}
-            startIcon={generating ? <CircularProgress size={16} color="inherit" /> : undefined}
-          >
-            {generating ? 'Generating…' : 'Generate letter'}
-          </Button>
+      {error && (
+        <Box mb={2}>
+          <ErrorAlert message={error} onClose={() => {}} />
         </Box>
       )}
+
+      <Button
+        variant="contained"
+        onClick={onGenerate}
+        disabled={submitting}
+        startIcon={submitting ? <CircularProgress size={16} color="inherit" /> : <SendIcon />}
+      >
+        {submitting ? 'Submitting…' : 'Generate letter'}
+      </Button>
     </Box>
   )
 }
@@ -611,20 +573,18 @@ export default function LetterGeneratorPage() {
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
   const { user } = useAuth()
-  const { trackJob, jobs } = useJobs()
+  const { trackJob } = useJobs()
+  const navigate = useNavigate()
   const [activeStep, setActiveStep] = useState(0)
   const [templates, setTemplates] = useState<Template[]>([])
   const [associations, setAssociations] = useState<Association[]>([])
   const [managers, setManagers] = useState<ManagerOption[]>([])
   const [loadError, setLoadError] = useState<string | null>(null)
-  const [downloading, setDownloading] = useState(false)
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null)
   const [fieldValues, setFieldValues] = useState<FieldValueMap>({})
-
-  const [generating, setGenerating] = useState(false)
-  const [downloadUrl, setDownloadUrl] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
   const [genError, setGenError] = useState<string | null>(null)
-  const [jobId, setJobId] = useState<string | null>(null)
+  const [toastOpen, setToastOpen] = useState(false)
   const [noticeWarningOpen, setNoticeWarningOpen] = useState(false)
 
   useEffect(() => {
@@ -644,10 +604,8 @@ export default function LetterGeneratorPage() {
   const handleTemplateSelect = useCallback((template: Template) => {
     setSelectedTemplate(template)
     setFieldValues({})
-    setDownloadUrl(null)
     setGenError(null)
-    setJobId(null)
-    setGenerating(false)
+    setSubmitting(false)
   }, [])
 
   const handleFieldChange = useCallback((key: string, val: unknown) => {
@@ -708,19 +666,6 @@ export default function LetterGeneratorPage() {
     setActiveStep((s) => Math.max(s - 1, 0))
   }
 
-  const handleDownload = async () => {
-    if (!downloadUrl) return
-
-    try {
-      setDownloading(true)
-      await downloadFromUrl(downloadUrl, `${selectedTemplate?.name ?? 'letter'}.docx`)
-    } catch {
-      setGenError('Failed to download file.')
-    } finally {
-      setDownloading(false)
-    }
-  }
-
   const handleGenerate = async () => {
     if (!selectedTemplate) return
 
@@ -730,46 +675,27 @@ export default function LetterGeneratorPage() {
       return
     }
 
-    setGenerating(true)
+    setSubmitting(true)
     setGenError(null)
-    setDownloadUrl(null)
 
     try {
-      // The request is accepted immediately; the worker renders in the
-      // background and we poll GET /api/letters/{job_id} for the result.
       const res = await apiClient.post<GenerateAccepted>('/api/letters/generate', {
         template_id: selectedTemplate.id,
         association_id: associationId,
         field_values: fieldValues,
       })
-
-      setJobId(res.data.job_id)
-      // Register with the app-wide tracker so the job keeps being polled (and
-      // raises a completion toast) even if the user navigates away.
       trackJob(res.data.job_id, 'letter')
+      handleReset()
+      setToastOpen(true)
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ??
         'Generation failed.'
       setGenError(msg)
-      setGenerating(false)
+    } finally {
+      setSubmitting(false)
     }
   }
-
-  // The app-wide tracker polls the queued job; surface its outcome inline here.
-  const jobStatus = jobId ? jobs[jobId] : undefined
-  useEffect(() => {
-    if (!jobStatus) return
-    if (jobStatus.status === 'complete') {
-      setDownloadUrl(jobStatus.download_url)
-      setGenerating(false)
-      setJobId(null)
-    } else if (jobStatus.status === 'failed') {
-      setGenError('Generation failed.')
-      setGenerating(false)
-      setJobId(null)
-    }
-  }, [jobStatus])
 
   // 60-day notice check for notice_candidacy renderer.
   // Finds the first date-type field value and checks if it's < 60 days from today.
@@ -802,10 +728,8 @@ export default function LetterGeneratorPage() {
     setActiveStep(0)
     setSelectedTemplate(null)
     setFieldValues({})
-    setDownloadUrl(null)
     setGenError(null)
-    setJobId(null)
-    setGenerating(false)
+    setSubmitting(false)
   }
 
   const userName = user ? `${user.fname} ${user.lname}` : ''
@@ -861,12 +785,8 @@ export default function LetterGeneratorPage() {
             associations={associations}
             managers={managers}
             onGenerate={handleGenerateClick}
-            onDownload={handleDownload}
-            generating={generating}
-            downloading={downloading}
-            downloadUrl={downloadUrl}
+            submitting={submitting}
             error={genError}
-            onReset={handleReset}
           />
         )}
       </Box>
@@ -881,7 +801,7 @@ export default function LetterGeneratorPage() {
       />
 
       <Box display="flex" gap={2} flexWrap="wrap">
-        <Button variant="outlined" onClick={handleBack} disabled={activeStep === 0 || generating}>
+        <Button variant="outlined" onClick={handleBack} disabled={activeStep === 0 || submitting}>
           Back
         </Button>
 
@@ -891,6 +811,18 @@ export default function LetterGeneratorPage() {
           </Button>
         )}
       </Box>
+
+      <Snackbar
+        open={toastOpen}
+        autoHideDuration={8000}
+        onClose={() => setToastOpen(false)}
+        message="Letter job submitted — track progress in My Jobs"
+        action={
+          <Button color="inherit" size="small" onClick={() => navigate('/jobs')}>
+            View jobs
+          </Button>
+        }
+      />
     </Box>
   )
 }

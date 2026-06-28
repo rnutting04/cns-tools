@@ -1,6 +1,7 @@
 import uuid
+from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
@@ -64,6 +65,62 @@ def list_jobs(
     items += [_budget_to_item(j) for j in budget_q.all()]
     items.sort(key=lambda j: j.created_at, reverse=True)
     return items
+
+
+@router.get("/status", response_model=list[JobDetail])
+def get_jobs_status(
+    ids: Annotated[list[str], Query()],
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[JobDetail]:
+    """Batch status check — returns detail for every requested job ID the caller owns."""
+    is_super_admin = current_user.role == UserRole.super_admin
+    parsed = [uuid.UUID(i) for i in ids]
+
+    letters = (
+        db.query(LetterJob)
+        .options(joinedload(LetterJob.template), joinedload(LetterJob.association))
+        .filter(LetterJob.id.in_(parsed))
+        .all()
+    )
+    budgets = db.query(BudgetJob).filter(BudgetJob.id.in_(parsed)).all()
+
+    results: list[JobDetail] = []
+
+    for letter in letters:
+        if not is_super_admin and letter.created_by != current_user.id:
+            continue
+        download_url = None
+        if letter.status == JobStatus.complete and letter.output_path:
+            download_url = storage_service.generate_presigned_url(letter.output_path, expires=3600)
+        results.append(JobDetail(
+            id=letter.id,
+            job_type="letter",
+            title=letter.template.name if letter.template else "Letter",
+            association_name=letter.association.legal_name if letter.association else "",
+            status=letter.status.value,
+            created_at=letter.created_at,
+            download_url=download_url,
+        ))
+
+    for budget in budgets:
+        if not is_super_admin and budget.created_by != current_user.id:
+            continue
+        download_url = None
+        if budget.status == JobStatus.complete and budget.output_path:
+            download_url = storage_service.generate_presigned_url(budget.output_path, expires=3600)
+        results.append(JobDetail(
+            id=budget.id,
+            job_type="budget",
+            title=f"{budget.association_name} {budget.budget_year}",
+            association_name=budget.association_name,
+            status=budget.status.value,
+            created_at=budget.created_at,
+            current_step=budget.current_step,
+            download_url=download_url,
+        ))
+
+    return results
 
 
 @router.get("/{job_id}", response_model=JobDetail)

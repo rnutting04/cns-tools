@@ -19,7 +19,7 @@ router = APIRouter(prefix="/budget", tags=["budget"])
 
 
 @router.post("/generate", response_model=BudgetJobAcceptedResponse, status_code=202)
-async def generate_budget(
+def generate_budget(
     association_name: str = Form(...),
     budget_year: int = Form(...),
     financial_report: UploadFile = File(...),
@@ -35,8 +35,8 @@ async def generate_budget(
     """
     job_id = uuid.uuid4()
 
-    financial_report_bytes = await financial_report.read()
-    prior_budget_bytes = await prior_budget.read()
+    financial_report_bytes = financial_report.file.read()
+    prior_budget_bytes = prior_budget.file.read()
 
     report_key = f"budget/{job_id}/financial_report/{financial_report.filename}"
     prior_key = f"budget/{job_id}/prior_budget/{prior_budget.filename}"

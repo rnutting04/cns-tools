@@ -74,7 +74,7 @@ def _parse_fields(fields: str) -> list[dict[str, Any]]:
 
 
 @router.post("/templates", response_model=TemplateResponse, status_code=201)
-async def create_template(
+def create_template(
     file: UploadFile = File(...),
     name: str = Form(...),
     category: str = Form(...),
@@ -88,7 +88,7 @@ async def create_template(
 
     template_id = uuid.uuid4()
     key = f"templates/{template_id}/{file.filename}"
-    file_bytes = await file.read()
+    file_bytes = file.file.read()
 
     storage_service.upload_file(file_bytes, key, content_type=DOCX_CONTENT_TYPE)
 
@@ -123,7 +123,7 @@ def list_templates(
 
 
 @router.patch("/templates/{template_id}", response_model=TemplateResponse)
-async def update_template(
+def update_template(
     template_id: uuid.UUID,
     name: str | None = Form(None),
     category: str | None = Form(None),
@@ -155,7 +155,7 @@ async def update_template(
         _validate_docx(file)
         old_path = template.docx_path
         new_key = f"templates/{template_id}/{file.filename}"
-        file_bytes = await file.read()
+        file_bytes = file.file.read()
         storage_service.upload_file(file_bytes, new_key, content_type=DOCX_CONTENT_TYPE)
         template.docx_path = new_key
         if new_key != old_path:
@@ -180,7 +180,7 @@ async def update_template(
     response_model=TemplateResponse,
     status_code=201,
 )
-async def duplicate_template(
+def duplicate_template(
     template_id: uuid.UUID,
     name: str | None = Form(None),
     category: str | None = Form(None),
@@ -199,7 +199,7 @@ async def duplicate_template(
     if file is not None:
         _validate_docx(file)
         new_key = f"templates/{new_id}/{file.filename}"
-        file_bytes = await file.read()
+        file_bytes = file.file.read()
         storage_service.upload_file(file_bytes, new_key, content_type=DOCX_CONTENT_TYPE)
     else:
         filename = os.path.basename(source.docx_path)

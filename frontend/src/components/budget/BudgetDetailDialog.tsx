@@ -16,6 +16,15 @@ import ErrorAlert from '../layout/ErrorAlert'
 import LetterStatusChip from '../letters/LetterStatusChip'
 import type { BudgetJobDetail } from '../../types'
 
+const ERROR_LABELS: Record<string, string> = {
+  ingest_failed: 'Extraction failed',
+  cross_check_failed: 'Cross-check failed',
+  validation_failed: 'Validation failed',
+  pipeline_error: 'Pipeline error',
+  timeout: 'Timed out',
+  unexpected_error: 'Unexpected error',
+}
+
 interface Props {
   jobId: string | null
   onClose: () => void
@@ -153,7 +162,10 @@ export default function BudgetDetailDialog({ jobId, onClose, onRetried }: Props)
                 <Divider sx={{ mb: 1 }} />
                 <FieldRows
                   rows={[
-                    { label: 'Error', value: detail.error_code },
+                    {
+                      label: 'Error',
+                      value: ERROR_LABELS[detail.error_code] ?? detail.error_code,
+                    },
                     ...(detail.error_detail?.message
                       ? [{ label: 'Detail', value: String(detail.error_detail.message) }]
                       : []),

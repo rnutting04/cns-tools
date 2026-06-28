@@ -60,24 +60,28 @@ export function JobsProvider({ children }: { children: ReactNode }) {
     let timer: ReturnType<typeof setTimeout>
 
     const tick = async () => {
-      const results = await Promise.allSettled(
-        ids.map((id) => apiClient.get<JobDetail>(`/api/jobs/${id}`).then((r) => r.data)),
-      )
+      const params = new URLSearchParams(ids.map((id) => ['ids', id]))
+      let fetched: JobDetail[]
+      try {
+        const res = await apiClient.get<JobDetail[]>(`/api/jobs/status?${params}`)
+        fetched = res.data
+      } catch {
+        timer = setTimeout(tick, 2000)
+        return
+      }
       if (cancelled) return
 
       const updates: Record<string, JobDetail> = {}
-      results.forEach((res, i) => {
-        if (res.status !== 'fulfilled') return
-        const data = res.value
-        updates[ids[i]] = data
-        if (!isInFlight(data.status) && !notifiedRef.current.has(ids[i])) {
-          notifiedRef.current.add(ids[i])
+      for (const data of fetched) {
+        updates[data.id] = data
+        if (!isInFlight(data.status) && !notifiedRef.current.has(data.id)) {
+          notifiedRef.current.add(data.id)
           setNotice({
             jobType: data.job_type,
             status: data.status === 'failed' ? 'failed' : 'complete',
           })
         }
-      })
+      }
 
       if (Object.keys(updates).length > 0) {
         setJobs((prev) => ({ ...prev, ...updates }))
@@ -99,7 +103,7 @@ export function JobsProvider({ children }: { children: ReactNode }) {
       {children}
       <Snackbar
         open={notice !== null}
-        autoHideDuration={6000}
+        autoHideDuration={8000}
         onClose={() => setNotice(null)}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
       >
@@ -108,23 +112,21 @@ export function JobsProvider({ children }: { children: ReactNode }) {
             severity={notice.status === 'complete' ? 'success' : 'error'}
             onClose={() => setNotice(null)}
             action={
-              notice.status === 'complete' ? (
-                <Button
-                  color="inherit"
-                  size="small"
-                  onClick={() => {
-                    setNotice(null)
-                    navigate('/jobs')
-                  }}
-                >
-                  View
-                </Button>
-              ) : undefined
+              <Button
+                color="inherit"
+                size="small"
+                onClick={() => {
+                  setNotice(null)
+                  navigate('/jobs')
+                }}
+              >
+                View jobs
+              </Button>
             }
           >
             {notice.status === 'complete'
               ? `Your ${jobLabel} is ready to download.`
-              : `A ${jobLabel} failed to generate.`}
+              : `Your ${jobLabel} failed — check My Jobs for details.`}
           </Alert>
         ) : undefined}
       </Snackbar>
