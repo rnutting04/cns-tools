@@ -23,6 +23,7 @@ import useMediaQuery from '@mui/material/useMediaQuery'
 import { useTheme } from '@mui/material/styles'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import SendIcon from '@mui/icons-material/Send'
+import Skeleton from '@mui/material/Skeleton'
 import apiClient from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import ErrorAlert from '../components/layout/ErrorAlert'
@@ -90,10 +91,12 @@ function getSelectedManager(
 
 function TemplateStep({
   templates,
+  loading,
   selected,
   onSelect,
 }: {
   templates: Template[]
+  loading: boolean
   selected: Template | null
   onSelect: (t: Template) => void
 }) {
@@ -104,6 +107,16 @@ function TemplateStep({
     }
     return map
   }, [templates])
+
+  if (loading) {
+    return (
+      <Box display="flex" flexWrap="wrap" gap={2}>
+        {[0, 1, 2, 3].map((i) => (
+          <Skeleton key={i} variant="rounded" width={250} height={110} />
+        ))}
+      </Box>
+    )
+  }
 
   return (
     <Box>
@@ -579,6 +592,7 @@ export default function LetterGeneratorPage() {
   const [templates, setTemplates] = useState<Template[]>([])
   const [associations, setAssociations] = useState<Association[]>([])
   const [managers, setManagers] = useState<ManagerOption[]>([])
+  const [loadingData, setLoadingData] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null)
   const [fieldValues, setFieldValues] = useState<FieldValueMap>({})
@@ -599,6 +613,7 @@ export default function LetterGeneratorPage() {
         setManagers(managerRes.data.filter((m) => m.is_active !== false))
       })
       .catch(() => setLoadError('Failed to load data. Please refresh.'))
+      .finally(() => setLoadingData(false))
   }, [])
 
   const handleTemplateSelect = useCallback((template: Template) => {
@@ -762,6 +777,7 @@ export default function LetterGeneratorPage() {
         {activeStep === 0 && (
           <TemplateStep
             templates={templates}
+            loading={loadingData}
             selected={selectedTemplate}
             onSelect={handleTemplateSelect}
           />
