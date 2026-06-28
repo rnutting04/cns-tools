@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Alert, Button, Snackbar } from '@mui/material'
+import { toast } from 'sonner'
 import { useNavigate } from 'react-router-dom'
 import apiClient from '../api/client'
 import type { JobDetail, JobStatus, JobType } from '../types'
@@ -20,10 +20,6 @@ const JobsContext = createContext<JobsContextValue | null>(null)
 
 export function JobsProvider({ children }: { children: ReactNode }) {
   const [jobs, setJobs] = useState<Record<string, JobDetail>>({})
-  const [notice, setNotice] = useState<{
-    jobType: JobType
-    status: 'complete' | 'failed'
-  } | null>(null)
   const navigate = useNavigate()
 
   const notifiedRef = useRef<Set<string>>(new Set())
@@ -76,10 +72,17 @@ export function JobsProvider({ children }: { children: ReactNode }) {
         updates[data.id] = data
         if (!isInFlight(data.status) && !notifiedRef.current.has(data.id)) {
           notifiedRef.current.add(data.id)
-          setNotice({
-            jobType: data.job_type,
-            status: data.status === 'failed' ? 'failed' : 'complete',
-          })
+          const label = data.job_type === 'budget' ? 'budget' : 'letter'
+          if (data.status === 'failed') {
+            toast.error(`Your ${label} failed.`, {
+              description: 'Check My Jobs for details.',
+              action: { label: 'View jobs', onClick: () => navigate('/jobs') },
+            })
+          } else {
+            toast.success(`Your ${label} is ready to download.`, {
+              action: { label: 'View jobs', onClick: () => navigate('/jobs') },
+            })
+          }
         }
       }
 
@@ -96,40 +99,9 @@ export function JobsProvider({ children }: { children: ReactNode }) {
     }
   }, [inFlightKey])
 
-  const jobLabel = notice?.jobType === 'budget' ? 'budget' : 'letter'
-
   return (
     <JobsContext.Provider value={{ jobs, trackJob, inFlightCount: inFlightIds.length }}>
       {children}
-      <Snackbar
-        open={notice !== null}
-        autoHideDuration={8000}
-        onClose={() => setNotice(null)}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-      >
-        {notice ? (
-          <Alert
-            severity={notice.status === 'complete' ? 'success' : 'error'}
-            onClose={() => setNotice(null)}
-            action={
-              <Button
-                color="inherit"
-                size="small"
-                onClick={() => {
-                  setNotice(null)
-                  navigate('/jobs')
-                }}
-              >
-                View jobs
-              </Button>
-            }
-          >
-            {notice.status === 'complete'
-              ? `Your ${jobLabel} is ready to download.`
-              : `Your ${jobLabel} failed — check My Jobs for details.`}
-          </Alert>
-        ) : undefined}
-      </Snackbar>
     </JobsContext.Provider>
   )
 }
