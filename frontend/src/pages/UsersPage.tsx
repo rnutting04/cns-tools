@@ -23,6 +23,7 @@ import useMediaQuery from '@mui/material/useMediaQuery'
 import { useTheme } from '@mui/material/styles'
 import AddIcon from '@mui/icons-material/Add'
 import BlockIcon from '@mui/icons-material/Block'
+import DeleteForeverIcon from '@mui/icons-material/DeleteForever'
 import EditIcon from '@mui/icons-material/Edit'
 import EmailIcon from '@mui/icons-material/Email'
 import LockResetIcon from '@mui/icons-material/LockReset'
@@ -83,9 +84,10 @@ interface UserRowProps {
   onRoleChange: (u: User) => void
   onDeactivate: (u: User) => void
   onReset: (u: User) => void
+  onPermanentDelete: (u: User) => void
 }
 
-function UserRow({ user, isSuperAdmin, isSelf, isLast, onEdit, onRoleChange, onDeactivate, onReset }: UserRowProps) {
+function UserRow({ user, isSuperAdmin, isSelf, isLast, onEdit, onRoleChange, onDeactivate, onReset, onPermanentDelete }: UserRowProps) {
   return (
     <>
       <Box sx={{ p: 2 }}>
@@ -149,6 +151,18 @@ function UserRow({ user, isSuperAdmin, isSelf, isLast, onEdit, onRoleChange, onD
                     </span>
                   </Tooltip>
                 )}
+                <Tooltip title={isSelf ? 'You cannot delete your own account' : 'Delete permanently'}>
+                  <span>
+                    <IconButton
+                      size="small"
+                      color="error"
+                      disabled={isSelf}
+                      onClick={() => onPermanentDelete(user)}
+                    >
+                      <DeleteForeverIcon fontSize="small" />
+                    </IconButton>
+                  </span>
+                </Tooltip>
               </>
             )}
           </Box>
@@ -195,6 +209,9 @@ export default function UsersPage() {
 
   const [resetTarget, setResetTarget] = useState<User | null>(null)
   const [resetLoading, setResetLoading] = useState(false)
+
+  const [permanentDeleteTarget, setPermanentDeleteTarget] = useState<User | null>(null)
+  const [permanentDeleteLoading, setPermanentDeleteLoading] = useState(false)
 
   async function fetchUsers(silent = false) {
     if (!silent) setLoading(true)
@@ -328,6 +345,22 @@ export default function UsersPage() {
     }
   }
 
+  async function handlePermanentDelete() {
+    if (!permanentDeleteTarget) return
+    setPermanentDeleteLoading(true)
+    try {
+      await apiClient.delete(`/api/users/${permanentDeleteTarget.id}/permanent`)
+      setPermanentDeleteTarget(null)
+      fetchUsers(true)
+    } catch (err: unknown) {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      setError(detail ?? 'Failed to delete user.')
+      setPermanentDeleteTarget(null)
+    } finally {
+      setPermanentDeleteLoading(false)
+    }
+  }
+
   const columns: GridColDef<User>[] = [
     {
       field: 'name',
@@ -361,7 +394,7 @@ export default function UsersPage() {
     {
       field: 'actions',
       headerName: 'Actions',
-      width: 140,
+      width: 160,
       sortable: false,
       renderCell: (params: GridRenderCellParams<User>) => (
         <Box display="flex" gap={0.5}>
@@ -402,6 +435,24 @@ export default function UsersPage() {
                   </span>
                 </Tooltip>
               )}
+              <Tooltip
+                title={
+                  params.row.id === currentUser?.id
+                    ? 'You cannot delete your own account'
+                    : 'Delete permanently'
+                }
+              >
+                <span>
+                  <IconButton
+                    size="small"
+                    color="error"
+                    disabled={params.row.id === currentUser?.id}
+                    onClick={() => setPermanentDeleteTarget(params.row)}
+                  >
+                    <DeleteForeverIcon fontSize="small" />
+                  </IconButton>
+                </span>
+              </Tooltip>
             </>
           )}
         </Box>
@@ -461,6 +512,7 @@ export default function UsersPage() {
                 onRoleChange={openRoleChange}
                 onDeactivate={setDeactivateTarget}
                 onReset={setResetTarget}
+                onPermanentDelete={setPermanentDeleteTarget}
               />
             ))}
           </Paper>
@@ -690,6 +742,17 @@ export default function UsersPage() {
         loading={deactivateLoading}
         onConfirm={handleDeactivate}
         onCancel={() => setDeactivateTarget(null)}
+      />
+
+      {/* Permanent delete confirm */}
+      <ConfirmDialog
+        open={!!permanentDeleteTarget}
+        title="Permanently delete user"
+        description={`Permanently delete ${permanentDeleteTarget?.fname} ${permanentDeleteTarget?.lname} (${permanentDeleteTarget?.email})? This cannot be undone. If this user has submitted jobs they cannot be deleted — deactivate them instead.`}
+        confirmLabel={permanentDeleteLoading ? 'Deleting…' : 'Delete permanently'}
+        loading={permanentDeleteLoading}
+        onConfirm={handlePermanentDelete}
+        onCancel={() => setPermanentDeleteTarget(null)}
       />
     </Box>
   )

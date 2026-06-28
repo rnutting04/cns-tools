@@ -3,6 +3,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
@@ -195,6 +196,36 @@ def change_password(
     db.commit()
 
     password_changed_email(current_user.email, current_user.fname)
+
+
+@router.delete("/{user_id}/permanent", status_code=204)
+def permanently_delete_user(
+    user_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_super_admin),
+):
+    if user_id == current_user.id:
+        raise HTTPException(status_code=403, detail="You cannot delete your own account")
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    log_event(
+        db,
+        actor=current_user,
+        action="user.permanently_deleted",
+        target_type="user",
+        target_id=str(user.id),
+        metadata={"email": user.email, "role": user.role.value},
+    )
+    try:
+        db.delete(user)
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="User has associated jobs or data and cannot be deleted. Deactivate them instead.",
+        )
 
 
 @router.post("/{user_id}/reset-password", status_code=204)
