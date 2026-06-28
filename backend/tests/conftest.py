@@ -31,7 +31,9 @@ from sqlalchemy.orm import Session, sessionmaker
 # before create_all runs, regardless of which subset of tests is collected.
 import app.models.association  # noqa: F401,E402
 import app.models.audit_event  # noqa: F401,E402
+import app.models.budget_job  # noqa: F401,E402
 import app.models.letter_job  # noqa: F401,E402
+import app.models.refresh_token  # noqa: F401,E402
 import app.models.template  # noqa: F401,E402
 import app.models.user  # noqa: F401,E402
 from app.config import settings

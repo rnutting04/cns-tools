@@ -145,9 +145,7 @@ export default function BudgetDetailDialog({ jobId, onClose, onRetried }: Props)
                     {
                       label: 'Review flags',
                       value:
-                        detail.review_flag_count === 0
-                          ? 'None'
-                          : String(detail.review_flag_count),
+                        detail.review_flag_count === 0 ? 'None' : String(detail.review_flag_count),
                     },
                   ]}
                 />

@@ -52,8 +52,7 @@ apiClient.interceptors.response.use(
     const url: string = error.config?.url ?? ''
     const alreadyRetried: boolean = error.config?._retry ?? false
 
-    const isAuthEndpoint =
-      url.includes('/api/auth/login') || url.includes('/api/auth/refresh')
+    const isAuthEndpoint = url.includes('/api/auth/login') || url.includes('/api/auth/refresh')
 
     if (status === 401 && !isAuthEndpoint && !alreadyRetried) {
       error.config._retry = true

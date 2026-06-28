@@ -45,7 +45,7 @@ ci-backend:
 	cd backend && venv/bin/ruff check . && venv/bin/ruff format --check . && venv/bin/python -m pytest
 
 ci-frontend:
-	cd frontend && npm run build && npm run typecheck && npm run test:coverage && npm run lint && npx prettier --check "src/**/*.{ts,tsx}"
+	bash -ic 'cd frontend && npm run build && npm run typecheck && npm run test:coverage && npm run lint && npx prettier --check "src/**/*.{ts,tsx}"'
 
 ci: ci-backend ci-frontend
 

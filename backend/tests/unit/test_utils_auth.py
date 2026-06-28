@@ -6,7 +6,9 @@ from freezegun import freeze_time
 
 from app.config import settings
 from app.utils.auth import (
-    create_token,
+    create_access_token as create_token,
+)
+from app.utils.auth import (
     decode_token,
     hash_password,
     verify_password,

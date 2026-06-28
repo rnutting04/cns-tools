@@ -46,11 +46,7 @@ export default function AiToolsPage() {
 
       <Box display="flex" flexWrap="wrap" gap={3}>
         {AI_TOOLS.map((tool) => (
-          <Card
-            key={tool.to}
-            variant="outlined"
-            sx={{ width: { xs: '100%', sm: 280 } }}
-          >
+          <Card key={tool.to} variant="outlined" sx={{ width: { xs: '100%', sm: 280 } }}>
             <CardActionArea onClick={() => navigate(tool.to)} sx={{ height: '100%' }}>
               <CardContent>
                 <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={1.5}>

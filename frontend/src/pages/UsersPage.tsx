@@ -87,7 +87,17 @@ interface UserRowProps {
   onPermanentDelete: (u: User) => void
 }
 
-function UserRow({ user, isSuperAdmin, isSelf, isLast, onEdit, onRoleChange, onDeactivate, onReset, onPermanentDelete }: UserRowProps) {
+function UserRow({
+  user,
+  isSuperAdmin,
+  isSelf,
+  isLast,
+  onEdit,
+  onRoleChange,
+  onDeactivate,
+  onReset,
+  onPermanentDelete,
+}: UserRowProps) {
   return (
     <>
       <Box sx={{ p: 2 }}>
@@ -151,7 +161,9 @@ function UserRow({ user, isSuperAdmin, isSelf, isLast, onEdit, onRoleChange, onD
                     </span>
                   </Tooltip>
                 ) : (
-                  <Tooltip title={isSelf ? 'You cannot delete your own account' : 'Delete permanently'}>
+                  <Tooltip
+                    title={isSelf ? 'You cannot delete your own account' : 'Delete permanently'}
+                  >
                     <span>
                       <IconButton
                         size="small"

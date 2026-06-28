@@ -37,12 +37,7 @@ const TYPE_COLOR: Record<JobType, 'primary' | 'secondary'> = {
 
 function TypeChip({ jobType }: { jobType: JobType }) {
   return (
-    <Chip
-      label={TYPE_LABEL[jobType]}
-      size="small"
-      color={TYPE_COLOR[jobType]}
-      variant="outlined"
-    />
+    <Chip label={TYPE_LABEL[jobType]} size="small" color={TYPE_COLOR[jobType]} variant="outlined" />
   )
 }
 
@@ -76,7 +71,14 @@ interface MobileRowProps {
   onBudgetDetails: (id: string) => void
 }
 
-function MobileRow({ job, isLast, downloadingId, onDownload, onDetails, onBudgetDetails }: MobileRowProps) {
+function MobileRow({
+  job,
+  isLast,
+  downloadingId,
+  onDownload,
+  onDetails,
+  onBudgetDetails,
+}: MobileRowProps) {
   return (
     <>
       <Box sx={{ p: 2 }}>
@@ -102,7 +104,9 @@ function MobileRow({ job, isLast, downloadingId, onDownload, onDetails, onBudget
             <Tooltip title="View details">
               <IconButton
                 size="small"
-                onClick={() => job.job_type === 'letter' ? onDetails(job.id) : onBudgetDetails(job.id)}
+                onClick={() =>
+                  job.job_type === 'letter' ? onDetails(job.id) : onBudgetDetails(job.id)
+                }
               >
                 <InfoOutlinedIcon fontSize="small" />
               </IconButton>
