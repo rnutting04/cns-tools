@@ -31,8 +31,6 @@ class ChangePasswordRequest(BaseModel):
     new_password: str
 
 
-
-
 def _serialize_user_with_associations(user: User) -> dict:
     data = UserResponse.model_validate(user).model_dump()
     data["associations"] = [
@@ -65,6 +63,7 @@ def create_user(
     if db.query(User).filter(User.email == body.email).first():
         raise HTTPException(status_code=409, detail="Email already in use")
     import secrets
+
     temp_password = secrets.token_urlsafe(12)
     user = User(
         fname=body.fname,
@@ -210,7 +209,9 @@ def permanently_delete_user(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     if user.is_active:
-        raise HTTPException(status_code=400, detail="User must be deactivated before being permanently deleted.")
+        raise HTTPException(
+            status_code=400, detail="User must be deactivated before being permanently deleted."
+        )
     log_event(
         db,
         actor=current_user,
@@ -222,12 +223,12 @@ def permanently_delete_user(
     try:
         db.delete(user)
         db.commit()
-    except IntegrityError:
+    except IntegrityError as err:
         db.rollback()
         raise HTTPException(
             status_code=409,
             detail="User has associated jobs or data and cannot be deleted. Deactivate them instead.",
-        )
+        ) from err
 
 
 @router.post("/{user_id}/reset-password", status_code=204)

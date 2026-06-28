@@ -7,6 +7,7 @@ class BudgetPipelineError(Exception):
 
 class MissingInputFile(BudgetPipelineError):
     """A required input file was not provided."""
+
     pass
 
 
@@ -28,6 +29,7 @@ class ValidationFailed(BudgetPipelineError):
 
 class IngestFailed(BudgetPipelineError):
     """AI extraction from the input files failed or returned incomplete data."""
+
     pass
 
 
@@ -41,4 +43,5 @@ class CrossCheckFailed(BudgetPipelineError):
 
 class RenderFailed(BudgetPipelineError):
     """XLSX generation failed or produced formula errors."""
+
     pass

@@ -62,18 +62,22 @@ def login(body: LoginRequest, request: Request, response: Response, db: Session 
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     if not user.is_active:
-        log_event(db, actor=user, action="auth.login_blocked", metadata={"reason": "account_inactive"})
+        log_event(
+            db, actor=user, action="auth.login_blocked", metadata={"reason": "account_inactive"}
+        )
         db.commit()
         raise HTTPException(status_code=403, detail="Account is inactive")
 
     raw_rt, rt_hash = generate_refresh_token()
-    db.add(RefreshToken(
-        user_id=user.id,
-        token_hash=rt_hash,
-        expires_at=datetime.utcnow() + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS),
-        user_agent=request.headers.get("user-agent"),
-        ip_address=request.client.host if request.client else None,
-    ))
+    db.add(
+        RefreshToken(
+            user_id=user.id,
+            token_hash=rt_hash,
+            expires_at=datetime.utcnow() + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS),
+            user_agent=request.headers.get("user-agent"),
+            ip_address=request.client.host if request.client else None,
+        )
+    )
 
     access_token = create_access_token(str(user.id), user.email, user.role.value)
     log_event(db, actor=user, action="auth.login")
@@ -92,9 +96,9 @@ def refresh(
     if not refresh_token:
         raise HTTPException(status_code=401, detail="No refresh token")
 
-    record = db.query(RefreshToken).filter(
-        RefreshToken.token_hash == hash_token(refresh_token)
-    ).first()
+    record = (
+        db.query(RefreshToken).filter(RefreshToken.token_hash == hash_token(refresh_token)).first()
+    )
 
     if not record:
         _clear_refresh_cookie(response)
@@ -153,9 +157,11 @@ def logout(
     refresh_token: str | None = Cookie(default=None),
 ):
     if refresh_token:
-        record = db.query(RefreshToken).filter(
-            RefreshToken.token_hash == hash_token(refresh_token)
-        ).first()
+        record = (
+            db.query(RefreshToken)
+            .filter(RefreshToken.token_hash == hash_token(refresh_token))
+            .first()
+        )
         if record and record.revoked_at is None:
             record.revoked_at = datetime.utcnow()
             db.commit()

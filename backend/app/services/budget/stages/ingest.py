@@ -23,8 +23,8 @@ from app.services.budget.exceptions import IngestFailed
 from app.services.budget.schema import (
     AIExtractionResult,
     BudgetSection,
-    IngestResult,
     IngestedLine,
+    IngestResult,
 )
 
 _PROMPT_PATH = Path(__file__).parent.parent / "prompts" / "ingest.txt"
@@ -80,7 +80,7 @@ def _detect_label_col(ws) -> int:
             1
             for row in range(2, min(ws.max_row + 1, 42))
             if (v := ws.cell(row=row, column=col).value) is not None
-            and not isinstance(v, (int, float))
+            and not isinstance(v, int | float)
             and re.search(r"[a-zA-Z]", str(v))
         )
         if letter_count >= 3:
@@ -105,8 +105,9 @@ def _parse_excel_budget(xlsx_bytes: bytes, budget_year: int) -> list[dict]:
 
     Section is inferred from section-header rows.
     """
-    import openpyxl
     import re as _re
+
+    import openpyxl
 
     wb = openpyxl.load_workbook(io.BytesIO(xlsx_bytes), data_only=True)
     ws = _find_budget_sheet(wb)
@@ -125,7 +126,7 @@ def _parse_excel_budget(xlsx_bytes: bytes, budget_year: int) -> list[dict]:
     # Title cells like "Morton Village ADOPTED Operating Budget" are excluded
     # by requiring either a 4-digit year OR a short phrase (<=3 words).
     prior_year_int = budget_year - 1
-    budget_cols: list[tuple[int, int | None]] = []   # (col_idx, parsed_year | None)
+    budget_cols: list[tuple[int, int | None]] = []  # (col_idx, parsed_year | None)
 
     for check_row in range(1, min(ws.max_row + 1, 6)):
         found_any = False
@@ -136,7 +137,7 @@ def _parse_excel_budget(xlsx_bytes: bytes, budget_year: int) -> list[dict]:
             s = str(raw).strip()
             if "budget" not in s.lower():
                 continue
-            m = _re.search(r'\b(20\d{2})\b', s)
+            m = _re.search(r"\b(20\d{2})\b", s)
             if m:  # primary: year-stamped columns only; excludes titles and section headers
                 budget_cols.append((col, int(m.group(1))))
                 found_any = True
@@ -159,8 +160,9 @@ def _parse_excel_budget(xlsx_bytes: bytes, budget_year: int) -> list[dict]:
 
     def _val_count(col: int) -> int:
         return sum(
-            1 for r in range(2, min(ws.max_row + 1, 62))
-            if isinstance(ws.cell(row=r, column=col).value, (int, float))
+            1
+            for r in range(2, min(ws.max_row + 1, 62))
+            if isinstance(ws.cell(row=r, column=col).value, int | float)
         )
 
     prior_year_col: int | None = None
@@ -172,7 +174,7 @@ def _parse_excel_budget(xlsx_bytes: bytes, budget_year: int) -> list[dict]:
         if prior_matches:
             candidate = prior_matches[0]
             if _val_count(candidate) >= 3:
-                prior_year_col = candidate   # populated → done
+                prior_year_col = candidate  # populated → done
             else:
                 # Year match exists but column is blank — the data must be in
                 # another column (e.g. the association filled the wrong slot).
@@ -186,8 +188,10 @@ def _parse_excel_budget(xlsx_bytes: bytes, budget_year: int) -> list[dict]:
             non_proposed = [c for c, _ in budget_cols if c != rightmost]
             if non_proposed:
                 best_np = max(non_proposed, key=_val_count)
-                prior_year_col = best_np if _val_count(best_np) > 0 else max(
-                    (c for c, _ in budget_cols), key=_val_count
+                prior_year_col = (
+                    best_np
+                    if _val_count(best_np) > 0
+                    else max((c for c, _ in budget_cols), key=_val_count)
                 )
             else:
                 prior_year_col = rightmost
@@ -217,15 +221,13 @@ def _parse_excel_budget(xlsx_bytes: bytes, budget_year: int) -> list[dict]:
 
         # Subtotal / total rows: skip, but use income-total to mark the transition.
         if label_upper.startswith("TOTAL") or label_upper.startswith("[SUBTOTAL]"):
-            if not past_income_total and (
-                "INCOME" in label_upper or "REVENUE" in label_upper
-            ):
+            if not past_income_total and ("INCOME" in label_upper or "REVENUE" in label_upper):
                 past_income_total = True
             continue
 
         # Collect numeric values from data columns.
         raw_data = [ws.cell(row=row, column=c).value for c in data_cols]
-        numeric_vals = [v for v in raw_data if isinstance(v, (int, float))]
+        numeric_vals = [v for v in raw_data if isinstance(v, int | float)]
 
         # A row is a section header when it has no numeric values, OR when all
         # numeric values are zero and the label matches a known section keyword.
@@ -250,7 +252,7 @@ def _parse_excel_budget(xlsx_bytes: bytes, budget_year: int) -> list[dict]:
 
         # Line-item row: pull prior_year from the identified column.
         raw_val = ws.cell(row=row, column=prior_year_col).value
-        prior_year = float(raw_val) if isinstance(raw_val, (int, float)) else None
+        prior_year = float(raw_val) if isinstance(raw_val, int | float) else None
 
         lines.append({"label": label, "section": current_section, "prior_year": prior_year})
 
@@ -343,9 +345,7 @@ def run(
     try:
         from anthropic import Anthropic
     except ImportError as e:
-        raise IngestFailed(
-            "anthropic is not installed — run: pip install anthropic"
-        ) from e
+        raise IngestFailed("anthropic is not installed — run: pip install anthropic") from e
 
     client = Anthropic(api_key=settings.ANTHROPIC_API_KEY)
     system_prompt = _PROMPT_PATH.read_text()
@@ -422,9 +422,8 @@ def run(
     merged: list[IngestedLine] = []
 
     for xl in excel_lines:
-        ai_line = (
-            ai_by_label_exact.get(xl["label"])
-            or ai_by_label_lower.get(xl["label"].strip().lower())
+        ai_line = ai_by_label_exact.get(xl["label"]) or ai_by_label_lower.get(
+            xl["label"].strip().lower()
         )
         merged.append(
             IngestedLine(
@@ -441,7 +440,10 @@ def run(
     # Skip if the AI label is a case-variant of an existing Excel label — that means
     # the AI slightly mis-cased a provided label rather than returning a genuinely new line.
     for ai_line in ai_result.lines:
-        if ai_line.label not in excel_label_set and ai_line.label.strip().lower() not in excel_label_set_lower:
+        if (
+            ai_line.label not in excel_label_set
+            and ai_line.label.strip().lower() not in excel_label_set_lower
+        ):
             merged.append(
                 IngestedLine(
                     label=ai_line.label,

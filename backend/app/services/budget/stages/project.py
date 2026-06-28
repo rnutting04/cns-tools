@@ -12,10 +12,17 @@ _ALWAYS_FLAG_SECTIONS = {BudgetSection.RESERVES}
 
 # Label keywords indicating lump-sum or one-time payments.
 _FLAG_LABEL_KEYWORDS = [
-    "insurance", "premium", "bond", "warranty",
-    "legal", "attorney",
-    "special assessment", "special assess",
-    "tax", "permit", "license",
+    "insurance",
+    "premium",
+    "bond",
+    "warranty",
+    "legal",
+    "attorney",
+    "special assessment",
+    "special assess",
+    "tax",
+    "permit",
+    "license",
 ]
 
 # Projected deviates by more than this factor from prior year → flag for review.
@@ -23,7 +30,9 @@ _OUTLIER_HIGH = 2.0
 _OUTLIER_LOW = 0.30
 
 
-def _should_flag(label: str, section: BudgetSection, projected: float | None, prior_year: float | None) -> bool:
+def _should_flag(
+    label: str, section: BudgetSection, projected: float | None, prior_year: float | None
+) -> bool:
     if section in _ALWAYS_FLAG_SECTIONS:
         return True
 

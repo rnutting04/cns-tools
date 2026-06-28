@@ -71,11 +71,14 @@ def run(ingest: IngestResult) -> None:
 
         if diff > warn_limit:
             # > 1% off — likely missed an entire revenue section. Hard failure.
-            lines_detail = "; ".join(
-                f"{l.label}: ${l.ytd_actual:,.2f}"
-                for l in ingest.lines
-                if l.section.value in _REVENUE_SECTIONS and l.ytd_actual is not None
-            ) or "none"
+            lines_detail = (
+                "; ".join(
+                    f"{ln.label}: ${ln.ytd_actual:,.2f}"
+                    for ln in ingest.lines
+                    if ln.section.value in _REVENUE_SECTIONS and ln.ytd_actual is not None
+                )
+                or "none"
+            )
             mismatches.append(
                 f"REVENUE (OPERATING + RESERVES combined): extracted lines sum to "
                 f"${combined_extracted:,.2f} but PDF shows ${combined_pdf:,.2f} "
@@ -117,17 +120,18 @@ def run(ingest: IngestResult) -> None:
             continue
 
         extracted_sum = sum(
-            line.ytd_actual or 0.0
-            for line in ingest.lines
-            if line.section.value == section_key
+            line.ytd_actual or 0.0 for line in ingest.lines if line.section.value == section_key
         )
 
         if abs(extracted_sum - pdf_total) > _tolerance(pdf_total):
-            lines_detail = "; ".join(
-                f"{l.label}: ${l.ytd_actual:,.2f}"
-                for l in ingest.lines
-                if l.section.value == section_key and l.ytd_actual is not None
-            ) or "none"
+            lines_detail = (
+                "; ".join(
+                    f"{ln.label}: ${ln.ytd_actual:,.2f}"
+                    for ln in ingest.lines
+                    if ln.section.value == section_key and ln.ytd_actual is not None
+                )
+                or "none"
+            )
             mismatches.append(
                 f"{section_key}: extracted lines sum to ${extracted_sum:,.2f} "
                 f"but PDF shows ${pdf_total:,.2f} "

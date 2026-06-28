@@ -1,6 +1,6 @@
 # app/models/budget_job.py
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import JSON, Column, DateTime, ForeignKey, Integer, String
 from sqlalchemy import Enum as SAEnum
@@ -43,6 +43,6 @@ class BudgetJob(Base):
     )
 
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
 
     creator = relationship("User")

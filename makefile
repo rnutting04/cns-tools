@@ -1,4 +1,4 @@
-.PHONY: dev worker seed migrate reset stop logs ps install test test-backend test-frontend help
+.PHONY: dev worker seed migrate reset stop logs ps install test test-backend test-frontend ci ci-backend ci-frontend help
 
 dev:
 	docker compose up -d
@@ -40,6 +40,15 @@ test-frontend:
 
 test: test-backend test-frontend
 
+# CI checks — mirrors what GitHub Actions runs. Needs docker services up for ci-backend.
+ci-backend:
+	cd backend && venv/bin/ruff check . && venv/bin/ruff format --check . && venv/bin/python -m pytest
+
+ci-frontend:
+	cd frontend && npm run build && npm run typecheck && npm run test:coverage && npm run lint && npx prettier --check "src/**/*.{ts,tsx}"
+
+ci: ci-backend ci-frontend
+
 help:
 	@echo "Available commands:"
 	@echo "  make dev           - start docker + uvicorn"
@@ -54,3 +63,6 @@ help:
 	@echo "  make test          - run backend + frontend test suites"
 	@echo "  make test-backend  - run backend pytest (needs docker services up)"
 	@echo "  make test-frontend - run frontend vitest"
+	@echo "  make ci            - run full CI checks (lint + format + tests)"
+	@echo "  make ci-backend    - backend lint, format, and pytest (needs docker services up)"
+	@echo "  make ci-frontend   - frontend build, typecheck, tests, lint, prettier"

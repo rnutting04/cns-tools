@@ -69,7 +69,7 @@ def _detect_label_col(ws) -> int:
             1
             for row in range(2, min(ws.max_row + 1, 42))
             if (v := ws.cell(row=row, column=col).value) is not None
-            and not isinstance(v, (int, float))
+            and not isinstance(v, int | float)
             and re.search(r"[a-zA-Z]", str(v))
         )
         if letter_count >= 3:
@@ -97,7 +97,7 @@ def _detect_column_positions(ws, budget_year: int) -> tuple[int, int | None, int
     Falls back to columns B / D when headers are unrecognisable.
     """
     header_row = 1
-    budget_cols: list[tuple[int, int | None]] = []   # (col_idx, parsed_year | None)
+    budget_cols: list[tuple[int, int | None]] = []  # (col_idx, parsed_year | None)
     projected_col: int | None = None
     notes_col: int | None = None
 
@@ -109,7 +109,7 @@ def _detect_column_positions(ws, budget_year: int) -> tuple[int, int | None, int
                 continue
             h = str(raw).strip()
             hl = h.lower()
-            m_year = re.search(r'\b(20\d{2})\b', h)
+            m_year = re.search(r"\b(20\d{2})\b", h)
 
             if "projected" in hl and (m_year or len(h.split()) <= 4):
                 projected_col = col
@@ -210,7 +210,7 @@ def _find_row(
             continue
         if all(
             any(
-                sw[:max(4, min(len(sw), len(xw)))] == xw[:max(4, min(len(sw), len(xw)))]
+                sw[: max(4, min(len(sw), len(xw)))] == xw[: max(4, min(len(sw), len(xw)))]
                 for xw in xlsx_words
             )
             for sw in sig_words
@@ -231,7 +231,7 @@ def _find_row(
             continue
         if all(
             any(
-                xs[:max(4, min(len(xs), len(sw)))] == sw[:max(4, min(len(xs), len(sw)))]
+                xs[: max(4, min(len(xs), len(sw)))] == sw[: max(4, min(len(xs), len(sw)))]
                 for sw in sig_words
             )
             for xs in xlsx_sig
@@ -272,7 +272,9 @@ def run(budget: BudgetOutput, review_flags: list[str], prev_year_xlsx_bytes: byt
         wb_data = openpyxl.load_workbook(io.BytesIO(prev_year_xlsx_bytes), data_only=True)
         ws_data = _find_budget_sheet(wb_data)
 
-        prior_col, projected_col, proposed_col, notes_col, header_row = _detect_column_positions(ws, budget.budget_year)
+        prior_col, projected_col, proposed_col, notes_col, header_row = _detect_column_positions(
+            ws, budget.budget_year
+        )
 
         # Shift column headers to the new budget year
         prior_year_int = budget.budget_year - 1
@@ -288,10 +290,19 @@ def run(budget: BudgetOutput, review_flags: list[str], prev_year_xlsx_bytes: byt
         # must be handled separately from the main budget line-item loop.
         # Rows containing "assessment" are explicitly excluded so sub-headers
         # like "Quarterly Assessment" don't terminate preamble detection early.
-        _SECTION_KW = frozenset({
-            "income", "revenue", "operating", "administration",
-            "maintenance", "expense", "expenses", "utility", "utilities",
-        })
+        _SECTION_KW = frozenset(
+            {
+                "income",
+                "revenue",
+                "operating",
+                "administration",
+                "maintenance",
+                "expense",
+                "expenses",
+                "utility",
+                "utilities",
+            }
+        )
         preamble_end = data_start  # default: no preamble
         for _pr in range(data_start, ws.max_row + 1):
             _pv = ws.cell(row=_pr, column=label_col).value
@@ -305,7 +316,7 @@ def run(budget: BudgetOutput, review_flags: list[str], prev_year_xlsx_bytes: byt
                 # columns (which contain integers like 6010) would otherwise
                 # cause every row to be classified as "has numeric values".
                 _has_nums = any(
-                    isinstance(ws_data.cell(row=_pr, column=c).value, (int, float))
+                    isinstance(ws_data.cell(row=_pr, column=c).value, int | float)
                     for c in [prior_col, projected_col, proposed_col]
                     if c is not None
                 )
@@ -434,7 +445,7 @@ def run(budget: BudgetOutput, review_flags: list[str], prev_year_xlsx_bytes: byt
         if preamble_end > data_start:
             for _pr in range(data_start, preamble_end):
                 _pval = ws_data.cell(row=_pr, column=proposed_col).value
-                if not isinstance(_pval, (int, float)):
+                if not isinstance(_pval, int | float):
                     continue
                 ws.cell(row=_pr, column=prior_col).value = _pval
                 if projected_col is not None:
@@ -456,7 +467,7 @@ def run(budget: BudgetOutput, review_flags: list[str], prev_year_xlsx_bytes: byt
         # --- tracking state ---
         claimed: set[int] = set()
         section_item_rows: dict[str, list[int]] = defaultdict(list)
-        subtotal_excel_row: dict[str, int] = {}   # section_key → excel row of its subtotal
+        subtotal_excel_row: dict[str, int] = {}  # section_key → excel row of its subtotal
 
         for line in budget.lines:
             row = _find_row(label_to_rows, claimed, line.label, line.is_computed)

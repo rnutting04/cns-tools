@@ -13,15 +13,15 @@ _TOLERANCE = 0.01  # float rounding tolerance for arithmetic checks
 
 
 def _lines_by_code(budget: BudgetOutput) -> dict:
-    return {l.code: l for l in budget.lines}
+    return {ln.code: ln for ln in budget.lines}
 
 
 def _member_lines(budget: BudgetOutput, section: BudgetSection) -> list:
-    return [l for l in budget.lines if l.section == section and not l.is_computed]
+    return [ln for ln in budget.lines if ln.section == section and not ln.is_computed]
 
 
 def _sum_members(budget: BudgetOutput, section: BudgetSection, col: str) -> float:
-    return sum(getattr(l, col) or 0.0 for l in _member_lines(budget, section))
+    return sum(getattr(ln, col) or 0.0 for ln in _member_lines(budget, section))
 
 
 def run(budget: BudgetOutput) -> list[str]:

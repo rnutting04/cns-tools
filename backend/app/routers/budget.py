@@ -2,18 +2,21 @@
 import uuid
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.budget_job import BudgetJob
 from app.models.letter_job import JobStatus
 from app.models.user import User
-from app.schemas.budget import BudgetJobAcceptedResponse, BudgetJobDetailResponse, BudgetJobStatusResponse
+from app.schemas.budget import (
+    BudgetJobAcceptedResponse,
+    BudgetJobDetailResponse,
+    BudgetJobStatusResponse,
+)
 from app.services.audit import log_event
 from app.services.budget.tasks import generate_budget_task
 from app.services.storage import storage_service
-
-from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/budget", tags=["budget"])
 
@@ -113,6 +116,7 @@ def get_budget_job_details(
     current_user: User = Depends(get_current_user),
 ) -> BudgetJobDetailResponse:
     from sqlalchemy.orm import joinedload
+
     job = (
         db.query(BudgetJob)
         .options(joinedload(BudgetJob.creator))

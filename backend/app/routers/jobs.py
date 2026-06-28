@@ -93,15 +93,17 @@ def get_jobs_status(
         download_url = None
         if letter.status == JobStatus.complete and letter.output_path:
             download_url = storage_service.generate_presigned_url(letter.output_path, expires=3600)
-        results.append(JobDetail(
-            id=letter.id,
-            job_type="letter",
-            title=letter.template.name if letter.template else "Letter",
-            association_name=letter.association.legal_name if letter.association else "",
-            status=letter.status.value,
-            created_at=letter.created_at,
-            download_url=download_url,
-        ))
+        results.append(
+            JobDetail(
+                id=letter.id,
+                job_type="letter",
+                title=letter.template.name if letter.template else "Letter",
+                association_name=letter.association.legal_name if letter.association else "",
+                status=letter.status.value,
+                created_at=letter.created_at,
+                download_url=download_url,
+            )
+        )
 
     for budget in budgets:
         if not is_super_admin and budget.created_by != current_user.id:
@@ -109,16 +111,18 @@ def get_jobs_status(
         download_url = None
         if budget.status == JobStatus.complete and budget.output_path:
             download_url = storage_service.generate_presigned_url(budget.output_path, expires=3600)
-        results.append(JobDetail(
-            id=budget.id,
-            job_type="budget",
-            title=f"{budget.association_name} {budget.budget_year}",
-            association_name=budget.association_name,
-            status=budget.status.value,
-            created_at=budget.created_at,
-            current_step=budget.current_step,
-            download_url=download_url,
-        ))
+        results.append(
+            JobDetail(
+                id=budget.id,
+                job_type="budget",
+                title=f"{budget.association_name} {budget.budget_year}",
+                association_name=budget.association_name,
+                status=budget.status.value,
+                created_at=budget.created_at,
+                current_step=budget.current_step,
+                download_url=download_url,
+            )
+        )
 
     return results
 

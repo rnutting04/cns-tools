@@ -49,7 +49,7 @@ def _make_code(label: str) -> str:
 
 
 def _subtotal(lines: list[BudgetLine], col: str) -> float | None:
-    vals = [getattr(l, col) for l in lines if not l.is_computed]
+    vals = [getattr(ln, col) for ln in lines if not ln.is_computed]
     if not vals or all(v is None for v in vals):
         return None
     return sum(v or 0.0 for v in vals)
@@ -169,7 +169,7 @@ def run(
 
     # Reserve schedule — decrement remaining_life_years by one.
     reserve_items: list[ReserveItem] = []
-    for entry in (prior_reserve_schedule or []):
+    for entry in prior_reserve_schedule or []:
         reserve_items.append(
             ReserveItem(
                 code=_make_code(entry["label"]),

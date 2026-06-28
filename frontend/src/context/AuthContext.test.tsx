@@ -6,10 +6,12 @@ import type { User } from '../types'
 
 vi.mock('../api/client', () => ({
   default: { get: vi.fn(), post: vi.fn() },
+  setAccessToken: vi.fn(),
 }))
 
-import apiClient from '../api/client'
+import apiClient, { setAccessToken } from '../api/client'
 const mockClient = apiClient as unknown as { get: Mock; post: Mock }
+const mockSetAccessToken = setAccessToken as Mock
 
 function makeUser(): User {
   return {
@@ -27,7 +29,11 @@ function makeUser(): User {
 }
 
 beforeEach(() => {
-  localStorage.clear()
+  mockClient.post.mockReset()
+  mockClient.get.mockReset()
+  mockSetAccessToken.mockReset()
+  // Default: refresh-on-mount rejects (no session cookie)
+  mockClient.post.mockRejectedValue(new Error('401'))
 })
 
 describe('AuthProvider', () => {
@@ -38,7 +44,9 @@ describe('AuthProvider', () => {
   })
 
   it('login stores the token and sets the user', async () => {
-    mockClient.post.mockResolvedValue({ data: { access_token: 'tok-123', token_type: 'bearer' } })
+    mockClient.post
+      .mockRejectedValueOnce(new Error('401')) // initial refresh on mount
+      .mockResolvedValueOnce({ data: { access_token: 'tok-123', token_type: 'bearer' } }) // login
     mockClient.get.mockResolvedValue({ data: makeUser() })
 
     const { result } = renderHook(() => useAuth(), { wrapper: AuthProvider })
@@ -52,12 +60,14 @@ describe('AuthProvider', () => {
       email: 'test@example.com',
       password: 'password123',
     })
-    expect(localStorage.getItem('token')).toBe('tok-123')
+    expect(mockSetAccessToken).toHaveBeenCalledWith('tok-123')
     expect(result.current.user?.email).toBe('test@example.com')
   })
 
   it('logout clears the token and the user', async () => {
-    mockClient.post.mockResolvedValue({ data: { access_token: 'tok-123', token_type: 'bearer' } })
+    mockClient.post
+      .mockRejectedValueOnce(new Error('401')) // initial refresh on mount
+      .mockResolvedValueOnce({ data: { access_token: 'tok-123', token_type: 'bearer' } }) // login
     mockClient.get.mockResolvedValue({ data: makeUser() })
 
     const { result } = renderHook(() => useAuth(), { wrapper: AuthProvider })
@@ -68,7 +78,7 @@ describe('AuthProvider', () => {
 
     act(() => result.current.logout())
 
-    expect(localStorage.getItem('token')).toBeNull()
+    expect(mockSetAccessToken).toHaveBeenCalledWith(null)
     expect(result.current.user).toBeNull()
   })
 })
