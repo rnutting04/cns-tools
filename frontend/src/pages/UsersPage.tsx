@@ -137,7 +137,7 @@ function UserRow({ user, isSuperAdmin, isSelf, isLast, onEdit, onRoleChange, onD
                     <ManageAccountsIcon fontSize="small" />
                   </IconButton>
                 </Tooltip>
-                {user.is_active && (
+                {user.is_active ? (
                   <Tooltip title={isSelf ? 'You cannot deactivate your own account' : 'Deactivate'}>
                     <span>
                       <IconButton
@@ -150,19 +150,20 @@ function UserRow({ user, isSuperAdmin, isSelf, isLast, onEdit, onRoleChange, onD
                       </IconButton>
                     </span>
                   </Tooltip>
+                ) : (
+                  <Tooltip title={isSelf ? 'You cannot delete your own account' : 'Delete permanently'}>
+                    <span>
+                      <IconButton
+                        size="small"
+                        color="error"
+                        disabled={isSelf}
+                        onClick={() => onPermanentDelete(user)}
+                      >
+                        <DeleteForeverIcon fontSize="small" />
+                      </IconButton>
+                    </span>
+                  </Tooltip>
                 )}
-                <Tooltip title={isSelf ? 'You cannot delete your own account' : 'Delete permanently'}>
-                  <span>
-                    <IconButton
-                      size="small"
-                      color="error"
-                      disabled={isSelf}
-                      onClick={() => onPermanentDelete(user)}
-                    >
-                      <DeleteForeverIcon fontSize="small" />
-                    </IconButton>
-                  </span>
-                </Tooltip>
               </>
             )}
           </Box>
@@ -415,7 +416,7 @@ export default function UsersPage() {
                   <ManageAccountsIcon fontSize="small" />
                 </IconButton>
               </Tooltip>
-              {params.row.is_active && (
+              {params.row.is_active ? (
                 <Tooltip
                   title={
                     params.row.id === currentUser?.id
@@ -434,25 +435,26 @@ export default function UsersPage() {
                     </IconButton>
                   </span>
                 </Tooltip>
+              ) : (
+                <Tooltip
+                  title={
+                    params.row.id === currentUser?.id
+                      ? 'You cannot delete your own account'
+                      : 'Delete permanently'
+                  }
+                >
+                  <span>
+                    <IconButton
+                      size="small"
+                      color="error"
+                      disabled={params.row.id === currentUser?.id}
+                      onClick={() => setPermanentDeleteTarget(params.row)}
+                    >
+                      <DeleteForeverIcon fontSize="small" />
+                    </IconButton>
+                  </span>
+                </Tooltip>
               )}
-              <Tooltip
-                title={
-                  params.row.id === currentUser?.id
-                    ? 'You cannot delete your own account'
-                    : 'Delete permanently'
-                }
-              >
-                <span>
-                  <IconButton
-                    size="small"
-                    color="error"
-                    disabled={params.row.id === currentUser?.id}
-                    onClick={() => setPermanentDeleteTarget(params.row)}
-                  >
-                    <DeleteForeverIcon fontSize="small" />
-                  </IconButton>
-                </span>
-              </Tooltip>
             </>
           )}
         </Box>

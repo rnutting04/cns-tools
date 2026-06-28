@@ -209,6 +209,8 @@ def permanently_delete_user(
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    if user.is_active:
+        raise HTTPException(status_code=400, detail="User must be deactivated before being permanently deleted.")
     log_event(
         db,
         actor=current_user,
