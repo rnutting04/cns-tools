@@ -19,6 +19,8 @@ from app.celery_app import celery_app
 from app.database import SessionLocal
 from app.models.budget_job import BudgetJob
 from app.models.letter_job import JobStatus
+from app.models.user import User
+from app.services.email.tasks import budget_complete_email
 from app.services.budget.exceptions import (
     BudgetPipelineError,
     CrossCheckFailed,
@@ -91,6 +93,10 @@ def generate_budget_task(self, job_id: str) -> dict[str, Any]:
         job.output_path = output_key
         job.review_flag_count = len(result.review_flags)
         db.commit()
+
+        creator = db.query(User).filter(User.id == job.created_by).first()
+        if creator:
+            budget_complete_email(creator.email, creator.fname, job.association_name, job.budget_year)
 
         return {"job_id": job_id, "status": "complete"}
 

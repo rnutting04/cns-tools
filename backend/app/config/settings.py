@@ -17,6 +17,11 @@ class Settings(BaseSettings):
 
     FRONTEND_URL: str = "http://localhost:5173"
 
+    # Email (Resend). Leave RESEND_API_KEY blank to suppress sending in dev.
+    RESEND_API_KEY: str = ""
+    EMAIL_FROM: str = "noreply@cns-tools.com"
+    EMAIL_TO: str  = ""
+
     # Set True in production (requires HTTPS). False allows http-only local dev.
     COOKIE_SECURE: bool = False
 

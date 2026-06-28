@@ -12,6 +12,7 @@ from app.models.user import User, UserRole
 from app.schemas.association import AssociationResponse
 from app.schemas.user import UserCreate, UserResponse, UserUpdate, UserWithAssociations
 from app.services.audit import log_event
+from app.services.email.tasks import password_changed_email, reset_password_email, welcome_email
 from app.utils.auth import hash_password, verify_password
 
 # Resolve forward reference: UserWithAssociations.associations -> AssociationResponse
@@ -27,6 +28,8 @@ class RoleUpdate(BaseModel):
 class ChangePasswordRequest(BaseModel):
     current_password: str
     new_password: str
+
+
 
 
 def _serialize_user_with_associations(user: User) -> dict:
@@ -80,6 +83,9 @@ def create_user(
     )
     db.commit()
     db.refresh(user)
+
+    welcome_email(user.email, user.fname, body.password)
+
     return user
 
 
@@ -185,3 +191,33 @@ def change_password(
         metadata={"was_required": was_required},
     )
     db.commit()
+
+    password_changed_email(current_user.email, current_user.fname)
+
+
+@router.post("/{user_id}/reset-password", status_code=204)
+def reset_user_password(
+    user_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    import secrets
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    temp_password = secrets.token_urlsafe(12)
+    user.password_hash = hash_password(temp_password)
+    user.password_change_required = True
+    log_event(
+        db,
+        actor=current_user,
+        action="user.password_reset",
+        target_type="user",
+        target_id=str(user_id),
+        metadata={"email": user.email},
+    )
+    db.commit()
+
+    reset_password_email(user.email, user.fname, temp_password)

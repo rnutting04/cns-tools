@@ -25,6 +25,7 @@ import AddIcon from '@mui/icons-material/Add'
 import BlockIcon from '@mui/icons-material/Block'
 import EditIcon from '@mui/icons-material/Edit'
 import EmailIcon from '@mui/icons-material/Email'
+import LockResetIcon from '@mui/icons-material/LockReset'
 import ManageAccountsIcon from '@mui/icons-material/ManageAccounts'
 import SearchIcon from '@mui/icons-material/Search'
 import WorkIcon from '@mui/icons-material/Work'
@@ -82,9 +83,10 @@ interface UserRowProps {
   onEdit: (u: User) => void
   onRoleChange: (u: User) => void
   onDeactivate: (u: User) => void
+  onReset: (u: User) => void
 }
 
-function UserRow({ user, isSuperAdmin, isSelf, isLast, onEdit, onRoleChange, onDeactivate }: UserRowProps) {
+function UserRow({ user, isSuperAdmin, isSelf, isLast, onEdit, onRoleChange, onDeactivate, onReset }: UserRowProps) {
   return (
     <>
       <Box sx={{ p: 2 }}>
@@ -120,6 +122,11 @@ function UserRow({ user, isSuperAdmin, isSelf, isLast, onEdit, onRoleChange, onD
             <Tooltip title="Edit">
               <IconButton size="small" onClick={() => onEdit(user)}>
                 <EditIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Reset password">
+              <IconButton size="small" onClick={() => onReset(user)}>
+                <LockResetIcon fontSize="small" />
               </IconButton>
             </Tooltip>
             {isSuperAdmin && (
@@ -184,6 +191,9 @@ export default function UsersPage() {
 
   const [deactivateTarget, setDeactivateTarget] = useState<User | null>(null)
   const [deactivateLoading, setDeactivateLoading] = useState(false)
+
+  const [resetTarget, setResetTarget] = useState<User | null>(null)
+  const [resetLoading, setResetLoading] = useState(false)
 
   const fetchUsers = useCallback(async () => {
     setLoading(true)
@@ -287,6 +297,20 @@ export default function UsersPage() {
     }
   }
 
+  async function handleReset() {
+    if (!resetTarget) return
+    setResetLoading(true)
+    try {
+      await apiClient.post(`/api/users/${resetTarget.id}/reset-password`)
+      setResetTarget(null)
+    } catch {
+      setError('Failed to reset password.')
+      setResetTarget(null)
+    } finally {
+      setResetLoading(false)
+    }
+  }
+
   async function handleDeactivate() {
     if (!deactivateTarget) return
     setDeactivateLoading(true)
@@ -341,6 +365,11 @@ export default function UsersPage() {
           <Tooltip title="Edit">
             <IconButton size="small" onClick={() => openEdit(params.row)}>
               <EditIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Reset password">
+            <IconButton size="small" onClick={() => setResetTarget(params.row)}>
+              <LockResetIcon fontSize="small" />
             </IconButton>
           </Tooltip>
           {isSuperAdmin && (
@@ -428,6 +457,7 @@ export default function UsersPage() {
                 onEdit={openEdit}
                 onRoleChange={openRoleChange}
                 onDeactivate={setDeactivateTarget}
+                onReset={setResetTarget}
               />
             ))}
           </Paper>
@@ -645,6 +675,17 @@ export default function UsersPage() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Reset password confirm */}
+      <ConfirmDialog
+        open={!!resetTarget}
+        title="Reset password"
+        description={`Generate a new temporary password for ${resetTarget?.fname} ${resetTarget?.lname} and send it to ${resetTarget?.email}? They will be required to change it on next login.`}
+        confirmLabel={resetLoading ? 'Sending…' : 'Reset & send email'}
+        loading={resetLoading}
+        onConfirm={handleReset}
+        onCancel={() => setResetTarget(null)}
+      />
 
       {/* Deactivate confirm */}
       <ConfirmDialog

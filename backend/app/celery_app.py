@@ -45,5 +45,12 @@ celery_app.conf.update(
     imports=(
         "app.services.letters.tasks",
         "app.services.budget.tasks",
+        "app.services.email.tasks",
     ),
+    # Queue routing: quick tasks go to the light worker, heavy tasks to default.
+    task_default_queue="default",
+    task_routes={
+        "app.services.letters.tasks.*": {"queue": "light"},
+        "app.services.email.tasks.*": {"queue": "light"},
+    },
 )
