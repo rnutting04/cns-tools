@@ -89,6 +89,8 @@ jobs:
       SPACES_BUCKET: cs-tool-hub
       ANTHROPIC_API_KEY: sk-ant-ci-placeholder
       CELERY_TASK_ALWAYS_EAGER: true
+      CELERY_BROKER_URL: memory://
+      CELERY_RESULT_BACKEND: cache+memory://
 
     steps:
       - name: Checkout
