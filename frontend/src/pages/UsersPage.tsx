@@ -374,105 +374,108 @@ export default function UsersPage() {
     }
   }
 
-  const columns = useMemo<GridColDef<User>[]>(() => [
-    {
-      field: 'name',
-      headerName: 'Name',
-      flex: 1,
-      minWidth: 160,
-      valueGetter: (_v, row) => `${row.fname} ${row.lname}`,
-    },
-    { field: 'email', headerName: 'Email', flex: 1.5, minWidth: 200 },
-    { field: 'title', headerName: 'Title', flex: 1, minWidth: 160 },
-    {
-      field: 'role',
-      headerName: 'Role',
-      width: 130,
-      renderCell: (params: GridRenderCellParams<User, UserRole>) => (
-        <RoleBadge role={params.value!} />
-      ),
-    },
-    {
-      field: 'is_active',
-      headerName: 'Status',
-      width: 100,
-      renderCell: (params) => (
-        <Chip
-          label={params.value ? 'Active' : 'Inactive'}
-          color={params.value ? 'success' : 'default'}
-          size="small"
-        />
-      ),
-    },
-    {
-      field: 'actions',
-      headerName: 'Actions',
-      width: 160,
-      sortable: false,
-      renderCell: (params: GridRenderCellParams<User>) => (
-        <Box display="flex" gap={0.5}>
-          <Tooltip title="Edit">
-            <IconButton size="small" onClick={() => openEdit(params.row)}>
-              <EditIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-          <Tooltip title="Reset password">
-            <IconButton size="small" onClick={() => setResetTarget(params.row)}>
-              <LockResetIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-          {isSuperAdmin && (
-            <>
-              <Tooltip title="Change role">
-                <IconButton size="small" onClick={() => openRoleChange(params.row)}>
-                  <ManageAccountsIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-              {params.row.is_active ? (
-                <Tooltip
-                  title={
-                    params.row.id === currentUser?.id
-                      ? 'You cannot deactivate your own account'
-                      : 'Deactivate'
-                  }
-                >
-                  <span>
-                    <IconButton
-                      size="small"
-                      color="error"
-                      disabled={params.row.id === currentUser?.id}
-                      onClick={() => setDeactivateTarget(params.row)}
-                    >
-                      <BlockIcon fontSize="small" />
-                    </IconButton>
-                  </span>
+  const columns = useMemo<GridColDef<User>[]>(
+    () => [
+      {
+        field: 'name',
+        headerName: 'Name',
+        flex: 1,
+        minWidth: 160,
+        valueGetter: (_v, row) => `${row.fname} ${row.lname}`,
+      },
+      { field: 'email', headerName: 'Email', flex: 1.5, minWidth: 200 },
+      { field: 'title', headerName: 'Title', flex: 1, minWidth: 160 },
+      {
+        field: 'role',
+        headerName: 'Role',
+        width: 130,
+        renderCell: (params: GridRenderCellParams<User, UserRole>) => (
+          <RoleBadge role={params.value!} />
+        ),
+      },
+      {
+        field: 'is_active',
+        headerName: 'Status',
+        width: 100,
+        renderCell: (params) => (
+          <Chip
+            label={params.value ? 'Active' : 'Inactive'}
+            color={params.value ? 'success' : 'default'}
+            size="small"
+          />
+        ),
+      },
+      {
+        field: 'actions',
+        headerName: 'Actions',
+        width: 160,
+        sortable: false,
+        renderCell: (params: GridRenderCellParams<User>) => (
+          <Box display="flex" gap={0.5}>
+            <Tooltip title="Edit">
+              <IconButton size="small" onClick={() => openEdit(params.row)}>
+                <EditIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Reset password">
+              <IconButton size="small" onClick={() => setResetTarget(params.row)}>
+                <LockResetIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+            {isSuperAdmin && (
+              <>
+                <Tooltip title="Change role">
+                  <IconButton size="small" onClick={() => openRoleChange(params.row)}>
+                    <ManageAccountsIcon fontSize="small" />
+                  </IconButton>
                 </Tooltip>
-              ) : (
-                <Tooltip
-                  title={
-                    params.row.id === currentUser?.id
-                      ? 'You cannot delete your own account'
-                      : 'Delete permanently'
-                  }
-                >
-                  <span>
-                    <IconButton
-                      size="small"
-                      color="error"
-                      disabled={params.row.id === currentUser?.id}
-                      onClick={() => setPermanentDeleteTarget(params.row)}
-                    >
-                      <DeleteForeverIcon fontSize="small" />
-                    </IconButton>
-                  </span>
-                </Tooltip>
-              )}
-            </>
-          )}
-        </Box>
-      ),
-    },
-  ], [isSuperAdmin, currentUser?.id, openEdit, openRoleChange])
+                {params.row.is_active ? (
+                  <Tooltip
+                    title={
+                      params.row.id === currentUser?.id
+                        ? 'You cannot deactivate your own account'
+                        : 'Deactivate'
+                    }
+                  >
+                    <span>
+                      <IconButton
+                        size="small"
+                        color="error"
+                        disabled={params.row.id === currentUser?.id}
+                        onClick={() => setDeactivateTarget(params.row)}
+                      >
+                        <BlockIcon fontSize="small" />
+                      </IconButton>
+                    </span>
+                  </Tooltip>
+                ) : (
+                  <Tooltip
+                    title={
+                      params.row.id === currentUser?.id
+                        ? 'You cannot delete your own account'
+                        : 'Delete permanently'
+                    }
+                  >
+                    <span>
+                      <IconButton
+                        size="small"
+                        color="error"
+                        disabled={params.row.id === currentUser?.id}
+                        onClick={() => setPermanentDeleteTarget(params.row)}
+                      >
+                        <DeleteForeverIcon fontSize="small" />
+                      </IconButton>
+                    </span>
+                  </Tooltip>
+                )}
+              </>
+            )}
+          </Box>
+        ),
+      },
+    ],
+    [isSuperAdmin, currentUser?.id, openEdit, openRoleChange],
+  )
 
   return (
     <Box>

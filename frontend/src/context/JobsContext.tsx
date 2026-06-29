@@ -44,7 +44,11 @@ export function JobsProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const inFlightIds = useMemo(
-    () => Object.values(jobs).filter((j) => isInFlight(j.status)).map((j) => j.id).sort(),
+    () =>
+      Object.values(jobs)
+        .filter((j) => isInFlight(j.status))
+        .map((j) => j.id)
+        .sort(),
     [jobs],
   )
   const inFlightKey = inFlightIds.join(',')

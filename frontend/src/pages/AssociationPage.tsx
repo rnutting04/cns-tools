@@ -272,20 +272,23 @@ export default function AssociationPage() {
     }
   }
 
-  const openManagerDialog = useCallback(async (assoc: Association) => {
-    setManagerDialogAssoc(assoc)
-    setSelectedUserId('')
-    setManagerError(null)
-    if (isAdmin) {
-      if (assocUsersCache) {
-        setAllUsers(assocUsersCache.filter((u) => u.is_active))
-      } else {
-        const { data } = await apiClient.get<User[]>('/api/users')
-        assocUsersCache = data
-        setAllUsers(data.filter((u) => u.is_active))
+  const openManagerDialog = useCallback(
+    async (assoc: Association) => {
+      setManagerDialogAssoc(assoc)
+      setSelectedUserId('')
+      setManagerError(null)
+      if (isAdmin) {
+        if (assocUsersCache) {
+          setAllUsers(assocUsersCache.filter((u) => u.is_active))
+        } else {
+          const { data } = await apiClient.get<User[]>('/api/users')
+          assocUsersCache = data
+          setAllUsers(data.filter((u) => u.is_active))
+        }
       }
-    }
-  }, [isAdmin])
+    },
+    [isAdmin],
+  )
 
   async function handleAssignManager() {
     if (!managerDialogAssoc || !selectedUserId) return
@@ -326,72 +329,75 @@ export default function AssociationPage() {
     }
   }
 
-  const columns = useMemo(() => [
-    { field: 'legal_name', headerName: 'Legal name', flex: 2, minWidth: 200 },
-    { field: 'filter_name', headerName: 'Filter name', flex: 1, minWidth: 130 },
-    { field: 'location_name', headerName: 'Location', flex: 1, minWidth: 130 },
-    {
-      field: 'managers',
-      headerName: 'Managers',
-      flex: 1.5,
-      minWidth: 180,
-      sortable: false,
-      renderCell: (params: GridRenderCellParams<Association, User[]>) => (
-        <Box display="flex" flexWrap="wrap" gap={0.5} alignItems="center" py={0.5}>
-          {(params.value ?? []).map((m) => (
-            <Chip key={m.id} label={`${m.fname} ${m.lname}`} size="small" />
-          ))}
-        </Box>
-      ),
-    },
-    {
-      field: 'is_active',
-      headerName: 'Status',
-      width: 100,
-      renderCell: (params) => (
-        <Chip
-          label={params.value ? 'Active' : 'Inactive'}
-          color={params.value ? 'success' : 'default'}
-          size="small"
-        />
-      ),
-    },
-    ...(isAdmin
-      ? ([
-          {
-            field: 'actions',
-            headerName: 'Actions',
-            width: 140,
-            sortable: false,
-            renderCell: (params: GridRenderCellParams<Association>) => (
-              <Box display="flex" gap={0.5}>
-                <Tooltip title="Edit">
-                  <IconButton size="small" onClick={() => openEdit(params.row)}>
-                    <EditIcon fontSize="small" />
-                  </IconButton>
-                </Tooltip>
-                <Tooltip title="Manage managers">
-                  <IconButton size="small" onClick={() => openManagerDialog(params.row)}>
-                    <GroupAddIcon fontSize="small" />
-                  </IconButton>
-                </Tooltip>
-                {isSuperAdmin && params.row.is_active && (
-                  <Tooltip title="Deactivate">
-                    <IconButton
-                      size="small"
-                      color="error"
-                      onClick={() => setDeactivateTarget(params.row)}
-                    >
-                      <BlockIcon fontSize="small" />
+  const columns = useMemo(
+    () => [
+      { field: 'legal_name', headerName: 'Legal name', flex: 2, minWidth: 200 },
+      { field: 'filter_name', headerName: 'Filter name', flex: 1, minWidth: 130 },
+      { field: 'location_name', headerName: 'Location', flex: 1, minWidth: 130 },
+      {
+        field: 'managers',
+        headerName: 'Managers',
+        flex: 1.5,
+        minWidth: 180,
+        sortable: false,
+        renderCell: (params: GridRenderCellParams<Association, User[]>) => (
+          <Box display="flex" flexWrap="wrap" gap={0.5} alignItems="center" py={0.5}>
+            {(params.value ?? []).map((m) => (
+              <Chip key={m.id} label={`${m.fname} ${m.lname}`} size="small" />
+            ))}
+          </Box>
+        ),
+      },
+      {
+        field: 'is_active',
+        headerName: 'Status',
+        width: 100,
+        renderCell: (params) => (
+          <Chip
+            label={params.value ? 'Active' : 'Inactive'}
+            color={params.value ? 'success' : 'default'}
+            size="small"
+          />
+        ),
+      },
+      ...(isAdmin
+        ? ([
+            {
+              field: 'actions',
+              headerName: 'Actions',
+              width: 140,
+              sortable: false,
+              renderCell: (params: GridRenderCellParams<Association>) => (
+                <Box display="flex" gap={0.5}>
+                  <Tooltip title="Edit">
+                    <IconButton size="small" onClick={() => openEdit(params.row)}>
+                      <EditIcon fontSize="small" />
                     </IconButton>
                   </Tooltip>
-                )}
-              </Box>
-            ),
-          },
-        ] as GridColDef<Association>[])
-      : []),
-  ], [isAdmin, isSuperAdmin, openEdit, openManagerDialog])
+                  <Tooltip title="Manage managers">
+                    <IconButton size="small" onClick={() => openManagerDialog(params.row)}>
+                      <GroupAddIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                  {isSuperAdmin && params.row.is_active && (
+                    <Tooltip title="Deactivate">
+                      <IconButton
+                        size="small"
+                        color="error"
+                        onClick={() => setDeactivateTarget(params.row)}
+                      >
+                        <BlockIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  )}
+                </Box>
+              ),
+            },
+          ] as GridColDef<Association>[])
+        : []),
+    ],
+    [isAdmin, isSuperAdmin, openEdit, openManagerDialog],
+  )
 
   return (
     <Box>

@@ -390,10 +390,18 @@ export default function AuditPage() {
                 <>
                   {[0, 1, 2, 3, 4].map((i) => (
                     <TableRow key={i}>
-                      <TableCell><Skeleton variant="text" width={130} /></TableCell>
-                      <TableCell><Skeleton variant="text" width={160} /></TableCell>
-                      <TableCell><Skeleton variant="rounded" width={110} height={24} /></TableCell>
-                      <TableCell><Skeleton variant="text" width={120} /></TableCell>
+                      <TableCell>
+                        <Skeleton variant="text" width={130} />
+                      </TableCell>
+                      <TableCell>
+                        <Skeleton variant="text" width={160} />
+                      </TableCell>
+                      <TableCell>
+                        <Skeleton variant="rounded" width={110} height={24} />
+                      </TableCell>
+                      <TableCell>
+                        <Skeleton variant="text" width={120} />
+                      </TableCell>
                     </TableRow>
                   ))}
                 </>
