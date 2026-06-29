@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Chip from '@mui/material/Chip'
@@ -226,7 +226,7 @@ export default function AssociationPage() {
     setFormOpen(true)
   }
 
-  function openEdit(assoc: Association) {
+  const openEdit = useCallback((assoc: Association) => {
     setEditTarget(assoc)
     setFormData({
       legal_name: assoc.legal_name,
@@ -235,7 +235,7 @@ export default function AssociationPage() {
     })
     setFormError(null)
     setFormOpen(true)
-  }
+  }, [])
 
   async function handleFormSubmit() {
     setFormLoading(true)
@@ -272,7 +272,7 @@ export default function AssociationPage() {
     }
   }
 
-  async function openManagerDialog(assoc: Association) {
+  const openManagerDialog = useCallback(async (assoc: Association) => {
     setManagerDialogAssoc(assoc)
     setSelectedUserId('')
     setManagerError(null)
@@ -285,7 +285,7 @@ export default function AssociationPage() {
         setAllUsers(data.filter((u) => u.is_active))
       }
     }
-  }
+  }, [isAdmin])
 
   async function handleAssignManager() {
     if (!managerDialogAssoc || !selectedUserId) return
@@ -326,7 +326,7 @@ export default function AssociationPage() {
     }
   }
 
-  const columns: GridColDef<Association>[] = [
+  const columns = useMemo(() => [
     { field: 'legal_name', headerName: 'Legal name', flex: 2, minWidth: 200 },
     { field: 'filter_name', headerName: 'Filter name', flex: 1, minWidth: 130 },
     { field: 'location_name', headerName: 'Location', flex: 1, minWidth: 130 },
@@ -391,7 +391,7 @@ export default function AssociationPage() {
           },
         ] as GridColDef<Association>[])
       : []),
-  ]
+  ], [isAdmin, isSuperAdmin, openEdit, openManagerDialog])
 
   return (
     <Box>

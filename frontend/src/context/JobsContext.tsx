@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { toast } from 'sonner'
 import { useNavigate } from 'react-router-dom'
@@ -43,10 +43,10 @@ export function JobsProvider({ children }: { children: ReactNode }) {
     })
   }, [])
 
-  const inFlightIds = Object.values(jobs)
-    .filter((j) => isInFlight(j.status))
-    .map((j) => j.id)
-    .sort()
+  const inFlightIds = useMemo(
+    () => Object.values(jobs).filter((j) => isInFlight(j.status)).map((j) => j.id).sort(),
+    [jobs],
+  )
   const inFlightKey = inFlightIds.join(',')
 
   useEffect(() => {

@@ -4,6 +4,7 @@ import Button from '@mui/material/Button'
 import Chip from '@mui/material/Chip'
 import CircularProgress from '@mui/material/CircularProgress'
 import Dialog from '@mui/material/Dialog'
+import Skeleton from '@mui/material/Skeleton'
 import DialogContent from '@mui/material/DialogContent'
 import DialogTitle from '@mui/material/DialogTitle'
 import Divider from '@mui/material/Divider'
@@ -386,11 +387,16 @@ export default function AuditPage() {
             </TableHead>
             <TableBody>
               {loading ? (
-                <TableRow>
-                  <TableCell colSpan={5} align="center" sx={{ py: 6 }}>
-                    <CircularProgress size={28} />
-                  </TableCell>
-                </TableRow>
+                <>
+                  {[0, 1, 2, 3, 4].map((i) => (
+                    <TableRow key={i}>
+                      <TableCell><Skeleton variant="text" width={130} /></TableCell>
+                      <TableCell><Skeleton variant="text" width={160} /></TableCell>
+                      <TableCell><Skeleton variant="rounded" width={110} height={24} /></TableCell>
+                      <TableCell><Skeleton variant="text" width={120} /></TableCell>
+                    </TableRow>
+                  ))}
+                </>
               ) : rows.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={5} align="center" sx={{ py: 6, color: 'text.secondary' }}>

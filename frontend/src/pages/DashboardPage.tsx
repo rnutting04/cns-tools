@@ -129,13 +129,13 @@ export default function DashboardPage() {
   const [recentJobs, setRecentJobs] = useState<Job[] | null>(null)
 
   useEffect(() => {
-    apiClient.get<Association[]>('/api/associations').then((r) => setAssocCount(r.data.length))
+    apiClient.get<Association[]>('/api/associations').then((r) => setAssocCount(r.data.length)).catch(() => setAssocCount(0))
     apiClient
       .get<Job[]>('/api/jobs')
       .then((r) => setRecentJobs(r.data.slice(0, 5)))
       .catch(() => setRecentJobs([]))
     if (user && hasRole(user, ['admin', 'super_admin'])) {
-      apiClient.get<User[]>('/api/users').then((r) => setUserCount(r.data.length))
+      apiClient.get<User[]>('/api/users').then((r) => setUserCount(r.data.length)).catch(() => setUserCount(0))
     }
   }, [user])
 

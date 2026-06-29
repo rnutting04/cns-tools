@@ -4,6 +4,7 @@ import Button from '@mui/material/Button'
 import CircularProgress from '@mui/material/CircularProgress'
 import Divider from '@mui/material/Divider'
 import Paper from '@mui/material/Paper'
+import Skeleton from '@mui/material/Skeleton'
 import Typography from '@mui/material/Typography'
 import DownloadIcon from '@mui/icons-material/Download'
 import { Link } from 'react-router-dom'
@@ -38,6 +39,7 @@ interface DisplayJob {
 export default function SessionJobsPanel({ jobType }: { jobType: JobType }) {
   const { jobs: liveJobs, inFlightCount } = useJobs()
   const [apiJobs, setApiJobs] = useState<Job[]>([])
+  const [initialLoading, setInitialLoading] = useState(true)
   const [downloading, setDownloading] = useState<string | null>(null)
   const [downloadError, setDownloadError] = useState<string | null>(null)
   const [highlightedIds, setHighlightedIds] = useState<Set<string>>(new Set())
@@ -75,6 +77,8 @@ export default function SessionJobsPanel({ jobType }: { jobType: JobType }) {
       }
     } catch {
       // fail silently — don't block the main form
+    } finally {
+      setInitialLoading(false)
     }
   }, [jobType])
 
@@ -107,6 +111,31 @@ export default function SessionJobsPanel({ jobType }: { jobType: JobType }) {
     })
   }, [apiJobs, liveJobs])
 
+  if (initialLoading) {
+    const heading = jobType === 'letter' ? 'Recent letters' : 'Recent budgets'
+    return (
+      <Box mt={3}>
+        <Typography variant="subtitle2" color="text.secondary" mb={1}>
+          {heading} — last 24 hours
+        </Typography>
+        <Paper variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden' }}>
+          {[0, 1].map((i) => (
+            <Box key={i}>
+              <Box sx={{ px: 2, py: 1.5, display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                <Skeleton variant="rounded" width={72} height={24} sx={{ flexShrink: 0 }} />
+                <Box flex={1}>
+                  <Skeleton variant="text" width="55%" />
+                  <Skeleton variant="text" width="35%" />
+                </Box>
+              </Box>
+              {i === 0 && <Divider />}
+            </Box>
+          ))}
+        </Paper>
+      </Box>
+    )
+  }
+
   if (rows.length === 0) return null
 
   const visible = rows.slice(0, MAX_VISIBLE)
@@ -133,7 +162,6 @@ export default function SessionJobsPanel({ jobType }: { jobType: JobType }) {
   }
 
   const heading = jobType === 'letter' ? 'Recent letters' : 'Recent budgets'
-
   return (
     <Box mt={3}>
       <Typography variant="subtitle2" color="text.secondary" mb={1}>

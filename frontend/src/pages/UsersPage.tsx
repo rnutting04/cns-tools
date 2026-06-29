@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Chip from '@mui/material/Chip'
@@ -276,7 +276,7 @@ export default function UsersPage() {
     }
   }
 
-  function openEdit(u: User) {
+  const openEdit = useCallback((u: User) => {
     setEditTarget(u)
     setEditForm({
       fname: u.fname,
@@ -286,7 +286,7 @@ export default function UsersPage() {
       is_active: u.is_active,
     })
     setEditError(null)
-  }
+  }, [])
 
   async function handleEdit() {
     if (!editTarget) return
@@ -306,11 +306,11 @@ export default function UsersPage() {
     }
   }
 
-  function openRoleChange(u: User) {
+  const openRoleChange = useCallback((u: User) => {
     setRoleTarget(u)
     setSelectedRole(u.role)
     setRoleError(null)
-  }
+  }, [])
 
   async function handleRoleChange() {
     if (!roleTarget) return
@@ -374,7 +374,7 @@ export default function UsersPage() {
     }
   }
 
-  const columns: GridColDef<User>[] = [
+  const columns = useMemo<GridColDef<User>[]>(() => [
     {
       field: 'name',
       headerName: 'Name',
@@ -472,7 +472,7 @@ export default function UsersPage() {
         </Box>
       ),
     },
-  ]
+  ], [isSuperAdmin, currentUser?.id, openEdit, openRoleChange])
 
   return (
     <Box>
