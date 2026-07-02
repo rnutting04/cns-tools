@@ -42,7 +42,7 @@ class BudgetJob(Base):
         default=JobStatus.pending,
     )
 
-    created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
     created_at = Column(DateTime, default=lambda: datetime.now(UTC))
 
     creator = relationship("User")

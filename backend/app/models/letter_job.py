@@ -21,9 +21,9 @@ class LetterJob(Base):
     __tablename__ = "letter_jobs"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    template_id = Column(UUID(as_uuid=True), ForeignKey("templates.id"), nullable=False)
-    association_id = Column(UUID(as_uuid=True), ForeignKey("associations.id"), nullable=False)
-    created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    template_id = Column(UUID(as_uuid=True), ForeignKey("templates.id"), nullable=False, index=True)
+    association_id = Column(UUID(as_uuid=True), ForeignKey("associations.id"), nullable=False, index=True)
+    created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
     field_values = Column(JSON, nullable=False, default=dict)
     output_path = Column(String(500), nullable=True)
     status = Column(Enum(JobStatus), nullable=False, default=JobStatus.pending)
