@@ -136,7 +136,23 @@ export default function SessionJobsPanel({ jobType }: { jobType: JobType }) {
     )
   }
 
-  if (rows.length === 0) return null
+  if (rows.length === 0) {
+    return (
+      <Box mt={3}>
+        <Typography variant="subtitle2" color="text.secondary" mb={1}>
+          {jobType === 'letter' ? 'Recent letters' : 'Recent budgets'} — last 24 hours
+        </Typography>
+        <Paper
+          variant="outlined"
+          sx={{ borderRadius: 2, px: 2, py: 3, textAlign: 'center' }}
+        >
+          <Typography variant="body2" color="text.secondary">
+            No {jobType === 'letter' ? 'letters' : 'budgets'} in the last 24 hours.
+          </Typography>
+        </Paper>
+      </Box>
+    )
+  }
 
   const visible = rows.slice(0, MAX_VISIBLE)
   const overflow = rows.length - MAX_VISIBLE

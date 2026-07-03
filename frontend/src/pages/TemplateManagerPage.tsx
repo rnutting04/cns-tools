@@ -4,6 +4,7 @@ import Button from '@mui/material/Button'
 import Chip from '@mui/material/Chip'
 import CircularProgress from '@mui/material/CircularProgress'
 import Dialog from '@mui/material/Dialog'
+import Skeleton from '@mui/material/Skeleton'
 import DialogActions from '@mui/material/DialogActions'
 import DialogContent from '@mui/material/DialogContent'
 import DialogTitle from '@mui/material/DialogTitle'
@@ -634,9 +635,25 @@ export default function TemplateManagerPage() {
       )}
 
       {loading ? (
-        <Box display="flex" justifyContent="center" py={8}>
-          <CircularProgress />
-        </Box>
+        <Paper variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden' }}>
+          {[0, 1, 2, 3].map((i) => (
+            <Box key={i}>
+              {i > 0 && <Divider />}
+              <Box sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
+                <Box flex={1.2} minWidth={180}>
+                  <Skeleton variant="text" width="60%" height={22} />
+                </Box>
+                <Box flex={1} minWidth={140}>
+                  <Skeleton variant="text" width="50%" height={22} />
+                </Box>
+                <Skeleton variant="rounded" width={80} height={24} sx={{ flexShrink: 0 }} />
+                <Skeleton variant="text" width={30} height={22} sx={{ flexShrink: 0 }} />
+                <Skeleton variant="rounded" width={64} height={24} sx={{ flexShrink: 0 }} />
+                <Skeleton variant="rounded" width={96} height={32} sx={{ flexShrink: 0 }} />
+              </Box>
+            </Box>
+          ))}
+        </Paper>
       ) : templates.length === 0 ? (
         <Paper variant="outlined" sx={{ p: 3, borderRadius: 2 }}>
           <Typography color="text.secondary">No templates uploaded yet.</Typography>

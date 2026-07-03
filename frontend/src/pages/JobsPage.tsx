@@ -287,9 +287,11 @@ export default function JobsPage() {
       {loading ? (
         <JobsSkeleton />
       ) : rows.length === 0 ? (
-        <Typography color="text.secondary" textAlign="center" py={6}>
-          No jobs yet.
-        </Typography>
+        <Paper variant="outlined" sx={{ borderRadius: 2, px: 2, py: 6, textAlign: 'center' }}>
+          <Typography color="text.secondary">
+            {tab === 'all' ? 'No jobs yet.' : `No ${tab} jobs yet.`}
+          </Typography>
+        </Paper>
       ) : isMobile ? (
         <Paper variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden' }}>
           {rows.map((job, i) => (
