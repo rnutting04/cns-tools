@@ -142,10 +142,7 @@ export default function SessionJobsPanel({ jobType }: { jobType: JobType }) {
         <Typography variant="subtitle2" color="text.secondary" mb={1}>
           {jobType === 'letter' ? 'Recent letters' : 'Recent budgets'} — last 24 hours
         </Typography>
-        <Paper
-          variant="outlined"
-          sx={{ borderRadius: 2, px: 2, py: 3, textAlign: 'center' }}
-        >
+        <Paper variant="outlined" sx={{ borderRadius: 2, px: 2, py: 3, textAlign: 'center' }}>
           <Typography variant="body2" color="text.secondary">
             No {jobType === 'letter' ? 'letters' : 'budgets'} in the last 24 hours.
           </Typography>
