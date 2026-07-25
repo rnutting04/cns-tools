@@ -164,11 +164,15 @@ function TemplateStep({
                 variant="outlined"
                 sx={{
                   width: { xs: '100%', sm: 250 },
+                  height: '100%',
                   borderColor: selected?.id === t.id ? 'primary.main' : undefined,
                   borderWidth: selected?.id === t.id ? 2 : 1,
                 }}
               >
-                <CardActionArea onClick={() => onSelect(t)} sx={{ p: 0.5 }}>
+                <CardActionArea
+                  onClick={() => onSelect(t)}
+                  sx={{ p: 0.5, height: '100%', alignItems: 'flex-start' }}
+                >
                   <CardContent>
                     <Typography variant="body1" fontWeight={600}>
                       {t.name}
@@ -328,6 +332,31 @@ function FieldsStep({
                       `${option.fname} ${option.lname}${option.title ? ` (${option.title})` : ''}`
                     }
                     isOptionEqualToValue={(option, value) => option.id === value.id}
+                    renderOption={(props, option) => {
+                      const { key, ...optionProps } = props
+                      return (
+                        <Box
+                          component="li"
+                          key={key}
+                          {...optionProps}
+                          sx={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'flex-start',
+                            gap: 0.25,
+                          }}
+                        >
+                          <Typography variant="body2" fontWeight={600}>
+                            {option.fname} {option.lname}
+                          </Typography>
+                          {(option.title || option.email) && (
+                            <Typography variant="caption" color="text.secondary">
+                              {[option.title, option.email].filter(Boolean).join(' · ')}
+                            </Typography>
+                          )}
+                        </Box>
+                      )
+                    }}
                     renderInput={(params) => (
                       <TextField
                         {...params}
