@@ -532,7 +532,9 @@ def run(budget: BudgetOutput, review_flags: list[str], prev_year_xlsx_bytes: byt
         claimed: set[int] = set()
         section_item_rows: dict[str, list[int]] = defaultdict(list)
         subtotal_excel_row: dict[str, int] = {}  # section_key → excel row of its subtotal
-        special_row: dict[str, int] = {}  # code → excel row, for grand totals that reference each other
+        special_row: dict[
+            str, int
+        ] = {}  # code → excel row, for grand totals that reference each other
 
         for line in budget.lines:
             row = _find_row(label_to_rows, claimed, line.label, line.is_computed)
@@ -578,7 +580,9 @@ def run(budget: BudgetOutput, review_flags: list[str], prev_year_xlsx_bytes: byt
                 _write_cols(row, formulas)
 
             elif line.code == "total_income":
-                sec_rows = [subtotal_excel_row[s] for s in _INCOME_SECTION_KEYS if s in subtotal_excel_row]
+                sec_rows = [
+                    subtotal_excel_row[s] for s in _INCOME_SECTION_KEYS if s in subtotal_excel_row
+                ]
                 raw = _raw_vals(line)
                 formulas = {col: _sum_formula(col, sec_rows) or raw.get(col) for col in active_cols}
                 _write_cols(row, formulas)
@@ -586,14 +590,18 @@ def run(budget: BudgetOutput, review_flags: list[str], prev_year_xlsx_bytes: byt
 
             elif line.code == "total_operating":
                 sec_rows = [
-                    subtotal_excel_row[s] for s in _OPERATING_EXPENSE_SECTION_KEYS if s in subtotal_excel_row
+                    subtotal_excel_row[s]
+                    for s in _OPERATING_EXPENSE_SECTION_KEYS
+                    if s in subtotal_excel_row
                 ]
                 raw = _raw_vals(line)
                 formulas = {col: _sum_formula(col, sec_rows) or raw.get(col) for col in active_cols}
                 _write_cols(row, formulas)
 
             elif line.code == "total_operating_and_reserves":
-                sec_rows = [subtotal_excel_row[s] for s in _EXPENSE_SECTION_KEYS if s in subtotal_excel_row]
+                sec_rows = [
+                    subtotal_excel_row[s] for s in _EXPENSE_SECTION_KEYS if s in subtotal_excel_row
+                ]
                 raw = _raw_vals(line)
                 formulas = {col: _sum_formula(col, sec_rows) or raw.get(col) for col in active_cols}
                 _write_cols(row, formulas)
