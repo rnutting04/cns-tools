@@ -183,7 +183,7 @@ export default function BudgetGeneratorPage() {
           <Divider />
 
           <FileField
-            label="Income & Expense report"
+            label="Current Income & Expense report"
             accept=".pdf"
             file={financialReport}
             onChange={setFinancialReport}
