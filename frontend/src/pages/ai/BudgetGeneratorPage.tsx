@@ -187,7 +187,7 @@ export default function BudgetGeneratorPage() {
             accept=".pdf"
             file={financialReport}
             onChange={setFinancialReport}
-            helperText="CSC Income & Expense report PDF — source for the Projected column"
+            helperText="Current Year CSC Income & Expense report PDF — source for the Projected column"
             disabled={submitting}
           />
 

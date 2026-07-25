@@ -99,13 +99,26 @@ function TemplateStep({
   selected: Template | null
   onSelect: (t: Template) => void
 }) {
+  const [search, setSearch] = useState('')
+
   const byCategory = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    const filtered = q ? templates.filter((t) => t.name.toLowerCase().includes(q)) : templates
+
     const map: Record<string, Template[]> = {}
-    for (const t of templates) {
+    for (const t of filtered) {
       ;(map[t.category] ??= []).push(t)
     }
+    for (const items of Object.values(map)) {
+      items.sort((a, b) => a.name.localeCompare(b.name))
+    }
     return map
-  }, [templates])
+  }, [templates, search])
+
+  const sortedCategories = useMemo(
+    () => Object.keys(byCategory).sort((a, b) => a.localeCompare(b)),
+    [byCategory],
+  )
 
   if (loading) {
     return (
@@ -123,14 +136,29 @@ function TemplateStep({
         <Typography color="text.secondary">No templates available.</Typography>
       )}
 
-      {Object.entries(byCategory).map(([cat, items]) => (
+      {templates.length > 0 && (
+        <TextField
+          placeholder="Search templates…"
+          size="small"
+          fullWidth
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          sx={{ mb: 3, maxWidth: 360 }}
+        />
+      )}
+
+      {templates.length > 0 && sortedCategories.length === 0 && (
+        <Typography color="text.secondary">No templates match your search.</Typography>
+      )}
+
+      {sortedCategories.map((cat) => (
         <Box key={cat} mb={3}>
           <Typography variant="subtitle2" color="text.secondary" mb={1}>
             {cat}
           </Typography>
 
           <Box display="flex" flexWrap="wrap" gap={2}>
-            {items.map((t) => (
+            {byCategory[cat].map((t) => (
               <Card
                 key={t.id}
                 variant="outlined"
@@ -606,8 +634,16 @@ export default function LetterGeneratorPage() {
     ])
       .then(([tmplRes, assocRes, managerRes]) => {
         setTemplates(tmplRes.data)
-        setAssociations(assocRes.data.filter((a) => a.is_active))
-        setManagers(managerRes.data.filter((m) => m.is_active !== false))
+        setAssociations(
+          assocRes.data
+            .filter((a) => a.is_active)
+            .sort((a, b) => a.legal_name.localeCompare(b.legal_name)),
+        )
+        setManagers(
+          managerRes.data
+            .filter((m) => m.is_active !== false)
+            .sort((a, b) => `${a.lname} ${a.fname}`.localeCompare(`${b.lname} ${b.fname}`)),
+        )
       })
       .catch(() => setLoadError('Failed to load data. Please refresh.'))
       .finally(() => setLoadingData(false))

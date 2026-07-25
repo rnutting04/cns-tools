@@ -339,7 +339,14 @@ export default function AssociationPage() {
         headerName: 'Managers',
         flex: 1.5,
         minWidth: 180,
-        sortable: false,
+        sortComparator: (v1: User[], v2: User[]) => {
+          const toKey = (managers: User[]) =>
+            managers
+              .map((m) => `${m.lname} ${m.fname}`)
+              .sort()
+              .join(', ')
+          return toKey(v1).localeCompare(toKey(v2))
+        },
         renderCell: (params: GridRenderCellParams<Association, User[]>) => (
           <Box display="flex" flexWrap="wrap" gap={0.5} alignItems="center" py={0.5}>
             {(params.value ?? []).map((m) => (
