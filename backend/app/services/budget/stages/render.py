@@ -6,7 +6,13 @@
 #   1. Detects which columns hold prior/projected/proposed/notes values
 #   2. Updates column headers to the new budget year
 #   3. Overwrites each data row's values from the validated BudgetOutput
-#      - All data rows, subtotals, and totals: raw numeric values
+#      - Data rows: raw numeric values
+#      - Subtotal/total rows: live Excel formulas (=SUM(...) / difference)
+#        referencing the rows just written, so the workbook re-totals itself
+#        if a reviewer tweaks a number by hand.
+#   4. Highlights recurring-but-variable line items (CPA/accounting fees,
+#      annual corporate report, insurance, backflow inspection, tree
+#      trimming, mulch) so a reviewer always double-checks them.
 #
 # Any sheets beyond the Budget tab are left untouched, so any charts or
 # formatting the association has added are preserved automatically.
@@ -19,9 +25,60 @@ from dataclasses import dataclass
 
 import openpyxl
 from openpyxl.styles import PatternFill
+from openpyxl.utils import get_column_letter
 
 from app.services.budget.exceptions import RenderFailed
 from app.services.budget.schema import BudgetLine, BudgetOutput
+
+# Section groupings mirroring assemble.py's grand-total math, keyed by
+# BudgetSection.value so they line up with subtotal_excel_row's keys.
+_INCOME_SECTION_KEYS = {"REVENUE_OPERATING", "REVENUE_RESERVES"}
+_OPERATING_EXPENSE_SECTION_KEYS = {"ADMINISTRATION", "MAINTENANCE", "UTILITIES", "OTHER"}
+_EXPENSE_SECTION_KEYS = _OPERATING_EXPENSE_SECTION_KEYS | {"RESERVES"}
+
+# Line items that are recurring but lumpy/variable (renewals, seasonal
+# contracts) — always flagged for manual review regardless of AI-detected
+# annualization concerns. Matched as case-insensitive substrings against the
+# line label, since actual xlsx wording varies ("Accounting/CPA", "Insurance
+# - Umbrella", etc.).
+_ALWAYS_REVIEW_KEYWORDS = (
+    "cpa",
+    "annual corp",
+    "corporate report",
+    "insurance",
+    "backflow",
+    "tree trim",
+    "mulch",
+)
+
+
+def _needs_review_flag(label: str) -> bool:
+    key = label.lower()
+    return any(kw in key for kw in _ALWAYS_REVIEW_KEYWORDS)
+
+
+def _sum_formula(col: int, rows: list[int]) -> str | None:
+    """
+    Build a =SUM(...) formula over *rows*, collapsing consecutive runs into
+    ranges — e.g. rows [38..47] become 'D38:D47' rather than a 10-cell list.
+    Non-contiguous rows still fall back to comma-joined ranges/cells, e.g.
+    'D5:D7,D9'.
+    """
+    if not rows:
+        return None
+    letter = get_column_letter(col)
+    rows = sorted(rows)
+    groups: list[str] = []
+    start = prev = rows[0]
+    for r in rows[1:]:
+        if r == prev + 1:
+            prev = r
+            continue
+        groups.append(f"{letter}{start}" if start == prev else f"{letter}{start}:{letter}{prev}")
+        start = prev = r
+    groups.append(f"{letter}{start}" if start == prev else f"{letter}{start}:{letter}{prev}")
+    return f"=SUM({','.join(groups)})"
+
 
 BLUE_FILL = PatternFill(start_color="DDEEFF", end_color="DDEEFF", fill_type="solid")
 NO_FILL = PatternFill(fill_type=None)
@@ -251,10 +308,11 @@ def run(budget: BudgetOutput, review_flags: list[str], prev_year_xlsx_bytes: byt
     from the header row, shifts all headers to the new year, and writes
     prior/projected/proposed values for every line in BudgetOutput.
 
-    All rows receive raw numeric values — no Excel formulas are written.
-    Projected values are already computed by Stage 2, so live formulas
-    are unnecessary and were causing #REF! errors from stale prior-year
-    references.
+    Data rows receive raw numeric values. Subtotal and grand-total rows
+    receive live =SUM(...)/difference formulas built from the exact rows
+    just written this run — never formulas carried over from the prior
+    workbook — so there's no risk of the #REF! errors that stale
+    prior-year references used to cause after columns shift each cycle.
 
     Raises RenderFailed on any openpyxl error.
     """
@@ -420,10 +478,13 @@ def run(budget: BudgetOutput, review_flags: list[str], prev_year_xlsx_bytes: byt
         # The pipeline writes to exactly two detected columns:
         #   prior_col     ← prior_year (the adopted budget from last cycle)
         #   projected_col ← projected  (annualised YTD actuals)
-        # proposed_col is wiped to blank so stale values from a previous run
-        # don't linger, but no computed values are written there — the
+        # proposed_col is wiped to blank so stale raw values from a previous
+        # run don't linger, but no computed values are written there — the
         # association fills in the new budget column manually (or via their
         # own Excel formulas that read from prior_col and projected_col).
+        # Any formula already sitting in proposed_col (e.g. a TOTAL row's own
+        # =SUM(...) the association built) is left alone — only non-formula
+        # (raw numeric/blank) cells are cleared.
         #
         # Preamble rows (assessment tables before the first section header) are
         # excluded from the wipe: their proposed_col formulas are preserved, and
@@ -435,7 +496,10 @@ def run(budget: BudgetOutput, review_flags: list[str], prev_year_xlsx_bytes: byt
                 ws.cell(row=_r, column=_wipe_col).value = None
         if proposed_col is not None:
             for _r in range(preamble_end, ws.max_row + 1):
-                ws.cell(row=_r, column=proposed_col).value = None
+                _cell = ws.cell(row=_r, column=proposed_col)
+                if isinstance(_cell.value, str) and _cell.value.startswith("="):
+                    continue
+                _cell.value = None
 
         # Assessment preamble: roll the old proposed_col value (computed from
         # the formula via the data-only workbook) into prior_col and projected_col
@@ -468,6 +532,7 @@ def run(budget: BudgetOutput, review_flags: list[str], prev_year_xlsx_bytes: byt
         claimed: set[int] = set()
         section_item_rows: dict[str, list[int]] = defaultdict(list)
         subtotal_excel_row: dict[str, int] = {}  # section_key → excel row of its subtotal
+        special_row: dict[str, int] = {}  # code → excel row, for grand totals that reference each other
 
         for line in budget.lines:
             row = _find_row(label_to_rows, claimed, line.label, line.is_computed)
@@ -480,21 +545,75 @@ def run(budget: BudgetOutput, review_flags: list[str], prev_year_xlsx_bytes: byt
             if not line.is_computed:
                 # ── Data row: write prior_year and projected ──────────────────
                 raw = _raw_vals(line)
+                flagged = _needs_review_flag(line.label)
+                fill = BLUE_FILL if flagged else NO_FILL
                 for col in active_cols:
                     cell = ws.cell(row=row, column=col)
                     cell.value = raw.get(col)
-                    cell.fill = NO_FILL
+                    cell.fill = fill
+                ws.cell(row=row, column=label_col).fill = fill
+                if proposed_col is not None:
+                    ws.cell(row=row, column=proposed_col).fill = fill
                 if notes_col is not None:
-                    ws.cell(row=row, column=notes_col).value = line.note or ""
+                    note = (line.note or "").strip()
+                    if flagged:
+                        tag = "Recurring but variable cost — verify against current contract/policy"
+                        note = f"{note} — {tag}" if note else tag
+                    ws.cell(row=row, column=notes_col).value = note
+                    ws.cell(row=row, column=notes_col).fill = fill
+                if flagged:
+                    review_flags.append(
+                        f'"{line.label}" (row {row}) flagged for manual review — recurring lumpy/variable cost'
+                    )
                 section_item_rows[section_key].append(row)
 
             elif line.code.startswith("subtotal_"):
+                # ── Subtotal row: =SUM(...) over this section's item rows ──────
                 subtotal_excel_row[section_key] = row
-                _write_cols(row, _raw_vals(line))
+                raw = _raw_vals(line)
+                formulas = {
+                    col: _sum_formula(col, section_item_rows.get(section_key, [])) or raw.get(col)
+                    for col in active_cols
+                }
+                _write_cols(row, formulas)
+
+            elif line.code == "total_income":
+                sec_rows = [subtotal_excel_row[s] for s in _INCOME_SECTION_KEYS if s in subtotal_excel_row]
+                raw = _raw_vals(line)
+                formulas = {col: _sum_formula(col, sec_rows) or raw.get(col) for col in active_cols}
+                _write_cols(row, formulas)
+                special_row["total_income"] = row
+
+            elif line.code == "total_operating":
+                sec_rows = [
+                    subtotal_excel_row[s] for s in _OPERATING_EXPENSE_SECTION_KEYS if s in subtotal_excel_row
+                ]
+                raw = _raw_vals(line)
+                formulas = {col: _sum_formula(col, sec_rows) or raw.get(col) for col in active_cols}
+                _write_cols(row, formulas)
+
+            elif line.code == "total_operating_and_reserves":
+                sec_rows = [subtotal_excel_row[s] for s in _EXPENSE_SECTION_KEYS if s in subtotal_excel_row]
+                raw = _raw_vals(line)
+                formulas = {col: _sum_formula(col, sec_rows) or raw.get(col) for col in active_cols}
+                _write_cols(row, formulas)
+                special_row["total_operating_and_reserves"] = row
+
+            elif line.code == "surplus":
+                ti_row = special_row.get("total_income")
+                te_row = special_row.get("total_operating_and_reserves")
+                raw = _raw_vals(line)
+                formulas = {}
+                for col in active_cols:
+                    if ti_row is not None and te_row is not None:
+                        letter = get_column_letter(col)
+                        formulas[col] = f"={letter}{ti_row}-{letter}{te_row}"
+                    else:
+                        formulas[col] = raw.get(col)
+                _write_cols(row, formulas)
 
             else:
-                # total_income, total_operating_and_reserves, surplus, and any
-                # other computed rows — all written as plain numbers, no formulas.
+                # Any other computed row type: fall back to a plain number.
                 _write_cols(row, _raw_vals(line))
 
         # ── Post-pass: flag rows within section ranges that weren't matched ──────
