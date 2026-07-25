@@ -215,9 +215,12 @@ export default function AssociationPage() {
   const filtered = useMemo(() => {
     const q = search.toLowerCase()
     if (!q) return rows
-    return rows.filter((a) =>
-      `${a.legal_name} ${a.filter_name} ${a.location_name}`.toLowerCase().includes(q),
-    )
+    return rows.filter((a) => {
+      const managerNames = a.managers.map((m) => `${m.fname} ${m.lname}`).join(' ')
+      return `${a.legal_name} ${a.filter_name} ${a.location_name} ${managerNames}`
+        .toLowerCase()
+        .includes(q)
+    })
   }, [rows, search])
 
   function openCreate() {
@@ -425,7 +428,7 @@ export default function AssociationPage() {
 
       {/* Search */}
       <TextField
-        placeholder="Search by name or location…"
+        placeholder="Search by name, location, or manager…"
         size="small"
         fullWidth
         value={search}
