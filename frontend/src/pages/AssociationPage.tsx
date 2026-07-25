@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import Autocomplete from '@mui/material/Autocomplete'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Chip from '@mui/material/Chip'
@@ -8,13 +9,9 @@ import DialogActions from '@mui/material/DialogActions'
 import DialogContent from '@mui/material/DialogContent'
 import DialogTitle from '@mui/material/DialogTitle'
 import Divider from '@mui/material/Divider'
-import FormControl from '@mui/material/FormControl'
 import IconButton from '@mui/material/IconButton'
 import InputAdornment from '@mui/material/InputAdornment'
-import InputLabel from '@mui/material/InputLabel'
-import MenuItem from '@mui/material/MenuItem'
 import Paper from '@mui/material/Paper'
-import Select from '@mui/material/Select'
 import Skeleton from '@mui/material/Skeleton'
 import TextField from '@mui/material/TextField'
 import Tooltip from '@mui/material/Tooltip'
@@ -39,6 +36,10 @@ import ConfirmDialog from '../components/layout/ConfrimDialog'
 import ErrorAlert from '../components/layout/ErrorAlert'
 
 const emptyForm = { legal_name: '', filter_name: '', location_name: '' }
+
+function sortByName(users: User[]): User[] {
+  return [...users].sort((a, b) => `${a.fname} ${a.lname}`.localeCompare(`${b.fname} ${b.lname}`))
+}
 
 // ─── Skeleton list ────────────────────────────────────────────────────────────
 
@@ -279,11 +280,11 @@ export default function AssociationPage() {
       setManagerError(null)
       if (isAdmin) {
         if (assocUsersCache) {
-          setAllUsers(assocUsersCache.filter((u) => u.is_active))
+          setAllUsers(sortByName(assocUsersCache.filter((u) => u.is_active)))
         } else {
           const { data } = await apiClient.get<User[]>('/api/users')
           assocUsersCache = data
-          setAllUsers(data.filter((u) => u.is_active))
+          setAllUsers(sortByName(data.filter((u) => u.is_active)))
         }
       }
     },
@@ -583,22 +584,18 @@ export default function AssociationPage() {
             <Typography variant="body2" color="text.secondary">
               Assign a manager
             </Typography>
-            <FormControl fullWidth size="small">
-              <InputLabel>Select user</InputLabel>
-              <Select
-                value={selectedUserId}
-                label="Select user"
-                onChange={(e) => setSelectedUserId(e.target.value)}
-              >
-                {allUsers
-                  .filter((u) => !managerDialogAssoc?.managers.some((m) => m.id === u.id))
-                  .map((u) => (
-                    <MenuItem key={u.id} value={u.id}>
-                      {u.fname} {u.lname} — {u.title}
-                    </MenuItem>
-                  ))}
-              </Select>
-            </FormControl>
+            <Autocomplete
+              options={allUsers.filter(
+                (u) => !managerDialogAssoc?.managers.some((m) => m.id === u.id),
+              )}
+              value={allUsers.find((u) => u.id === selectedUserId) ?? null}
+              onChange={(_, value) => setSelectedUserId(value?.id ?? '')}
+              getOptionLabel={(option) => `${option.fname} ${option.lname} — ${option.title}`}
+              isOptionEqualToValue={(option, value) => option.id === value.id}
+              renderInput={(params) => (
+                <TextField {...params} label="Select user" size="small" fullWidth />
+              )}
+            />
             <Button
               variant="contained"
               onClick={handleAssignManager}
