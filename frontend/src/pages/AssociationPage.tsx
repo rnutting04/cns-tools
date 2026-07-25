@@ -343,16 +343,18 @@ export default function AssociationPage() {
         sortComparator: (v1: User[], v2: User[]) => {
           const toKey = (managers: User[]) =>
             managers
-              .map((m) => `${m.lname} ${m.fname}`)
-              .sort()
+              .map((m) => `${m.fname} ${m.lname}`)
+              .sort((a, b) => a.localeCompare(b))
               .join(', ')
           return toKey(v1).localeCompare(toKey(v2))
         },
         renderCell: (params: GridRenderCellParams<Association, User[]>) => (
           <Box display="flex" flexWrap="wrap" gap={0.5} alignItems="center" py={0.5}>
-            {(params.value ?? []).map((m) => (
-              <Chip key={m.id} label={`${m.fname} ${m.lname}`} size="small" />
-            ))}
+            {[...(params.value ?? [])]
+              .sort((a, b) => `${a.fname} ${a.lname}`.localeCompare(`${b.fname} ${b.lname}`))
+              .map((m) => (
+                <Chip key={m.id} label={`${m.fname} ${m.lname}`} size="small" />
+              ))}
           </Box>
         ),
       },
