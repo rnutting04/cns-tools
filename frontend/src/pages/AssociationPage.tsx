@@ -359,7 +359,7 @@ export default function AssociationPage() {
         field: 'is_active',
         headerName: 'Status',
         width: 100,
-        renderCell: (params) => (
+        renderCell: (params: GridRenderCellParams<Association, boolean>) => (
           <Chip
             label={params.value ? 'Active' : 'Inactive'}
             color={params.value ? 'success' : 'default'}
