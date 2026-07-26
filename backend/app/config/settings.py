@@ -23,7 +23,15 @@ class Settings(BaseSettings):
     # mailbox and set EMAIL_REPLY_TO so recipients can actually reply.
     EMAIL_FROM: str = "C&S Dev Services <notifications@cns-tools.com>"
     EMAIL_REPLY_TO: str = ""
-    EMAIL_TO: str = ""
+    # In any non-production environment, all outgoing email is redirected to
+    # LOCAL_EMAIL_TO (see sender.py) so we never email real users while testing.
+    LOCAL_EMAIL_TO: str = ""
+
+    # Deployment environment: "local", "staging", or "production". Only
+    # "production" delivers email to real recipients; every other value (or a
+    # missing/typo'd one) redirects to LOCAL_EMAIL_TO, so it fails safe.
+    # Parsed via app/config/environment.py.
+    ENVIRONMENT: str = "local"
 
     # Set True in production (requires HTTPS). False allows http-only local dev.
     COOKIE_SECURE: bool = False
