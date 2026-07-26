@@ -204,7 +204,12 @@ export default function UsersPage() {
     isError,
   } = useQuery({ queryKey: queryKeys.users, queryFn: fetchUsers })
 
-  const invalidateUsers = () => queryClient.invalidateQueries({ queryKey: queryKeys.users })
+  // A manager is a user, so any user change can affect the /api/managers list
+  // (used by the letter generator). Invalidate both so that cache stays fresh.
+  const invalidateUsers = () => {
+    queryClient.invalidateQueries({ queryKey: queryKeys.users })
+    queryClient.invalidateQueries({ queryKey: queryKeys.managers })
+  }
 
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')

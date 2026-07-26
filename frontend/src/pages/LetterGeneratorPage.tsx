@@ -33,6 +33,7 @@ import { useQuery } from '@tanstack/react-query'
 import SessionJobsPanel from '../components/common/SessionJobsPanel'
 import apiClient from '../api/client'
 import {
+  REFERENCE_STALE_TIME,
   fetchAssociations,
   fetchManagers,
   fetchTemplates,
@@ -758,10 +759,15 @@ export default function LetterGeneratorPage() {
   const [genError, setGenError] = useState<string | null>(null)
   const [noticeWarningOpen, setNoticeWarningOpen] = useState(false)
 
-  const templatesQuery = useQuery({ queryKey: queryKeys.templates, queryFn: fetchTemplates })
+  const templatesQuery = useQuery({
+    queryKey: queryKeys.templates,
+    queryFn: fetchTemplates,
+    staleTime: REFERENCE_STALE_TIME,
+  })
   const associationsQuery = useQuery({
     queryKey: queryKeys.associations,
     queryFn: fetchAssociations,
+    staleTime: REFERENCE_STALE_TIME,
     // Only active associations, alphabetized by legal name.
     select: (data) =>
       data.filter((a) => a.is_active).sort((a, b) => a.legal_name.localeCompare(b.legal_name)),
@@ -769,6 +775,7 @@ export default function LetterGeneratorPage() {
   const managersQuery = useQuery({
     queryKey: queryKeys.managers,
     queryFn: fetchManagers,
+    staleTime: REFERENCE_STALE_TIME,
     // Only active managers, alphabetized by name.
     select: (data) =>
       data

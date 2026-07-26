@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react'
 import Box from '@mui/material/Box'
 import Card from '@mui/material/Card'
 import CardActionArea from '@mui/material/CardActionArea'
@@ -20,12 +19,19 @@ import WorkHistoryIcon from '@mui/icons-material/WorkHistory'
 import ChevronRightIcon from '@mui/icons-material/ChevronRight'
 import InboxOutlinedIcon from '@mui/icons-material/InboxOutlined'
 import type { SvgIconProps } from '@mui/material/SvgIcon'
+import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useJobs } from '../context/JobsContext'
 import { hasRole } from '../utils/auth'
-import apiClient from '../api/client'
-import type { Association, Job, JobType, User } from '../types'
+import {
+  REFERENCE_STALE_TIME,
+  fetchAssociations,
+  fetchJobs,
+  fetchUsers,
+  queryKeys,
+} from '../api/queries'
+import type { JobType } from '../types'
 import JobStatusChip from '../components/common/JobStatusChip'
 import { formatDateTime } from '../utils/formatDate'
 
@@ -198,31 +204,31 @@ export default function DashboardPage() {
   const theme = useTheme()
   const { user } = useAuth()
   const { inFlightCount } = useJobs()
-  const [assocCount, setAssocCount] = useState<number | null>(null)
-  const [userCount, setUserCount] = useState<number | null>(null)
-  const [recentJobs, setRecentJobs] = useState<Job[] | null>(null)
 
-  useEffect(() => {
-    apiClient
-      .get<Association[]>('/api/associations')
-      .then((r) => setAssocCount(r.data.length))
-      .catch(() => setAssocCount(0))
-    apiClient
-      .get<Job[]>('/api/jobs')
-      .then((r) => setRecentJobs(r.data.slice(0, 5)))
-      .catch(() => setRecentJobs([]))
-    if (user && hasRole(user, ['admin', 'super_admin'])) {
-      apiClient
-        .get<User[]>('/api/users')
-        .then((r) => setUserCount(r.data.length))
-        .catch(() => setUserCount(0))
-    }
-  }, [user])
+  const isManagerUp = user ? hasRole(user, ['manager', 'admin', 'super_admin']) : false
+  const isAdmin = user ? hasRole(user, ['admin', 'super_admin']) : false
+
+  // Shared query keys, so navigating between the dashboard and the pages that
+  // use these lists reuses one cache entry instead of refetching.
+  const associationsQuery = useQuery({
+    queryKey: queryKeys.associations,
+    queryFn: fetchAssociations,
+    enabled: isManagerUp,
+    staleTime: REFERENCE_STALE_TIME,
+  })
+  const usersQuery = useQuery({
+    queryKey: queryKeys.users,
+    queryFn: fetchUsers,
+    enabled: isAdmin,
+    staleTime: REFERENCE_STALE_TIME,
+  })
+  const jobsQuery = useQuery({ queryKey: queryKeys.jobs, queryFn: fetchJobs })
 
   if (!user) return null
 
-  const isManagerUp = hasRole(user, ['manager', 'admin', 'super_admin'])
-  const isAdmin = hasRole(user, ['admin', 'super_admin'])
+  const assocCount = associationsQuery.data?.length ?? null
+  const userCount = usersQuery.data?.length ?? null
+  const recentJobs = (jobsQuery.data ?? []).slice(0, 5)
 
   return (
     <Box>
@@ -323,7 +329,7 @@ export default function DashboardPage() {
         </Button>
       </Box>
       <Card variant="outlined" sx={{ mb: 4, borderRadius: 2.5 }}>
-        {recentJobs === null ? (
+        {jobsQuery.isLoading ? (
           <RecentJobsSkeleton />
         ) : recentJobs.length === 0 ? (
           <Box textAlign="center" py={5} px={2}>
