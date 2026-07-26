@@ -60,6 +60,18 @@ function getManagerFieldKey(template: Template | null): string {
   return template?.fields.find((f) => f.type === 'manager')?.key ?? 'manager_id'
 }
 
+const RENDERER_CHIP_COLOR: Record<string, 'info' | 'secondary' | 'warning'> = {
+  proxy: 'info',
+  ballot: 'secondary',
+  electronic_ballot: 'secondary',
+  notice_candidacy: 'warning',
+}
+
+function formatRendererType(type?: string): string {
+  const value = type ?? 'simple'
+  return value.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
 function getAssociationIdFromValues(values: FieldValueMap, template: Template | null): string {
   const key = getAssociationFieldKey(template)
   return typeof values[key] === 'string' ? (values[key] as string) : ''
@@ -163,37 +175,54 @@ function TemplateStep({
                 key={t.id}
                 variant="outlined"
                 sx={{
+                  position: 'relative',
                   width: { xs: '100%', sm: 250 },
                   height: 190,
-                  borderColor: selected?.id === t.id ? 'primary.main' : undefined,
+                  borderRadius: 2,
+                  borderColor: selected?.id === t.id ? 'primary.main' : 'divider',
                   borderWidth: selected?.id === t.id ? 2 : 1,
+                  transition: 'box-shadow 0.15s ease, border-color 0.15s ease',
+                  '&:hover': {
+                    borderColor: 'primary.main',
+                    boxShadow: 2,
+                  },
                 }}
               >
+                {selected?.id === t.id && (
+                  <CheckCircleIcon
+                    color="primary"
+                    sx={{
+                      position: 'absolute',
+                      top: 10,
+                      right: 10,
+                      fontSize: 22,
+                      bgcolor: 'background.paper',
+                      borderRadius: '50%',
+                      pointerEvents: 'none',
+                    }}
+                  />
+                )}
                 <CardActionArea
                   onClick={() => onSelect(t)}
                   sx={{ p: 0.5, height: '100%', alignItems: 'flex-start' }}
                 >
                   <CardContent>
-                    <Typography variant="body1" fontWeight={600}>
+                    <Typography variant="body1" fontWeight={600} pr={selected?.id === t.id ? 3 : 0}>
                       {t.name}
                     </Typography>
 
-                    <Typography variant="caption" color="text.secondary" display="block" mb={1}>
+                    <Typography variant="caption" color="text.secondary" display="block" mb={1.5}>
                       {t.fields.filter((f) => !AUTO_POPULATE_KEYS.has(f.key)).length} field(s)
                     </Typography>
 
-                    <Box display="flex" gap={0.75} flexWrap="wrap">
-                      <Chip label={t.category} size="small" variant="outlined" />
-                      <Chip label={t.renderer_type ?? 'simple'} size="small" variant="outlined" />
-                      {selected?.id === t.id && (
-                        <Chip
-                          label="Selected"
-                          color="primary"
-                          size="small"
-                          icon={<CheckCircleIcon />}
-                        />
-                      )}
-                    </Box>
+                    <Chip
+                      label={formatRendererType(t.renderer_type)}
+                      size="small"
+                      color={RENDERER_CHIP_COLOR[t.renderer_type ?? 'simple'] ?? 'default'}
+                      variant={
+                        RENDERER_CHIP_COLOR[t.renderer_type ?? 'simple'] ? 'filled' : 'outlined'
+                      }
+                    />
                   </CardContent>
                 </CardActionArea>
               </Card>
