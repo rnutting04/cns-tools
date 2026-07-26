@@ -124,7 +124,7 @@ function TemplateStep({
     return (
       <Box display="flex" flexWrap="wrap" gap={2}>
         {[0, 1, 2, 3].map((i) => (
-          <Skeleton key={i} variant="rounded" width={250} height={110} />
+          <Skeleton key={i} variant="rounded" width={250} height={190} />
         ))}
       </Box>
     )
@@ -164,7 +164,7 @@ function TemplateStep({
                 variant="outlined"
                 sx={{
                   width: { xs: '100%', sm: 250 },
-                  height: '100%',
+                  height: 190,
                   borderColor: selected?.id === t.id ? 'primary.main' : undefined,
                   borderWidth: selected?.id === t.id ? 2 : 1,
                 }}
