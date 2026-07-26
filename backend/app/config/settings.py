@@ -19,7 +19,10 @@ class Settings(BaseSettings):
 
     # Email (Resend). Leave RESEND_API_KEY blank to suppress sending in dev.
     RESEND_API_KEY: str = ""
-    EMAIL_FROM: str = "noreply@cns-tools.com"
+    # Avoid "no-reply" addresses (hurts deliverability/trust). Use a monitored
+    # mailbox and set EMAIL_REPLY_TO so recipients can actually reply.
+    EMAIL_FROM: str = "C&S Dev Services <notifications@cns-tools.com>"
+    EMAIL_REPLY_TO: str = ""
     EMAIL_TO: str = ""
 
     # Set True in production (requires HTTPS). False allows http-only local dev.
