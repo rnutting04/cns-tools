@@ -13,7 +13,7 @@ def send_email(to: str, subject: str, html: str) -> None:
         return
 
     import resend
-
+    
     resend.api_key = settings.RESEND_API_KEY
     resend.Emails.send(
         {

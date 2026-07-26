@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import apiClient, { setAccessToken } from '../api/client'
+import { queryClient } from '../api/queryClient'
 import type { User } from '../types'
 
 interface AuthContextValue {
@@ -20,6 +21,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(() => {
     setAccessToken(null)
     setUser(null)
+    // Drop all cached server state so the next user never sees this user's data.
+    queryClient.clear()
     // Best-effort server call to revoke the refresh token cookie.
     apiClient.post('/api/auth/logout').catch(() => {})
   }, [])

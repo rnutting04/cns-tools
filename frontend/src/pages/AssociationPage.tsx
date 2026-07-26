@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import Autocomplete from '@mui/material/Autocomplete'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
@@ -29,6 +30,7 @@ import SearchIcon from '@mui/icons-material/Search'
 import { DataGrid } from '@mui/x-data-grid'
 import type { GridColDef, GridRenderCellParams } from '@mui/x-data-grid'
 import apiClient from '../api/client'
+import { fetchAssociations, fetchUsers, queryKeys } from '../api/queries'
 import { useAuth } from '../context/AuthContext'
 import { hasRole } from '../utils/auth'
 import type { Association, User } from '../types'
@@ -161,9 +163,6 @@ function AssocRow({
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-let assocCache: Association[] | null = null
-let assocUsersCache: User[] | null = null
-
 export default function AssociationPage() {
   const { user } = useAuth()
   const theme = useTheme()
@@ -173,8 +172,28 @@ export default function AssociationPage() {
   const isAdmin = user ? hasRole(user, ['admin', 'super_admin']) : false
   const isSuperAdmin = user?.role === 'super_admin'
 
-  const [rows, setRows] = useState<Association[]>(assocCache ?? [])
-  const [loading, setLoading] = useState(assocCache === null)
+  const queryClient = useQueryClient()
+
+  const {
+    data: rows = [],
+    isLoading: loading,
+    isError,
+  } = useQuery({ queryKey: queryKeys.associations, queryFn: fetchAssociations })
+
+  // Users populate the "assign manager" dialog; only admins can open it.
+  const { data: usersData } = useQuery({
+    queryKey: queryKeys.users,
+    queryFn: fetchUsers,
+    enabled: isAdmin,
+  })
+  const allUsers = useMemo(
+    () => sortByName((usersData ?? []).filter((u) => u.is_active)),
+    [usersData],
+  )
+
+  const invalidateAssociations = () =>
+    queryClient.invalidateQueries({ queryKey: queryKeys.associations })
+
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
 
@@ -187,30 +206,13 @@ export default function AssociationPage() {
   const [deactivateTarget, setDeactivateTarget] = useState<Association | null>(null)
   const [deactivateLoading, setDeactivateLoading] = useState(false)
 
-  const [managerDialogAssoc, setManagerDialogAssoc] = useState<Association | null>(null)
-  const [allUsers, setAllUsers] = useState<User[]>([])
+  // Track the dialog by id and derive the association from the live query data,
+  // so assigning/removing a manager updates the dialog via cache invalidation.
+  const [managerDialogId, setManagerDialogId] = useState<string | null>(null)
+  const managerDialogAssoc = rows.find((a) => a.id === managerDialogId) ?? null
   const [selectedUserId, setSelectedUserId] = useState('')
   const [managerLoading, setManagerLoading] = useState(false)
   const [managerError, setManagerError] = useState<string | null>(null)
-
-  async function fetchAssociations(silent = false) {
-    if (!silent) setLoading(true)
-    setError(null)
-    try {
-      const { data } = await apiClient.get<Association[]>('/api/associations')
-      assocCache = data
-      setRows(data)
-    } catch {
-      setError('Failed to load associations.')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    fetchAssociations(assocCache !== null)
-  }, [])
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase()
@@ -251,7 +253,7 @@ export default function AssociationPage() {
         await apiClient.post('/api/associations', formData)
       }
       setFormOpen(false)
-      fetchAssociations(true)
+      invalidateAssociations()
     } catch (err: unknown) {
       setFormError(
         (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ??
@@ -268,7 +270,7 @@ export default function AssociationPage() {
     try {
       await apiClient.delete(`/api/associations/${deactivateTarget.id}`)
       setDeactivateTarget(null)
-      fetchAssociations(true)
+      invalidateAssociations()
     } catch {
       setError('Failed to deactivate association.')
     } finally {
@@ -276,23 +278,11 @@ export default function AssociationPage() {
     }
   }
 
-  const openManagerDialog = useCallback(
-    async (assoc: Association) => {
-      setManagerDialogAssoc(assoc)
-      setSelectedUserId('')
-      setManagerError(null)
-      if (isAdmin) {
-        if (assocUsersCache) {
-          setAllUsers(sortByName(assocUsersCache.filter((u) => u.is_active)))
-        } else {
-          const { data } = await apiClient.get<User[]>('/api/users')
-          assocUsersCache = data
-          setAllUsers(sortByName(data.filter((u) => u.is_active)))
-        }
-      }
-    },
-    [isAdmin],
-  )
+  const openManagerDialog = useCallback((assoc: Association) => {
+    setManagerDialogId(assoc.id)
+    setSelectedUserId('')
+    setManagerError(null)
+  }, [])
 
   async function handleAssignManager() {
     if (!managerDialogAssoc || !selectedUserId) return
@@ -302,10 +292,7 @@ export default function AssociationPage() {
       await apiClient.post(`/api/associations/${managerDialogAssoc.id}/managers`, {
         user_id: selectedUserId,
       })
-      const updated = await apiClient.get<Association[]>('/api/associations')
-      assocCache = updated.data
-      setRows(updated.data)
-      setManagerDialogAssoc(updated.data.find((a) => a.id === managerDialogAssoc.id) ?? null)
+      await invalidateAssociations()
       setSelectedUserId('')
     } catch (err: unknown) {
       setManagerError(
@@ -322,10 +309,7 @@ export default function AssociationPage() {
     setManagerError(null)
     try {
       await apiClient.delete(`/api/associations/${assocId}/managers/${userId}`)
-      const updated = await apiClient.get<Association[]>('/api/associations')
-      assocCache = updated.data
-      setRows(updated.data)
-      setManagerDialogAssoc(updated.data.find((a) => a.id === assocId) ?? null)
+      await invalidateAssociations()
     } catch {
       setManagerError('Failed to remove manager.')
     } finally {
@@ -424,7 +408,12 @@ export default function AssociationPage() {
         )}
       </Box>
 
-      {error && <ErrorAlert message={error} onClose={() => setError(null)} />}
+      {(error || isError) && (
+        <ErrorAlert
+          message={error ?? 'Failed to load associations.'}
+          onClose={() => setError(null)}
+        />
+      )}
 
       {/* Search */}
       <TextField
@@ -547,7 +536,7 @@ export default function AssociationPage() {
       {/* Manager assignment dialog */}
       <Dialog
         open={!!managerDialogAssoc}
-        onClose={() => setManagerDialogAssoc(null)}
+        onClose={() => setManagerDialogId(null)}
         fullScreen={fullScreen}
         maxWidth="sm"
         fullWidth
@@ -615,7 +604,7 @@ export default function AssociationPage() {
           </Box>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setManagerDialogAssoc(null)}>Close</Button>
+          <Button onClick={() => setManagerDialogId(null)}>Close</Button>
         </DialogActions>
       </Dialog>
     </Box>

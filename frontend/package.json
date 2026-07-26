@@ -19,6 +19,7 @@
     "@mui/icons-material": "^7.3.9",
     "@mui/material": "^7.3.9",
     "@mui/x-data-grid": "^8.28.2",
+    "@tanstack/react-query": "^5.101.4",
     "axios": "^1.14.0",
     "jwt-decode": "^4.0.0",
     "react": "^19.2.4",

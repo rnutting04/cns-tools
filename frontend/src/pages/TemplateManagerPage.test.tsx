@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import TemplateManagerPage from './TemplateManagerPage'
 import type { Template } from '../types'
 
@@ -41,9 +42,21 @@ beforeEach(() => {
   mockClient.get.mockResolvedValue({ data: [makeTemplate()] })
 })
 
+// Each render gets a fresh QueryClient so cached data never leaks between tests.
+function renderPage() {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } },
+  })
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <TemplateManagerPage />
+    </QueryClientProvider>,
+  )
+}
+
 describe('TemplateManagerPage', () => {
   it('renders rows with edit, duplicate, and deactivate actions', async () => {
-    render(<TemplateManagerPage />)
+    renderPage()
     await screen.findByText('Annual Notice')
 
     expect(screen.getByTestId('EditIcon')).toBeInTheDocument()
@@ -53,7 +66,7 @@ describe('TemplateManagerPage', () => {
 
   it('opens the edit dialog prefilled with the existing values', async () => {
     const user = userEvent.setup()
-    render(<TemplateManagerPage />)
+    renderPage()
     await screen.findByText('Annual Notice')
 
     await user.click(screen.getByTestId('EditIcon').closest('button')!)
@@ -69,7 +82,7 @@ describe('TemplateManagerPage', () => {
     const user = userEvent.setup()
     mockClient.patch.mockResolvedValue({ data: makeTemplate({ name: 'Updated Name' }) })
 
-    render(<TemplateManagerPage />)
+    renderPage()
     await screen.findByText('Annual Notice')
 
     await user.click(screen.getByTestId('EditIcon').closest('button')!)
@@ -89,7 +102,7 @@ describe('TemplateManagerPage', () => {
       data: makeTemplate({ id: 't2', name: 'Annual Notice (Copy)' }),
     })
 
-    render(<TemplateManagerPage />)
+    renderPage()
     await screen.findByText('Annual Notice')
 
     await user.click(screen.getByTestId('ContentCopyIcon').closest('button')!)

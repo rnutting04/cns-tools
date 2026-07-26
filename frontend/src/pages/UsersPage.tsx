@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Chip from '@mui/material/Chip'
@@ -33,6 +34,7 @@ import WorkIcon from '@mui/icons-material/Work'
 import { DataGrid } from '@mui/x-data-grid'
 import type { GridColDef, GridRenderCellParams } from '@mui/x-data-grid'
 import apiClient from '../api/client'
+import { fetchUsers, queryKeys } from '../api/queries'
 import { useAuth } from '../context/AuthContext'
 import type { User, UserRole } from '../types'
 import RoleBadge from '../components/layout/RoleBadge'
@@ -188,17 +190,22 @@ function UserRow({
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-let userCache: User[] | null = null
-
 export default function UsersPage() {
   const { user: currentUser } = useAuth()
+  const queryClient = useQueryClient()
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('md'))
   const fullScreen = useMediaQuery(theme.breakpoints.down('sm'))
   const isSuperAdmin = currentUser?.role === 'super_admin'
 
-  const [rows, setRows] = useState<User[]>(userCache ?? [])
-  const [loading, setLoading] = useState(userCache === null)
+  const {
+    data: rows = [],
+    isLoading: loading,
+    isError,
+  } = useQuery({ queryKey: queryKeys.users, queryFn: fetchUsers })
+
+  const invalidateUsers = () => queryClient.invalidateQueries({ queryKey: queryKeys.users })
+
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
 
@@ -226,25 +233,6 @@ export default function UsersPage() {
   const [permanentDeleteTarget, setPermanentDeleteTarget] = useState<User | null>(null)
   const [permanentDeleteLoading, setPermanentDeleteLoading] = useState(false)
 
-  async function fetchUsers(silent = false) {
-    if (!silent) setLoading(true)
-    setError(null)
-    try {
-      const { data } = await apiClient.get<User[]>('/api/users')
-      userCache = data
-      setRows(data)
-    } catch {
-      setError('Failed to load users.')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    fetchUsers(userCache !== null)
-  }, [])
-
   const filtered = useMemo(() => {
     const q = search.toLowerCase()
     if (!q) return rows
@@ -265,7 +253,7 @@ export default function UsersPage() {
     try {
       await apiClient.post('/api/users', createForm)
       setCreateOpen(false)
-      fetchUsers(true)
+      invalidateUsers()
     } catch (err: unknown) {
       setCreateError(
         (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ??
@@ -295,7 +283,7 @@ export default function UsersPage() {
     try {
       await apiClient.patch(`/api/users/${editTarget.id}`, editForm)
       setEditTarget(null)
-      fetchUsers(true)
+      invalidateUsers()
     } catch (err: unknown) {
       setEditError(
         (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ??
@@ -319,7 +307,7 @@ export default function UsersPage() {
     try {
       await apiClient.patch(`/api/users/${roleTarget.id}/role`, { role: selectedRole })
       setRoleTarget(null)
-      fetchUsers(true)
+      invalidateUsers()
     } catch (err: unknown) {
       setRoleError(
         (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ??
@@ -350,7 +338,7 @@ export default function UsersPage() {
     try {
       await apiClient.delete(`/api/users/${deactivateTarget.id}`)
       setDeactivateTarget(null)
-      fetchUsers(true)
+      invalidateUsers()
     } catch {
       setError('Failed to deactivate user.')
     } finally {
@@ -364,7 +352,7 @@ export default function UsersPage() {
     try {
       await apiClient.delete(`/api/users/${permanentDeleteTarget.id}/permanent`)
       setPermanentDeleteTarget(null)
-      fetchUsers(true)
+      invalidateUsers()
     } catch (err: unknown) {
       const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
       setError(detail ?? 'Failed to delete user.')
@@ -487,7 +475,9 @@ export default function UsersPage() {
         </Button>
       </Box>
 
-      {error && <ErrorAlert message={error} onClose={() => setError(null)} />}
+      {(error || isError) && (
+        <ErrorAlert message={error ?? 'Failed to load users.'} onClose={() => setError(null)} />
+      )}
 
       {/* Search */}
       <TextField

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import Autocomplete from '@mui/material/Autocomplete'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
@@ -29,8 +29,16 @@ import BallotOutlinedIcon from '@mui/icons-material/BallotOutlined'
 import CampaignOutlinedIcon from '@mui/icons-material/CampaignOutlined'
 import type { SvgIconComponent } from '@mui/icons-material'
 import Skeleton from '@mui/material/Skeleton'
+import { useQuery } from '@tanstack/react-query'
 import SessionJobsPanel from '../components/common/SessionJobsPanel'
 import apiClient from '../api/client'
+import {
+  fetchAssociations,
+  fetchManagers,
+  fetchTemplates,
+  queryKeys,
+  type ManagerOption,
+} from '../api/queries'
 import { useAuth } from '../context/AuthContext'
 import ErrorAlert from '../components/layout/ErrorAlert'
 import BallotCandidateEditor from '../components/letters/BallotCandidateEditor'
@@ -44,15 +52,6 @@ const AUTO_POPULATE_KEYS = new Set(['s0ke'])
 
 type RendererType = 'simple' | 'proxy' | 'ballot' | 'electronic_ballot' | 'notice_candidacy'
 type FieldValueMap = Record<string, unknown>
-
-type ManagerOption = {
-  id: string
-  fname: string
-  lname: string
-  email?: string
-  title?: string
-  is_active?: boolean
-}
 
 function getRendererType(template: Template | null): RendererType {
   return (template?.renderer_type ?? 'simple') as RendererType
@@ -753,39 +752,45 @@ export default function LetterGeneratorPage() {
   const { user } = useAuth()
   const { trackJob } = useJobs()
   const [activeStep, setActiveStep] = useState(0)
-  const [templates, setTemplates] = useState<Template[]>([])
-  const [associations, setAssociations] = useState<Association[]>([])
-  const [managers, setManagers] = useState<ManagerOption[]>([])
-  const [loadingData, setLoadingData] = useState(true)
-  const [loadError, setLoadError] = useState<string | null>(null)
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null)
   const [fieldValues, setFieldValues] = useState<FieldValueMap>({})
   const [submitting, setSubmitting] = useState(false)
   const [genError, setGenError] = useState<string | null>(null)
   const [noticeWarningOpen, setNoticeWarningOpen] = useState(false)
 
-  useEffect(() => {
-    Promise.all([
-      apiClient.get<Template[]>('/api/templates'),
-      apiClient.get<Association[]>('/api/associations'),
-      apiClient.get<ManagerOption[]>('/api/managers'),
-    ])
-      .then(([tmplRes, assocRes, managerRes]) => {
-        setTemplates(tmplRes.data)
-        setAssociations(
-          assocRes.data
-            .filter((a) => a.is_active)
-            .sort((a, b) => a.legal_name.localeCompare(b.legal_name)),
-        )
-        setManagers(
-          managerRes.data
-            .filter((m) => m.is_active !== false)
-            .sort((a, b) => `${a.lname} ${a.fname}`.localeCompare(`${b.lname} ${b.fname}`)),
-        )
-      })
-      .catch(() => setLoadError('Failed to load data. Please refresh.'))
-      .finally(() => setLoadingData(false))
-  }, [])
+  const templatesQuery = useQuery({ queryKey: queryKeys.templates, queryFn: fetchTemplates })
+  const associationsQuery = useQuery({
+    queryKey: queryKeys.associations,
+    queryFn: fetchAssociations,
+    // Only active associations, alphabetized by legal name.
+    select: (data) =>
+      data.filter((a) => a.is_active).sort((a, b) => a.legal_name.localeCompare(b.legal_name)),
+  })
+  const managersQuery = useQuery({
+    queryKey: queryKeys.managers,
+    queryFn: fetchManagers,
+    // Only active managers, alphabetized by name.
+    select: (data) =>
+      data
+        .filter((m) => m.is_active !== false)
+        .sort((a, b) => `${a.lname} ${a.fname}`.localeCompare(`${b.lname} ${b.fname}`)),
+  })
+
+  const templates = templatesQuery.data ?? []
+  const associations = associationsQuery.data ?? []
+  const managers = managersQuery.data ?? []
+  const loadingData =
+    templatesQuery.isLoading || associationsQuery.isLoading || managersQuery.isLoading
+  const loadError =
+    templatesQuery.isError || associationsQuery.isError || managersQuery.isError
+      ? 'Failed to load data. Please refresh.'
+      : null
+
+  const retryLoad = () => {
+    void templatesQuery.refetch()
+    void associationsQuery.refetch()
+    void managersQuery.refetch()
+  }
 
   const handleTemplateSelect = useCallback((template: Template) => {
     setSelectedTemplate(template)
@@ -927,7 +932,7 @@ export default function LetterGeneratorPage() {
 
       {loadError && (
         <Box mb={2}>
-          <ErrorAlert message={loadError} onClose={() => setLoadError(null)} />
+          <ErrorAlert message={loadError} onClose={retryLoad} />
         </Box>
       )}
 

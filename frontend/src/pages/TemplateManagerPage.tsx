@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Chip from '@mui/material/Chip'
@@ -29,6 +30,7 @@ import UploadFileIcon from '@mui/icons-material/UploadFile'
 import { DataGrid } from '@mui/x-data-grid'
 import type { GridColDef, GridRenderCellParams } from '@mui/x-data-grid'
 import apiClient from '../api/client'
+import { fetchTemplates, queryKeys } from '../api/queries'
 import ErrorAlert from '../components/layout/ErrorAlert'
 import type { FieldRow, FieldDefinition, Template, RendererType } from '../types'
 
@@ -476,52 +478,38 @@ function TemplateRow({
   )
 }
 
-let templateCache: Template[] | null = null
-
 export default function TemplateManagerPage() {
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('md'))
+  const queryClient = useQueryClient()
 
-  const [templates, setTemplates] = useState<Template[]>(templateCache ?? [])
-  const [loading, setLoading] = useState(templateCache === null)
+  const {
+    data: templates = [],
+    isLoading: loading,
+    isError,
+  } = useQuery({ queryKey: queryKeys.templates, queryFn: fetchTemplates })
+
   const [error, setError] = useState<string | null>(null)
   const [dialog, setDialog] = useState<{ mode: DialogMode; template?: Template } | null>(null)
-
-  const fetchTemplates = (silent = false) => {
-    if (!silent) setLoading(true)
-    setError(null)
-
-    apiClient
-      .get<Template[]>('/api/templates')
-      .then((res) => {
-        templateCache = res.data
-        setTemplates(res.data)
-      })
-      .catch(() => setError('Failed to load templates.'))
-      .finally(() => setLoading(false))
-  }
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    fetchTemplates(templateCache !== null)
-  }, [])
 
   const handleDeactivate = async (id: string) => {
     try {
       await apiClient.delete(`/api/templates/${id}`)
       // Backend list only returns active templates, so refetch to stay in sync.
-      fetchTemplates(true)
+      queryClient.invalidateQueries({ queryKey: queryKeys.templates })
     } catch {
       setError('Failed to deactivate template.')
     }
   }
 
+  // Reflect the server's response straight into the cached list so the row
+  // updates immediately without waiting for a refetch.
   const handleSaved = (t: Template, mode: DialogMode) => {
-    if (mode === 'edit') {
-      setTemplates((prev) => prev.map((existing) => (existing.id === t.id ? t : existing)))
-    } else {
-      setTemplates((prev) => [t, ...prev])
-    }
+    queryClient.setQueryData<Template[]>(queryKeys.templates, (prev = []) =>
+      mode === 'edit'
+        ? prev.map((existing) => (existing.id === t.id ? t : existing))
+        : [t, ...prev],
+    )
   }
 
   const columns: GridColDef<Template>[] = [
@@ -628,9 +616,12 @@ export default function TemplateManagerPage() {
         </Button>
       </Box>
 
-      {error && (
+      {(error || isError) && (
         <Box mb={2}>
-          <ErrorAlert message={error} onClose={() => setError(null)} />
+          <ErrorAlert
+            message={error ?? 'Failed to load templates.'}
+            onClose={() => setError(null)}
+          />
         </Box>
       )}
 
