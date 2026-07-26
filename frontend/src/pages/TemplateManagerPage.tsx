@@ -251,7 +251,8 @@ function TemplateDialog({
       form.append('file', file)
     }
 
-    const config = { headers: { 'Content-Type': 'multipart/form-data' } }
+    // File upload — allow more time than the default request timeout.
+    const config = { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 60_000 }
 
     try {
       let res

@@ -126,7 +126,10 @@ export default function BudgetGeneratorPage() {
     setSubmitError(null)
 
     try {
-      const res = await apiClient.post<{ job_id: string }>('/api/budget/generate', formData)
+      // File upload (PDF + Excel) — allow well beyond the default request timeout.
+      const res = await apiClient.post<{ job_id: string }>('/api/budget/generate', formData, {
+        timeout: 120_000,
+      })
       trackJob(res.data.job_id, 'budget')
 
       // Reset immediately so another job can be submitted without waiting.

@@ -326,6 +326,8 @@ export default function AuditPage() {
 
       const response = await apiClient.get(`/api/audit/export?${p.toString()}`, {
         responseType: 'blob',
+        // Exports can be large — don't let the default request timeout cut them off.
+        timeout: 120_000,
       })
       const url = URL.createObjectURL(response.data as Blob)
       const a = document.createElement('a')

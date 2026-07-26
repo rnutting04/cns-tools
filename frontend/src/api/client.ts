@@ -15,6 +15,9 @@ export function getAccessToken(): string | null {
 const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_URL,
   withCredentials: true, // send the httpOnly refresh_token cookie on every request
+  // Fail a stalled request instead of hanging forever — surfaces the retry UI
+  // rather than leaving the page stuck on loading skeletons.
+  timeout: 20_000,
 })
 
 apiClient.interceptors.request.use((config) => {
