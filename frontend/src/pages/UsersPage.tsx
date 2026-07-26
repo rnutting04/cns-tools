@@ -204,11 +204,13 @@ export default function UsersPage() {
     isError,
   } = useQuery({ queryKey: queryKeys.users, queryFn: fetchUsers })
 
-  // A manager is a user, so any user change can affect the /api/managers list
-  // (used by the letter generator). Invalidate both so that cache stays fresh.
+  // A user's data is embedded in other cached lists: the /api/managers list
+  // (letter generator) and the managers nested in each association. Invalidate
+  // all of them so any user change is reflected immediately for the editor.
   const invalidateUsers = () => {
     queryClient.invalidateQueries({ queryKey: queryKeys.users })
     queryClient.invalidateQueries({ queryKey: queryKeys.managers })
+    queryClient.invalidateQueries({ queryKey: queryKeys.associations })
   }
 
   const [error, setError] = useState<string | null>(null)
