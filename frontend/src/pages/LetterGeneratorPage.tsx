@@ -4,11 +4,11 @@ import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Card from '@mui/material/Card'
 import CardActionArea from '@mui/material/CardActionArea'
-import CardContent from '@mui/material/CardContent'
 import Chip from '@mui/material/Chip'
 import CircularProgress from '@mui/material/CircularProgress'
 import Divider from '@mui/material/Divider'
 import FormControl from '@mui/material/FormControl'
+import InputAdornment from '@mui/material/InputAdornment'
 import InputLabel from '@mui/material/InputLabel'
 import MenuItem from '@mui/material/MenuItem'
 import Paper from '@mui/material/Paper'
@@ -19,9 +19,15 @@ import Stepper from '@mui/material/Stepper'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import useMediaQuery from '@mui/material/useMediaQuery'
-import { useTheme } from '@mui/material/styles'
+import { alpha, useTheme } from '@mui/material/styles'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import SendIcon from '@mui/icons-material/Send'
+import SearchIcon from '@mui/icons-material/Search'
+import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined'
+import HowToVoteOutlinedIcon from '@mui/icons-material/HowToVoteOutlined'
+import BallotOutlinedIcon from '@mui/icons-material/BallotOutlined'
+import CampaignOutlinedIcon from '@mui/icons-material/CampaignOutlined'
+import type { SvgIconComponent } from '@mui/icons-material'
 import Skeleton from '@mui/material/Skeleton'
 import SessionJobsPanel from '../components/common/SessionJobsPanel'
 import apiClient from '../api/client'
@@ -60,11 +66,18 @@ function getManagerFieldKey(template: Template | null): string {
   return template?.fields.find((f) => f.type === 'manager')?.key ?? 'manager_id'
 }
 
-const RENDERER_CHIP_COLOR: Record<string, 'info' | 'secondary' | 'warning'> = {
-  proxy: 'info',
-  ballot: 'secondary',
-  electronic_ballot: 'secondary',
-  notice_candidacy: 'warning',
+type BrandColor = 'primary' | 'secondary' | 'warning'
+
+const RENDERER_META: Record<RendererType, { color: BrandColor; Icon: SvgIconComponent }> = {
+  simple: { color: 'primary', Icon: DescriptionOutlinedIcon },
+  proxy: { color: 'primary', Icon: HowToVoteOutlinedIcon },
+  ballot: { color: 'secondary', Icon: BallotOutlinedIcon },
+  electronic_ballot: { color: 'secondary', Icon: BallotOutlinedIcon },
+  notice_candidacy: { color: 'warning', Icon: CampaignOutlinedIcon },
+}
+
+function getRendererMeta(type?: string) {
+  return RENDERER_META[(type ?? 'simple') as RendererType] ?? RENDERER_META.simple
 }
 
 function formatRendererType(type?: string): string {
@@ -136,7 +149,7 @@ function TemplateStep({
     return (
       <Box display="flex" flexWrap="wrap" gap={2}>
         {[0, 1, 2, 3].map((i) => (
-          <Skeleton key={i} variant="rounded" width={250} height={190} />
+          <Skeleton key={i} variant="rounded" width={256} height={132} sx={{ borderRadius: 2.5 }} />
         ))}
       </Box>
     )
@@ -156,6 +169,15 @@ function TemplateStep({
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           sx={{ mb: 3, maxWidth: 360 }}
+          slotProps={{
+            input: {
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon fontSize="small" color="action" />
+                </InputAdornment>
+              ),
+            },
+          }}
         />
       )}
 
@@ -164,69 +186,127 @@ function TemplateStep({
       )}
 
       {sortedCategories.map((cat) => (
-        <Box key={cat} mb={3}>
-          <Typography variant="subtitle2" color="text.secondary" mb={1}>
+        <Box key={cat} mb={3.5}>
+          <Typography
+            variant="overline"
+            color="text.secondary"
+            sx={{ fontWeight: 700, letterSpacing: '0.08em', display: 'block', mb: 1.25 }}
+          >
             {cat}
           </Typography>
 
           <Box display="flex" flexWrap="wrap" gap={2}>
-            {byCategory[cat].map((t) => (
-              <Card
-                key={t.id}
-                variant="outlined"
-                sx={{
-                  position: 'relative',
-                  width: { xs: '100%', sm: 250 },
-                  height: 190,
-                  borderRadius: 2,
-                  borderColor: selected?.id === t.id ? 'primary.main' : 'divider',
-                  borderWidth: selected?.id === t.id ? 2 : 1,
-                  transition: 'box-shadow 0.15s ease, border-color 0.15s ease',
-                  '&:hover': {
-                    borderColor: 'primary.main',
-                    boxShadow: 2,
-                  },
-                }}
-              >
-                {selected?.id === t.id && (
-                  <CheckCircleIcon
-                    color="primary"
-                    sx={{
-                      position: 'absolute',
-                      top: 10,
-                      right: 10,
-                      fontSize: 22,
-                      bgcolor: 'background.paper',
-                      borderRadius: '50%',
-                      pointerEvents: 'none',
-                    }}
-                  />
-                )}
-                <CardActionArea
-                  onClick={() => onSelect(t)}
-                  sx={{ p: 0.5, height: '100%', alignItems: 'flex-start' }}
-                >
-                  <CardContent>
-                    <Typography variant="body1" fontWeight={600} pr={selected?.id === t.id ? 3 : 0}>
-                      {t.name}
-                    </Typography>
+            {byCategory[cat].map((t) => {
+              const isSelected = selected?.id === t.id
+              const meta = getRendererMeta(t.renderer_type)
+              const fieldCount = t.fields.filter((f) => !AUTO_POPULATE_KEYS.has(f.key)).length
 
-                    <Typography variant="caption" color="text.secondary" display="block" mb={1.5}>
-                      {t.fields.filter((f) => !AUTO_POPULATE_KEYS.has(f.key)).length} field(s)
-                    </Typography>
+              return (
+                <Card
+                  key={t.id}
+                  variant="outlined"
+                  sx={(theme) => ({
+                    position: 'relative',
+                    width: { xs: '100%', sm: 256 },
+                    height: 132,
+                    borderRadius: 2.5,
+                    borderColor: isSelected ? `${meta.color}.main` : 'divider',
+                    borderWidth: isSelected ? 2 : 1,
+                    bgcolor: isSelected
+                      ? alpha(theme.palette[meta.color].main, 0.04)
+                      : 'background.paper',
+                    boxShadow: 'none',
+                    transition: theme.transitions.create(
+                      ['box-shadow', 'border-color', 'transform'],
+                      { duration: theme.transitions.duration.shorter },
+                    ),
+                    '&:hover': {
+                      borderColor: `${meta.color}.main`,
+                      boxShadow: `0 6px 16px ${alpha(theme.palette[meta.color].main, 0.16)}`,
+                      transform: 'translateY(-2px)',
+                    },
+                  })}
+                >
+                  {isSelected && (
+                    <CheckCircleIcon
+                      sx={{
+                        position: 'absolute',
+                        top: 10,
+                        right: 10,
+                        fontSize: 20,
+                        color: `${meta.color}.main`,
+                        bgcolor: 'background.paper',
+                        borderRadius: '50%',
+                        pointerEvents: 'none',
+                        zIndex: 1,
+                      }}
+                    />
+                  )}
+                  <CardActionArea
+                    onClick={() => onSelect(t)}
+                    sx={{
+                      height: '100%',
+                      p: 2,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'stretch',
+                      justifyContent: 'space-between',
+                    }}
+                  >
+                    <Box display="flex" alignItems="flex-start" gap={1.5}>
+                      <Box
+                        sx={(theme) => ({
+                          width: 40,
+                          height: 40,
+                          flexShrink: 0,
+                          borderRadius: 2,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          bgcolor: alpha(theme.palette[meta.color].main, 0.12),
+                          color: `${meta.color}.main`,
+                        })}
+                      >
+                        <meta.Icon fontSize="small" />
+                      </Box>
+
+                      <Box minWidth={0} flex={1} pr={isSelected ? 2.5 : 0}>
+                        <Typography
+                          variant="body2"
+                          fontWeight={600}
+                          lineHeight={1.3}
+                          sx={{
+                            display: '-webkit-box',
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: 'vertical',
+                            overflow: 'hidden',
+                          }}
+                        >
+                          {t.name}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {fieldCount} field{fieldCount === 1 ? '' : 's'}
+                        </Typography>
+                      </Box>
+                    </Box>
 
                     <Chip
                       label={formatRendererType(t.renderer_type)}
                       size="small"
-                      color={RENDERER_CHIP_COLOR[t.renderer_type ?? 'simple'] ?? 'default'}
-                      variant={
-                        RENDERER_CHIP_COLOR[t.renderer_type ?? 'simple'] ? 'filled' : 'outlined'
-                      }
+                      sx={(theme) => ({
+                        alignSelf: 'flex-start',
+                        height: 22,
+                        fontWeight: 600,
+                        fontSize: '0.7rem',
+                        border: 'none',
+                        color: theme.palette[meta.color].main,
+                        bgcolor: alpha(theme.palette[meta.color].main, 0.12),
+                      })}
                     />
-                  </CardContent>
-                </CardActionArea>
-              </Card>
-            ))}
+                  </CardActionArea>
+                </Card>
+              )
+            })}
           </Box>
         </Box>
       ))}
