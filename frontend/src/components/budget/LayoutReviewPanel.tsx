@@ -51,15 +51,7 @@ function columnLetter(index: number | null): string {
   return out
 }
 
-function Fact({
-  label,
-  value,
-  hint,
-}: {
-  label: string
-  value: string
-  hint?: string
-}) {
+function Fact({ label, value, hint }: { label: string; value: string; hint?: string }) {
   const body = (
     <Box minWidth={0}>
       <Typography variant="caption" color="text.secondary" display="block" noWrap>
@@ -128,9 +120,7 @@ export default function LayoutReviewPanel({
 
   // Sections are keyed "SECTION::Sheet Heading" in subtotal_rows.
   const subtotalRow = (s: LayoutReview['sections'][number]) =>
-    review.subtotal_rows[
-      s.source_section ? `${s.section}::${s.source_section}` : s.section
-    ] ?? null
+    review.subtotal_rows[s.source_section ? `${s.section}::${s.source_section}` : s.section] ?? null
 
   return (
     <Paper variant="outlined" sx={{ p: 2.5, borderColor: 'warning.main' }}>
@@ -141,8 +131,8 @@ export default function LayoutReviewPanel({
         </Typography>
       </Stack>
       <Typography variant="body2" color="text.secondary" mb={2}>
-        {associationName} — {priorBudgetFilename}. Below is everything the parser read out of
-        this workbook. Check it against the spreadsheet before the budget is built on it.
+        {associationName} — {priorBudgetFilename}. Below is everything the parser read out of this
+        workbook. Check it against the spreadsheet before the budget is built on it.
       </Typography>
 
       {/* The balance check: the fastest signal that a parse is wrong. */}
@@ -178,8 +168,8 @@ export default function LayoutReviewPanel({
         // blank space that implies something is wrong.
         <Alert severity="info" sx={{ mb: 2 }}>
           <Typography variant="body2">
-            No problems detected — the automated checks all passed. Confirm the figures below
-            match the spreadsheet and the run will continue.
+            No problems detected — the automated checks all passed. Confirm the figures below match
+            the spreadsheet and the run will continue.
           </Typography>
         </Alert>
       )}
@@ -271,8 +261,8 @@ export default function LayoutReviewPanel({
 
       {/* Section breakdown — compare these against the workbook's own subtotals. */}
       <Typography variant="caption" color="text.secondary" display="block" mb={1}>
-        Sections read from the workbook — each keeps its own subtotal row, so these
-        should match the subtotals printed in your spreadsheet line for line
+        Sections read from the workbook — each keeps its own subtotal row, so these should match the
+        subtotals printed in your spreadsheet line for line
       </Typography>
       <Stack spacing={0.5} mb={1}>
         {review.sections.map((s) => (
@@ -290,10 +280,7 @@ export default function LayoutReviewPanel({
                 {s.label}
               </Typography>
               {s.source_section && SECTION_LABELS[s.section] && (
-                <Tooltip
-                  title={`Treated as ${SECTION_LABELS[s.section]} for budget totals`}
-                  arrow
-                >
+                <Tooltip title={`Treated as ${SECTION_LABELS[s.section]} for budget totals`} arrow>
                   <Chip
                     label={SECTION_LABELS[s.section]}
                     size="small"

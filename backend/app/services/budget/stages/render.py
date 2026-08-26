@@ -155,9 +155,7 @@ def _rows_for_sections(
     (MCP: BUILDING AND GROUNDS + MAINTENANCE), so grand totals sum all of them.
     """
     return sorted(
-        row
-        for group, row in subtotal_excel_row.items()
-        if group_section.get(group) in section_keys
+        row for group, row in subtotal_excel_row.items() if group_section.get(group) in section_keys
     )
 
 
@@ -577,7 +575,9 @@ def run(budget: BudgetOutput, review_flags: list[str], prev_year_xlsx_bytes: byt
                 _write_cols(row, formulas)
 
             elif line.code == "total_income":
-                sec_rows = _rows_for_sections(subtotal_excel_row, group_section, _INCOME_SECTION_KEYS)
+                sec_rows = _rows_for_sections(
+                    subtotal_excel_row, group_section, _INCOME_SECTION_KEYS
+                )
                 raw = _raw_vals(line)
                 formulas = {col: _sum_formula(col, sec_rows) or raw.get(col) for col in active_cols}
                 _write_cols(row, formulas)

@@ -118,7 +118,9 @@ def run(
             # Label the subtotal after the sheet's heading when the section is
             # split, so render matches it to that heading's own TOTAL row.
             source_label = group_key.split("::", 1)[-1]
-            label = SUBTOTAL_LABELS[section] if len(groups) == 1 else f"Total {source_label.title()}"
+            label = (
+                SUBTOTAL_LABELS[section] if len(groups) == 1 else f"Total {source_label.title()}"
+            )
             all_lines.append(
                 BudgetLine(
                     code=f"subtotal_{_make_code(group_key)}",

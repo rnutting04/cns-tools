@@ -264,10 +264,13 @@ def run(ingest: IngestResult) -> None:
         warn_limit = max(_tolerance(combined_pdf), abs(combined_pdf) * _EXPENSE_WARN_PCT)
 
         if diff > warn_limit:
+            # Kept out of the f-string: a multi-line expression inside braces is
+            # PEP 701 syntax and only parses on Python 3.12+, while CI runs 3.11.
+            def _section_sum(key: str) -> float:
+                return sum(ln.ytd_actual or 0.0 for ln in ingest.lines if ln.section.value == key)
+
             per_section = "; ".join(
-                f"{key}: extracted ${sum(
-                    ln.ytd_actual or 0.0 for ln in ingest.lines if ln.section.value == key
-                ):,.2f} vs PDF ${total:,.2f}"
+                f"{key}: extracted ${_section_sum(key):,.2f} vs PDF ${total:,.2f}"
                 for key, total in sorted(pdf_expense_sections.items())
             )
             mismatches.append(

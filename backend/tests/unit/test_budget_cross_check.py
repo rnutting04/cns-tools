@@ -36,7 +36,7 @@ class TestExpenseReclassification:
             ],
             {
                 "ADMINISTRATION": 5166.75,  # includes the $61.25
-                "MAINTENANCE": 48448.63,    # includes the $250.58
+                "MAINTENANCE": 48448.63,  # includes the $250.58
                 "OTHER": 6157.61,
             },
         )

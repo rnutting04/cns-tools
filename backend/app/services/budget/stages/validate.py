@@ -70,8 +70,7 @@ def run(budget: BudgetOutput) -> list[str]:
             member_sum = sum(
                 getattr(line, col) or 0.0
                 for line in budget.lines
-                if not line.is_computed
-                and (line.subtotal_group or line.section.value) == group
+                if not line.is_computed and (line.subtotal_group or line.section.value) == group
             )
             subtotal_val = getattr(subtotal_line, col) or 0.0
             if abs(member_sum - subtotal_val) > _TOLERANCE:

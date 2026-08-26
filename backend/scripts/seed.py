@@ -8,14 +8,6 @@ import bcrypt
 from dotenv import load_dotenv
 
 from app.config.settings import ENV_FILE
-
-# The app reads .env through pydantic-settings, which populates the Settings
-# object but never exports anything into os.environ. The seed passwords are also
-# not declared as Settings fields (and Config.extra = "ignore" drops them), so
-# without this they are unreachable from both places even when set in .env.
-# Loading the same ENV_FILE keeps the two from drifting apart.
-load_dotenv(ENV_FILE)
-
 from app.database import SessionLocal
 from app.models.association import Association, UserAssociation
 from app.models.budget_job import BudgetJob
@@ -28,6 +20,13 @@ def hash_password(password: str) -> str:
 
 
 def seed():
+    # The app reads .env through pydantic-settings, which populates the Settings
+    # object but never exports anything into os.environ. The seed passwords are
+    # also not declared as Settings fields (Config.extra = "ignore" drops them),
+    # so without this they are unreachable from both places even when set in
+    # .env. Loading the same ENV_FILE keeps the two from drifting apart.
+    load_dotenv(ENV_FILE)
+
     admin_password = os.environ.get("SEED_ADMIN_PASSWORD")
     manager_password = os.environ.get("SEED_MANAGER_PASSWORD")
 
