@@ -35,6 +35,13 @@ class BudgetJob(Base):
     error_code = Column(String(50), nullable=True)
     error_detail = Column(JSON, nullable=True)
 
+    # Layout review. When workbook structure detection is not confident and no
+    # confirmed profile matches, the run parks here with
+    # current_step == "awaiting_layout_review" and layout_review holding the
+    # detected structure plus a preview for the reviewer. Confirming resumes it.
+    layout_signature = Column(String(32), nullable=True, index=True)
+    layout_review = Column(JSON, nullable=True)
+
     # Reuses the jobstatus enum already in the DB (create_type=False).
     status = Column(
         SAEnum(JobStatus, name="jobstatus", create_type=False),

@@ -189,6 +189,89 @@ export interface BudgetJobDetail {
   created_at: string
 }
 
+/** current_step value set while a run is parked for workbook-layout confirmation. */
+export const AWAITING_LAYOUT_REVIEW = 'awaiting_layout_review'
+
+export interface LayoutValueColumn {
+  col: number
+  year: number | null
+  role: 'adopted' | 'projected' | 'actual'
+  header: string
+}
+
+export interface LayoutSectionSummary {
+  /** Normalized budget section used for the pipeline's arithmetic. */
+  section: string
+  /** The heading as written in the workbook, when it has one. */
+  source_section: string | null
+  /** What to display: the sheet's own heading, else the normalized name. */
+  label: string
+  count: number
+  total: number
+  sample: { label: string; amount: number | null; note: string | null }[]
+}
+
+/**
+ * What the backend detected about an association's workbook, shown to a
+ * reviewer when detection was not confident enough to run unattended.
+ */
+export interface LayoutReview {
+  signature: string
+  sheet_title: string
+  all_sheets: string[]
+  header_row: number
+  data_start_row: number
+  label_col: number
+  gl_col: number | null
+  prior_col: number | null
+  prior_col_header: string | null
+  projected_col: number | null
+  projected_col_header: string | null
+  proposed_col: number | null
+  proposed_col_header: string | null
+  notes_col: number | null
+  reserve_sheet: string | null
+  reserve_items: number
+  /** subtotal group -> the sheet row that prints that subtotal. */
+  subtotal_rows: Record<string, number>
+  value_cols: LayoutValueColumn[]
+  line_count: number
+  sections: LayoutSectionSummary[]
+  revenue_total: number
+  expense_total: number
+  balanced: boolean
+  notes_captured: number
+  warnings: string[]
+}
+
+export interface LayoutCorrections {
+  sheet_title?: string
+  prior_col?: number
+}
+
+export interface BudgetJobStatus {
+  job_id: string
+  status: JobStatus
+  current_step: string | null
+  review_flag_count: number | null
+  download_url: string | null
+  error_code: string | null
+  error_detail: Record<string, unknown> | null
+  layout_review: LayoutReview | null
+}
+
+export interface LayoutProfile {
+  id: string
+  signature: string
+  sheet_title: string
+  confirmed: boolean
+  use_count: number
+  example_association: string | null
+  example_filename: string | null
+  warnings: string[] | null
+  confirmed_at: string | null
+}
+
 export interface LetterGenerateRequest {
   template_id: string
   association_id: string

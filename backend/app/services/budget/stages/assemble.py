@@ -84,28 +84,54 @@ def run(
             # carry the prior-year amount forward as the starting proposed value.
             proposed=proj if proj is not None else (ingested.prior_year or 0.0),
             annualization_review_flag=ingested.label in review_labels,
+            # Qualified by section: a sheet can reuse one heading for two
+            # different sections (MCP has "RESERVES" as both a revenue and an
+            # expense header), and an unqualified key would merge them.
+            subtotal_group=(
+                f"{ingested.section.value}::{ingested.source_section}"
+                if ingested.source_section
+                else ingested.section.value
+            ),
         )
         lines_by_section[ingested.section].append(line)
 
-    # Build output lines: member lines followed by a subtotal row per section.
+    # Build output lines: member lines followed by a subtotal row per group.
+    #
+    # A group is the workbook's OWN section heading where it has one, so a sheet
+    # that keeps "BUILDING AND GROUNDS" and "MAINTENANCE" apart — each with its
+    # own printed subtotal — gets a subtotal for each, written back into its own
+    # row. Grouping by BudgetSection alone merged them into a single figure and
+    # left the second printed subtotal stale. Groups stay in sheet order within
+    # their section, so the output mirrors the source layout.
     all_lines: list[BudgetLine] = []
     for section in SECTION_ORDER:
         members = lines_by_section.get(section, [])
         if not members:
             continue
-        all_lines.extend(members)
-        all_lines.append(
-            BudgetLine(
-                code=f"subtotal_{section.value.lower()}",
-                label=SUBTOTAL_LABELS[section],
-                section=section,
-                gl_account=None,
-                prior_year=_subtotal(members, "prior_year"),
-                projected=_subtotal(members, "projected"),
-                proposed=_subtotal(members, "proposed"),
-                is_computed=True,
+
+        groups: dict[str, list[BudgetLine]] = {}
+        for member in members:
+            groups.setdefault(member.subtotal_group or section.value, []).append(member)
+
+        for group_key, group_members in groups.items():
+            all_lines.extend(group_members)
+            # Label the subtotal after the sheet's heading when the section is
+            # split, so render matches it to that heading's own TOTAL row.
+            source_label = group_key.split("::", 1)[-1]
+            label = SUBTOTAL_LABELS[section] if len(groups) == 1 else f"Total {source_label.title()}"
+            all_lines.append(
+                BudgetLine(
+                    code=f"subtotal_{_make_code(group_key)}",
+                    label=label,
+                    section=section,
+                    gl_account=None,
+                    prior_year=_subtotal(group_members, "prior_year"),
+                    projected=_subtotal(group_members, "projected"),
+                    proposed=_subtotal(group_members, "proposed"),
+                    is_computed=True,
+                    subtotal_group=group_key,
+                )
             )
-        )
 
     # Grand totals.
     income_sections = [BudgetSection.REVENUE_OPERATING, BudgetSection.REVENUE_RESERVES]
@@ -168,16 +194,27 @@ def run(
     all_lines.extend([total_income, total_operating, total_expense, surplus])
 
     # Reserve schedule — decrement remaining_life_years by one.
+    # Prefer the schedule read straight from the workbook's reserve sheet; fall
+    # back to one supplied by the caller. A component at remaining life 0 is due
+    # this year, so the decrement is floored rather than allowed to go negative.
+    schedule = ingest.reserve_schedule or prior_reserve_schedule or []
     reserve_items: list[ReserveItem] = []
-    for entry in prior_reserve_schedule or []:
+    for entry in schedule:
         reserve_items.append(
             ReserveItem(
                 code=_make_code(entry["label"]),
                 label=entry["label"],
                 total_life_years=entry["total_life_years"],
-                remaining_life_years=entry["remaining_life_years"] - 1,
+                remaining_life_years=max(0, entry["remaining_life_years"] - 1),
                 replacement_cost=entry["replacement_cost"],
-                current_balance=ingest.reserve_balances.get(entry["label"], 0.0),
+                # Workbook balance when we have one; otherwise whatever the AI
+                # recovered from the PDF.
+                current_balance=(
+                    entry.get("current_balance")
+                    if entry.get("current_balance") is not None
+                    else ingest.reserve_balances.get(entry["label"], 0.0)
+                ),
+                required_deposit=entry.get("required_deposit"),
             )
         )
 
@@ -188,4 +225,5 @@ def run(
         lines=all_lines,
         reserve_items=reserve_items,
         missing_data=ingest.missing_data,
+        subtotal_rows=ingest.subtotal_rows,
     )

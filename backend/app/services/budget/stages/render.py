@@ -18,17 +18,19 @@
 # formatting the association has added are preserved automatically.
 
 import io
-import re
 from collections import defaultdict
 from copy import copy
 from dataclasses import dataclass
+from difflib import SequenceMatcher
 
 import openpyxl
 from openpyxl.styles import PatternFill
 from openpyxl.utils import get_column_letter
 
+from app.services.budget import layout as layout_mod
 from app.services.budget.exceptions import RenderFailed
 from app.services.budget.schema import BudgetLine, BudgetOutput
+from app.services.budget.workbook import normalize_to_xlsx
 
 # Section groupings mirroring assemble.py's grand-total math, keyed by
 # BudgetSection.value so they line up with subtotal_excel_row's keys.
@@ -81,6 +83,11 @@ def _sum_formula(col: int, rows: list[int]) -> str | None:
 
 
 BLUE_FILL = PatternFill(start_color="DDEEFF", end_color="DDEEFF", fill_type="solid")
+# Amber: no YTD actual was found in the financial report for this line, so its
+# projected cell is blank and its proposed value falls back to the prior year.
+# Distinct from BLUE so a reviewer can tell "check this number" apart from
+# "we had nothing to work from here".
+AMBER_FILL = PatternFill(start_color="FFF0CC", end_color="FFF0CC", fill_type="solid")
 NO_FILL = PatternFill(fill_type=None)
 
 # Words ignored when doing keyword-prefix matching on subtotal rows
@@ -107,120 +114,50 @@ def _copy_row_style(ws, src_row: int, dst_row: int) -> None:
 
 
 def _find_budget_sheet(wb):
-    """Return the Budget worksheet, falling back to the first sheet."""
-    for name in wb.sheetnames:
-        if "budget" in name.lower():
-            return wb[name]
-    return wb.worksheets[0]
+    """Return the budget worksheet. Delegates to the shared layout module."""
+    return layout_mod.pick_budget_sheet(wb)
 
 
-def _detect_label_col(ws) -> int:
+def _detect_label_col(ws, header_row: int = 1) -> int:
+    """Return the column holding row labels. Delegates to the shared layout module."""
+    return layout_mod.detect_label_col(ws, header_row)
+
+
+def _detect_column_positions(ws, budget_year: int, wb=None):
     """
-    Return the 1-based column index that contains row labels.
-    Scans columns 1-4 and returns the leftmost one with at least 3 cells
-    containing alphabetic text in the first 40 data rows.
-    Handles budgets where column A holds GL codes and labels are in column B.
-    """
-    for col in range(1, min(ws.max_column + 1, 5)):
-        letter_count = sum(
-            1
-            for row in range(2, min(ws.max_row + 1, 42))
-            if (v := ws.cell(row=row, column=col).value) is not None
-            and not isinstance(v, int | float)
-            and re.search(r"[a-zA-Z]", str(v))
-        )
-        if letter_count >= 3:
-            return col
-    return 1
+    Locate the prior-year, projected, proposed and notes columns to WRITE into.
 
-
-def _detect_column_positions(ws, budget_year: int) -> tuple[int, int | None, int, int | None, int]:
-    """
-    Locate prior-year budget, projected, proposed-budget, and notes columns.
-
-    Each pipeline run shifts the columns forward by one year:
-      - The column currently labeled budget_year-2 receives the new prior-year
-        header (budget_year-1 Budget) and values — it is the WRITE DESTINATION.
-      - The column currently labeled budget_year-1 (the previously-proposed
-        slot now filled with adopted values) is wiped and becomes the new
-        proposed slot for budget_year — it is the proposed_col.
-
-    Title cells like "Morton Village ADOPTED Operating Budget" are excluded by
-    requiring either a 4-digit year OR a short phrase (<=3 words) for any cell
-    to be treated as a budget column header.
+    Detection itself lives in app.services.budget.layout so that ingest and
+    render can never disagree about a workbook's shape — they previously kept
+    separate copies of this logic and shared the same blind spots (sheet found
+    only by name, value columns found only via the literal word "budget").
 
     Returns (prior_col, projected_col, proposed_col, notes_col, header_row).
-    projected_col is None when no Projected column exists.
-    Falls back to columns B / D when headers are unrecognisable.
     """
-    header_row = 1
-    budget_cols: list[tuple[int, int | None]] = []  # (col_idx, parsed_year | None)
-    projected_col: int | None = None
-    notes_col: int | None = None
+    lay = layout_mod.build_layout(wb if wb is not None else ws.parent, budget_year)
+    prior, projected, proposed, notes = layout_mod.render_columns(lay, budget_year)
+    return prior, projected, proposed, notes, lay.header_row
 
-    for check_row in range(1, min(ws.max_row + 1, 6)):
-        found_any = False
-        for col in range(1, ws.max_column + 1):
-            raw = ws.cell(row=check_row, column=col).value
-            if raw is None:
-                continue
-            h = str(raw).strip()
-            hl = h.lower()
-            m_year = re.search(r"\b(20\d{2})\b", h)
 
-            if "projected" in hl and (m_year or len(h.split()) <= 4):
-                projected_col = col
-                found_any = True
-            elif "note" in hl and len(h.split()) <= 3:
-                notes_col = col
-                found_any = True
-            elif "budget" in hl and m_year:
-                # Primary: require a 4-digit year so section headers ("OPERATING
-                # BUDGET"), subtitles ("ADOPTED Budget"), and spreadsheet titles
-                # ("Morton Village ADOPTED Operating Budget") are never detected.
-                budget_cols.append((col, int(m_year.group(1))))
-                found_any = True
-        if found_any:
-            header_row = check_row
-            break
+def _row_shift(row: int, inserted_at: list[int]) -> int:
+    """How far *row* moved down after rows were inserted above it."""
+    return sum(1 for at in inserted_at if at <= row)
 
-    # Fallback: no year-stamped budget column found (rare legacy templates that
-    # use bare "BUDGET" or two-word "XXXX BUDGET" headers without a 4-digit year).
-    if not budget_cols:
-        for check_row in range(1, min(ws.max_row + 1, 6)):
-            for col in range(1, ws.max_column + 1):
-                raw = ws.cell(row=check_row, column=col).value
-                if raw is None:
-                    continue
-                parts = str(raw).strip().split()
-                if parts and parts[-1].upper() == "BUDGET" and len(parts) <= 2:
-                    budget_cols.append((col, None))
-            if budget_cols:
-                break
 
-    if not budget_cols:
-        return (2, None, 4, notes_col, header_row)
+def _rows_for_sections(
+    subtotal_excel_row: dict[str, int],
+    group_section: dict[str, str],
+    section_keys: set[str],
+) -> list[int]:
+    """Excel rows of every subtotal that rolls up into *section_keys*.
 
-    # proposed_col = rightmost budget column (becomes the new-year blank slot)
-    proposed_col = max(c for c, _ in budget_cols)
-
-    # prior_col = the column to WRITE the new prior-year data into.
-    # It currently carries year = budget_year - 2 from the previous pipeline run.
-    # Fallback: second-to-last (for first-run templates where that year is absent).
-    prior_dest_year = budget_year - 2
-    prior_matches = [c for c, y in budget_cols if y == prior_dest_year]
-    if prior_matches:
-        prior_col = prior_matches[0]
-    else:
-        non_proposed = [c for c, _ in budget_cols if c != proposed_col]
-        prior_col = non_proposed[0] if non_proposed else proposed_col
-
-    return (
-        prior_col,
-        projected_col,
-        proposed_col,
-        notes_col,
-        header_row,
+    A section can own more than one subtotal row when the workbook splits it
+    (MCP: BUILDING AND GROUNDS + MAINTENANCE), so grand totals sum all of them.
+    """
+    return sorted(
+        row
+        for group, row in subtotal_excel_row.items()
+        if group_section.get(group) in section_keys
     )
 
 
@@ -297,7 +234,26 @@ def _find_row(
                 if row not in claimed:
                     return row
 
-    return None
+    # Pass 4: closest overall match among unclaimed TOTAL rows.
+    #
+    # Prefix matching cannot bridge an abbreviation or a typo, and real
+    # workbooks have both: "Total Building and Grounds" must find the sheet's
+    # "TOTAL BLDG & GROUNDS", and "Total Utilities" must find "TOTAL UTILITES".
+    # Left unmatched, those subtotal rows keep no formula and the grand total
+    # silently omits them. The threshold is deliberately high so unrelated
+    # sections never collide.
+    best_row, best_score = None, 0.0
+    for xlsx_key, rows in label_to_rows.items():
+        if "total" not in xlsx_key and "surplus" not in xlsx_key:
+            continue
+        unclaimed = [r for r in rows if r not in claimed]
+        if not unclaimed:
+            continue
+        score = SequenceMatcher(None, key, xlsx_key).ratio()
+        if score > best_score:
+            best_row, best_score = unclaimed[0], score
+
+    return best_row if best_score >= 0.72 else None
 
 
 def run(budget: BudgetOutput, review_flags: list[str], prev_year_xlsx_bytes: bytes) -> RenderResult:
@@ -317,29 +273,41 @@ def run(budget: BudgetOutput, review_flags: list[str], prev_year_xlsx_bytes: byt
     Raises RenderFailed on any openpyxl error.
     """
     try:
+        # Legacy .xls inputs are converted up front so every stage downstream
+        # sees the same openpyxl workbook.
+        prev_year_xlsx_bytes = normalize_to_xlsx(prev_year_xlsx_bytes)
         wb = openpyxl.load_workbook(io.BytesIO(prev_year_xlsx_bytes))
-        ws = _find_budget_sheet(wb)
 
-        # Detect which column holds row labels — some budgets have GL codes in
-        # column A and text labels in column B; hardcoding column A would cause
-        # label_to_rows to be keyed by GL numbers and nothing would ever match.
-        label_col = _detect_label_col(ws)
+        # One layout pass drives every structural decision below — the same pass
+        # ingest made, so both stages target the same sheet and columns. Detecting
+        # the header row first also means the label-column scan starts below the
+        # headers instead of guessing row 1.
+        lay = layout_mod.build_layout(wb, budget.budget_year)
+        ws = wb[lay.sheet_title]
+        header_row = lay.header_row
+        # Column A may hold GL codes with the real labels in column B; using the
+        # detected column keeps label_to_rows keyed by text, not GL numbers.
+        label_col = lay.label_col
+        prior_col, projected_col, proposed_col, notes_col = layout_mod.render_columns(
+            lay, budget.budget_year
+        )
 
         # Load a second copy with data_only=True so we can read cached formula
         # results from the assessment preamble without destroying the formulas.
         wb_data = openpyxl.load_workbook(io.BytesIO(prev_year_xlsx_bytes), data_only=True)
-        ws_data = _find_budget_sheet(wb_data)
+        ws_data = wb_data[lay.sheet_title]
 
-        prior_col, projected_col, proposed_col, notes_col, header_row = _detect_column_positions(
-            ws, budget.budget_year
-        )
-
-        # Shift column headers to the new budget year
+        # Shift column headers to the new budget year.
+        #
+        # The proposed column is deliberately NOT touched — not its header, not
+        # its values, not its formulas. It is the manager's column: they set the
+        # new year's numbers there by hand, working from the prior-year and
+        # projected columns this stage fills in. Overwriting it (or blanking it)
+        # destroyed the starting point they edit from.
         prior_year_int = budget.budget_year - 1
         ws.cell(row=header_row, column=prior_col).value = f"{prior_year_int} Budget"
         if projected_col is not None:
             ws.cell(row=header_row, column=projected_col).value = f"Projected {prior_year_int}"
-        ws.cell(row=header_row, column=proposed_col).value = f"{budget.budget_year} BUDGET"
 
         data_start = header_row + 1
 
@@ -402,12 +370,13 @@ def run(budget: BudgetOutput, review_flags: list[str], prev_year_xlsx_bytes: byt
         # avoids stale row references after each insertion.
 
         _subtotal_label_for_section = {
-            line.section.value: line.label
+            (line.subtotal_group or line.section.value): line.label
             for line in budget.lines
             if line.is_computed and line.code.startswith("subtotal_")
         }
 
         # Determine which data lines are missing from the workbook.
+        _inserted_at: list[int] = []
         _pre_claimed: set[int] = set()
         _unfound_by_section: dict[str, list[BudgetLine]] = defaultdict(list)
         for _line in budget.lines:
@@ -417,7 +386,7 @@ def run(budget: BudgetOutput, review_flags: list[str], prev_year_xlsx_bytes: byt
             if _r is not None:
                 _pre_claimed.add(_r)
             else:
-                _unfound_by_section[_line.section.value].append(_line)
+                _unfound_by_section[_line.subtotal_group or _line.section.value].append(_line)
 
         if _unfound_by_section:
             # Locate each section's subtotal row.
@@ -465,6 +434,7 @@ def run(budget: BudgetOutput, review_flags: list[str], prev_year_xlsx_bytes: byt
                     ws.insert_rows(_insert_at + _i)
                     _copy_row_style(ws, _style_template, _insert_at + _i)
                     ws.cell(row=_insert_at + _i, column=label_col).value = _nl.label
+                    _inserted_at.append(_insert_at + _i)
                 _shift += len(_new_lines)
 
             # Rebuild the label index so the main loop finds inserted rows.
@@ -478,28 +448,18 @@ def run(budget: BudgetOutput, review_flags: list[str], prev_year_xlsx_bytes: byt
         # The pipeline writes to exactly two detected columns:
         #   prior_col     ← prior_year (the adopted budget from last cycle)
         #   projected_col ← projected  (annualised YTD actuals)
-        # proposed_col is wiped to blank so stale raw values from a previous
-        # run don't linger, but no computed values are written there — the
-        # association fills in the new budget column manually (or via their
-        # own Excel formulas that read from prior_col and projected_col).
-        # Any formula already sitting in proposed_col (e.g. a TOTAL row's own
-        # =SUM(...) the association built) is left alone — only non-formula
-        # (raw numeric/blank) cells are cleared.
+        # proposed_col is left ENTIRELY alone — values, formulas and header. It
+        # belongs to the manager, who fills in the new year's numbers by hand
+        # using the two columns this stage writes. Blanking it (as this used to)
+        # threw away the figures they start from.
         #
         # Preamble rows (assessment tables before the first section header) are
-        # excluded from the wipe: their proposed_col formulas are preserved, and
-        # the prior/projected columns are filled from those formula results below.
+        # excluded from the wipe so their formulas survive.
         active_cols = [c for c in [prior_col, projected_col] if c is not None]
 
         for _wipe_col in active_cols:
             for _r in range(preamble_end, ws.max_row + 1):
                 ws.cell(row=_r, column=_wipe_col).value = None
-        if proposed_col is not None:
-            for _r in range(preamble_end, ws.max_row + 1):
-                _cell = ws.cell(row=_r, column=proposed_col)
-                if isinstance(_cell.value, str) and _cell.value.startswith("="):
-                    continue
-                _cell.value = None
 
         # Assessment preamble: roll the old proposed_col value (computed from
         # the formula via the data-only workbook) into prior_col and projected_col
@@ -530,14 +490,36 @@ def run(budget: BudgetOutput, review_flags: list[str], prev_year_xlsx_bytes: byt
 
         # --- tracking state ---
         claimed: set[int] = set()
+        # Keyed by SUBTOTAL GROUP, not by section: a workbook that keeps
+        # "BUILDING AND GROUNDS" separate from "MAINTENANCE" has a printed
+        # subtotal for each, and each must receive its own =SUM over its own
+        # rows rather than one merged figure.
         section_item_rows: dict[str, list[int]] = defaultdict(list)
-        subtotal_excel_row: dict[str, int] = {}  # section_key → excel row of its subtotal
+        subtotal_excel_row: dict[str, int] = {}  # group → excel row of its subtotal
+        group_section: dict[str, str] = {}  # group → BudgetSection value it rolls up to
         special_row: dict[
             str, int
         ] = {}  # code → excel row, for grand totals that reference each other
 
+        # Rows shift when new line items are inserted above them, so the
+        # layout's recorded subtotal rows are re-based by that shift.
+        _sheet_subtotal_rows = {
+            group: (r + _row_shift(r, _inserted_at)) for group, r in budget.subtotal_rows.items()
+        }
+
         for line in budget.lines:
-            row = _find_row(label_to_rows, claimed, line.label, line.is_computed)
+            # A subtotal writes into the row the layout parser identified for its
+            # group. Matching by label text is only a fallback: association
+            # workbooks spell these rows every possible way ("TOTAL BLDG &
+            # GROUNDS", "TOTAL UTILITES", and a bare "TOTAL OPERATING" used for
+            # an expense block), and guessing from text does not scale.
+            row = None
+            if line.is_computed and line.subtotal_group:
+                candidate = _sheet_subtotal_rows.get(line.subtotal_group)
+                if candidate is not None and candidate not in claimed:
+                    row = candidate
+            if row is None:
+                row = _find_row(label_to_rows, claimed, line.label, line.is_computed)
             if row is None:
                 continue
             claimed.add(row)
@@ -548,7 +530,12 @@ def run(budget: BudgetOutput, review_flags: list[str], prev_year_xlsx_bytes: byt
                 # ── Data row: write prior_year and projected ──────────────────
                 raw = _raw_vals(line)
                 flagged = _needs_review_flag(line.label)
-                fill = BLUE_FILL if flagged else NO_FILL
+                # A line with no projected value means the report had no YTD
+                # actual to annualize — most often the label in the workbook does
+                # not appear in the report under that name. The cell would simply
+                # render blank, so make it visible instead.
+                unmatched = line.projected is None
+                fill = AMBER_FILL if unmatched else (BLUE_FILL if flagged else NO_FILL)
                 for col in active_cols:
                     cell = ws.cell(row=row, column=col)
                     cell.value = raw.get(col)
@@ -563,45 +550,51 @@ def run(budget: BudgetOutput, review_flags: list[str], prev_year_xlsx_bytes: byt
                         note = f"{note} — {tag}" if note else tag
                     ws.cell(row=row, column=notes_col).value = note
                     ws.cell(row=row, column=notes_col).fill = fill
-                if flagged:
+                if unmatched:
+                    review_flags.append(
+                        f'"{line.label}" (row {row}) — no matching line found in the financial '
+                        f"report, so there is no projected figure. The proposed value falls back "
+                        f"to last year's budget; enter a figure manually if that is not right."
+                    )
+                elif flagged:
                     review_flags.append(
                         f'"{line.label}" (row {row}) flagged for manual review — recurring lumpy/variable cost'
                     )
-                section_item_rows[section_key].append(row)
+                group_key = line.subtotal_group or section_key
+                group_section[group_key] = section_key
+                section_item_rows[group_key].append(row)
 
             elif line.code.startswith("subtotal_"):
-                # ── Subtotal row: =SUM(...) over this section's item rows ──────
-                subtotal_excel_row[section_key] = row
+                # ── Subtotal row: =SUM(...) over this GROUP's item rows ────────
+                group_key = line.subtotal_group or section_key
+                group_section[group_key] = section_key
+                subtotal_excel_row[group_key] = row
                 raw = _raw_vals(line)
                 formulas = {
-                    col: _sum_formula(col, section_item_rows.get(section_key, [])) or raw.get(col)
+                    col: _sum_formula(col, section_item_rows.get(group_key, [])) or raw.get(col)
                     for col in active_cols
                 }
                 _write_cols(row, formulas)
 
             elif line.code == "total_income":
-                sec_rows = [
-                    subtotal_excel_row[s] for s in _INCOME_SECTION_KEYS if s in subtotal_excel_row
-                ]
+                sec_rows = _rows_for_sections(subtotal_excel_row, group_section, _INCOME_SECTION_KEYS)
                 raw = _raw_vals(line)
                 formulas = {col: _sum_formula(col, sec_rows) or raw.get(col) for col in active_cols}
                 _write_cols(row, formulas)
                 special_row["total_income"] = row
 
             elif line.code == "total_operating":
-                sec_rows = [
-                    subtotal_excel_row[s]
-                    for s in _OPERATING_EXPENSE_SECTION_KEYS
-                    if s in subtotal_excel_row
-                ]
+                sec_rows = _rows_for_sections(
+                    subtotal_excel_row, group_section, _OPERATING_EXPENSE_SECTION_KEYS
+                )
                 raw = _raw_vals(line)
                 formulas = {col: _sum_formula(col, sec_rows) or raw.get(col) for col in active_cols}
                 _write_cols(row, formulas)
 
             elif line.code == "total_operating_and_reserves":
-                sec_rows = [
-                    subtotal_excel_row[s] for s in _EXPENSE_SECTION_KEYS if s in subtotal_excel_row
-                ]
+                sec_rows = _rows_for_sections(
+                    subtotal_excel_row, group_section, _EXPENSE_SECTION_KEYS
+                )
                 raw = _raw_vals(line)
                 formulas = {col: _sum_formula(col, sec_rows) or raw.get(col) for col in active_cols}
                 _write_cols(row, formulas)

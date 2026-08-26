@@ -26,6 +26,49 @@ class BudgetResult:
     budget_year: int
 
 
+@dataclass
+class LayoutPreview:
+    """Stage-1A-only result: enough to judge the parse without spending an AI call."""
+
+    lines: list[dict]
+    layout: object  # SheetLayout
+    all_sheets: list[str]
+    reserve_items: list[dict]
+
+
+def preview_layout(
+    prior_budget_bytes: bytes,
+    prior_budget_filename: str,
+    budget_year: int,
+    layout_profile=None,
+) -> LayoutPreview:
+    """
+    Run only the deterministic Excel read, so a doubtful layout can be reviewed
+    BEFORE any Anthropic call is made. Nothing here costs money or touches the PDF.
+    """
+    if not prior_budget_bytes:
+        raise MissingInputFile("prior_budget is required")
+
+    from app.services.budget.reserves import parse_reserve_schedule
+    from app.services.budget.workbook import load_workbook_any
+
+    lines, layout = ingest._parse_excel_budget(
+        prior_budget_bytes, budget_year, prior_budget_filename, layout_profile
+    )
+    wb = load_workbook_any(prior_budget_bytes, prior_budget_filename, data_only=True)
+    try:
+        reserve_items = parse_reserve_schedule(wb, layout)
+    except Exception:
+        reserve_items = []
+
+    return LayoutPreview(
+        lines=lines,
+        layout=layout,
+        all_sheets=list(wb.sheetnames),
+        reserve_items=reserve_items,
+    )
+
+
 def run_budget_pipeline(
     financial_report_bytes: bytes | None,
     financial_report_filename: str,
@@ -35,6 +78,7 @@ def run_budget_pipeline(
     budget_year: int,
     prior_reserve_schedule: list[dict] | None = None,
     on_step: Callable[[str], None] | None = None,
+    layout_profile=None,
 ) -> BudgetResult:
     """
     Run the full budget pipeline against the two uploaded files.
@@ -47,6 +91,9 @@ def run_budget_pipeline(
         association_name          — display name for the HOA
         budget_year               — the new year being budgeted (e.g. 2026)
         prior_reserve_schedule    — optional reserve items from last year's schedule
+                                    (ignored when the workbook has its own reserve sheet)
+        layout_profile            — a human-confirmed BudgetLayoutProfile to apply
+                                    instead of auto-detecting the workbook layout
 
     Raises:
         MissingInputFile   — a required file was not provided
@@ -68,6 +115,7 @@ def run_budget_pipeline(
         prior_budget_filename=prior_budget_filename,
         budget_year=budget_year,
         on_step=on_step,
+        layout_profile=layout_profile,
     )
 
     # Stage 1.5 — Cross-check

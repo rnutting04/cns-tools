@@ -11,6 +11,7 @@ import Paper from '@mui/material/Paper'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import SessionJobsPanel from '../../components/common/SessionJobsPanel'
+import PendingLayoutReviews from '../../components/budget/PendingLayoutReviews'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import AttachFileIcon from '@mui/icons-material/AttachFile'
 import ClearIcon from '@mui/icons-material/Clear'
@@ -221,6 +222,8 @@ export default function BudgetGeneratorPage() {
           </Button>
         </Box>
       </Paper>
+
+      <PendingLayoutReviews />
 
       <SessionJobsPanel jobType="budget" />
     </Box>

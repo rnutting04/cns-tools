@@ -58,17 +58,27 @@ def run(budget: BudgetOutput) -> list[str]:
     # --- Arithmetic checks (halt on fail) ------------------------------------
 
     for col in ("prior_year", "projected", "proposed"):
-        for section in income_sections + expense_sections:
-            member_sum = _sum_members(budget, section, col)
-            subtotal_code = f"subtotal_{section.value.lower()}"
-            subtotal_line = by_code.get(subtotal_code)
-            if subtotal_line:
-                subtotal_val = getattr(subtotal_line, col) or 0.0
-                if abs(member_sum - subtotal_val) > _TOLERANCE:
-                    errors.append(
-                        f"[arithmetic] {section.value} subtotal mismatch in '{col}': "
-                        f"members sum to {member_sum:.2f}, subtotal shows {subtotal_val:.2f}"
-                    )
+        # Each subtotal is checked against ITS OWN group's members. A workbook
+        # may keep two sections that normalize to one BudgetSection (MCP splits
+        # "BUILDING AND GROUNDS" from "MAINTENANCE"), each with its own printed
+        # subtotal. Summing by section would compare one subtotal against both
+        # groups' members and report a spurious mismatch.
+        for subtotal_line in budget.lines:
+            if not (subtotal_line.is_computed and subtotal_line.code.startswith("subtotal_")):
+                continue
+            group = subtotal_line.subtotal_group or subtotal_line.section.value
+            member_sum = sum(
+                getattr(line, col) or 0.0
+                for line in budget.lines
+                if not line.is_computed
+                and (line.subtotal_group or line.section.value) == group
+            )
+            subtotal_val = getattr(subtotal_line, col) or 0.0
+            if abs(member_sum - subtotal_val) > _TOLERANCE:
+                errors.append(
+                    f"[arithmetic] {subtotal_line.label} subtotal mismatch in '{col}': "
+                    f"members sum to {member_sum:.2f}, subtotal shows {subtotal_val:.2f}"
+                )
 
         total_income_val = sum(_sum_members(budget, s, col) for s in income_sections)
         total_expense_val = sum(_sum_members(budget, s, col) for s in expense_sections)

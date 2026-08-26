@@ -7,15 +7,19 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.budget_job import BudgetJob
+from app.models.budget_layout_profile import BudgetLayoutProfile
 from app.models.letter_job import JobStatus
 from app.models.user import User
 from app.schemas.budget import (
     BudgetJobAcceptedResponse,
     BudgetJobDetailResponse,
     BudgetJobStatusResponse,
+    ConfirmLayoutRequest,
+    LayoutProfileResponse,
 )
 from app.services.audit import log_event
-from app.services.budget.tasks import generate_budget_task
+from app.services.budget import layout_profiles
+from app.services.budget.tasks import AWAITING_LAYOUT_REVIEW, generate_budget_task
 from app.services.storage import storage_service
 
 router = APIRouter(prefix="/budget", tags=["budget"])
@@ -109,6 +113,86 @@ def retry_budget_job(
     return BudgetJobAcceptedResponse(job_id=job.id, status=JobStatus.pending.value)
 
 
+@router.post("/jobs/{job_id}/confirm-layout", response_model=BudgetJobAcceptedResponse)
+def confirm_job_layout(
+    job_id: uuid.UUID,
+    payload: ConfirmLayoutRequest | None = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> BudgetJobAcceptedResponse:
+    """
+    Confirm the workbook layout for a parked job and resume it.
+
+    The confirmation is stored against the layout's structural signature, not
+    against this job or association — so every other association whose workbook
+    has the same shape runs unattended from here on, this year and next.
+    """
+    job = db.query(BudgetJob).filter(BudgetJob.id == job_id).first()
+    if not job or job.created_by != current_user.id:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.current_step != AWAITING_LAYOUT_REVIEW:
+        raise HTTPException(status_code=409, detail="Job is not awaiting layout review")
+    if not job.layout_signature:
+        raise HTTPException(status_code=409, detail="Job has no detected layout to confirm")
+
+    corrections = (
+        payload.corrections.model_dump(exclude_none=True)
+        if payload and payload.corrections
+        else None
+    )
+    profile = layout_profiles.confirm(db, job.layout_signature, current_user.id, corrections)
+    if profile is None:
+        raise HTTPException(status_code=404, detail="No layout profile found for this job")
+
+    job.status = JobStatus.pending
+    job.current_step = None
+    job.layout_review = None
+    log_event(
+        db,
+        actor=current_user,
+        action="budget.layout.confirmed",
+        target_type="budget_layout_profile",
+        target_id=str(profile.id),
+        metadata={
+            "signature": profile.signature,
+            "association_name": job.association_name,
+            "sheet_title": profile.sheet_title,
+            "corrections": corrections or {},
+        },
+    )
+    db.commit()
+
+    generate_budget_task.delay(str(job.id))
+    return BudgetJobAcceptedResponse(job_id=job.id, status=JobStatus.pending.value)
+
+
+@router.get("/layout-profiles", response_model=list[LayoutProfileResponse])
+def list_layout_profiles(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[LayoutProfileResponse]:
+    """All known workbook templates and how many runs each has covered."""
+    profiles = (
+        db.query(BudgetLayoutProfile)
+        .order_by(BudgetLayoutProfile.confirmed.desc(), BudgetLayoutProfile.use_count.desc())
+        .all()
+    )
+    return [
+        LayoutProfileResponse(
+            id=p.id,
+            signature=p.signature,
+            sheet_title=p.sheet_title,
+            confirmed=p.confirmed,
+            use_count=p.use_count or 0,
+            example_association=p.example_association,
+            example_filename=p.example_filename,
+            warnings=p.warnings,
+            confirmed_at=p.confirmed_at,
+        )
+        for p in profiles
+    ]
+
+
 @router.get("/jobs/{job_id}/details", response_model=BudgetJobDetailResponse)
 def get_budget_job_details(
     job_id: uuid.UUID,
@@ -170,4 +254,5 @@ def get_budget_job(
         download_url=download_url,
         error_code=job.error_code,
         error_detail=job.error_detail,
+        layout_review=job.layout_review,
     )

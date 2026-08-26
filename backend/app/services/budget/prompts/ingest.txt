@@ -21,26 +21,28 @@ Example row: "7,034.50   7,034.50   0.00   70,345.00   70,345.00   0.00   84,414
 The YTD Actual is the 4th number on each line. The Annual Budget is the last number — never extract it.
 
 ## Required output
-Return ONLY valid JSON with absolutely no other text before or after it:
-{
-  "months_elapsed": <integer>,
-  "lines": [
-    {
-      "excel_label": "<exact label from the Excel list below>",
-      "ytd_actual": <float or null>,
-      "gl_account": "<4-5 digit GL code or null>"
-    }
-  ],
-  "section_totals": {
-    "REVENUE_OPERATING": <float or null>,
-    "REVENUE_RESERVES": <float or null>,
-    "ADMINISTRATION": <float or null>,
-    "MAINTENANCE": <float or null>,
-    "UTILITIES": <float or null>,
-    "OTHER": <float or null>,
-    "RESERVES": <float or null>
-  }
-}
+Return your answer by calling the `ingest_result` tool. Do not write JSON in prose —
+the tool call IS the output, and its schema is authoritative.
+
+Field names, exactly as the tool defines them:
+  months_elapsed      integer
+  lines[]             one entry per budget line item, each with:
+      label               the exact label string from the Excel list below
+      section             one of REVENUE_OPERATING, REVENUE_RESERVES,
+                          ADMINISTRATION, MAINTENANCE, UTILITIES, OTHER, RESERVES
+      ytd_actual          float or null
+      gl_account          "4-5 digit GL code" or null
+      annualization_review  true when this line should not be naively annualized
+                            (see "annualization_review" below)
+  pdf_total_revenue   the grand total printed on the report's "TOTAL REVENUES" line
+  pdf_total_expenses  the grand total printed on the report's "TOTAL EXPENSES" line
+  pdf_section_totals  section key -> a subtotal ACTUALLY PRINTED in the PDF (advisory)
+  reserve_balances    reserve component label -> its current balance
+  missing_data[]      short notes about anything you could not find
+
+Use `label` (not "excel_label") and `pdf_section_totals` (not "section_totals").
+Omit a key entirely rather than sending null inside pdf_section_totals or
+reserve_balances — those maps take numbers only.
 
 ## Extraction rules
 
@@ -52,8 +54,15 @@ months_elapsed:
   "Year Ending December 31, 2025"                → 12
 
 lines:
-  For each label in the Excel list, find the best-matching line in the report.
-  Use the YTD Actual value for that line.
+  For each entry in the Excel list, find the matching line in the report and use
+  its YTD Actual value.
+
+  MATCH BY GL ACCOUNT NUMBER FIRST. Entries prefixed with [nnnn] carry the GL
+  account from the budget workbook, and the report prints the same account on
+  each of its rows. The two documents frequently WORD a line differently while
+  agreeing on the account — workbook "Assessments" is report "Member Assessments"
+  (both GL 5000) — so matching on wording alone drops lines. Where an entry has
+  no [nnnn] prefix, match on the label text instead.
   If no matching line is found, set ytd_actual to null.
   Record the GL account code (4-5 digit number) if one appears on that row, else null.
   Use the exact excel_label string from the list — do not alter it.
@@ -64,26 +73,46 @@ lines:
   infer the correct section from where the line appears, and set the ytd_actual to
   its YTD Actual value. This ensures the extracted lines reconcile with the totals.
 
-section_totals:
-  Use the printed TOTAL lines in the report (e.g. "TOTAL REVENUES", "TOTAL ADMINISTRATION").
-  Extract the YTD Actual value for each total line and map it to the correct section key.
+pdf_total_revenue / pdf_total_expenses:
+  Read the two printed grand-total lines — typically "TOTAL REVENUES" and
+  "TOTAL EXPENSES" — and return their Year to Date Actual values.
+  These are the figures used to verify the extraction, so they matter most.
+  If a grand total is genuinely not printed anywhere, set it to null; never
+  compute one yourself by adding lines up.
+
+pdf_section_totals:
+  ONLY include a section if the report actually PRINTS a subtotal line for it
+  (e.g. "TOTAL ADMINISTRATIVE"). Map that printed figure to the closest section key.
+  Do NOT invent, derive, or sum a subtotal for a section the report does not print —
+  omit the key entirely instead. Reporting a computed subtotal makes the extraction
+  look self-consistent while hiding real errors.
+
+  Be aware: a report's section headings often DO NOT match the budget workbook's.
+  One report's "Administrative" may contain insurance, taxes and bad debts that the
+  workbook files under OTHER. Assign each LINE to the section given in the Excel list
+  above — never re-file a line to match the report's own heading — and report the
+  printed subtotals separately here. The mismatch is expected and handled downstream.
   Section key mapping:
     REVENUE_OPERATING  → total of operating revenue (assessments, fees, etc.)
     REVENUE_RESERVES   → total of reserve fund revenue
-    ADMINISTRATION     → TOTAL ADMINISTRATION (or TOTAL ADMIN)
+    ADMINISTRATION     → TOTAL ADMINISTRATION (or TOTAL ADMINISTRATIVE / TOTAL ADMIN)
     MAINTENANCE        → TOTAL MAINTENANCE
     UTILITIES          → TOTAL UTILITIES
     OTHER              → TOTAL OTHER (or TOTAL GENERAL)
     RESERVES           → TOTAL RESERVES (capital reserve expenditures)
-  If the section total line is not present in the report, set it to null.
   Interfund transfers (lines with "Trx from", "Due to/from", "Interfund transfer", etc.) must be
-  EXCLUDED from section totals: subtract their YTD Actual from the printed section total before
+  EXCLUDED from totals: subtract their YTD Actual from the printed total before
   recording it. Do not include transfer lines in the "lines" array at all.
 
 Negative amounts: parenthetical amounts like (1,234.56) are negative — return as -1234.56.
 
-## Excel line items to match
-{excel_lines}
+## Inputs
+The income and expense report is attached to this message as a PDF document —
+read it directly. The list of Excel budget line items to match against follows
+the attachment in the same message.
 
-## Financial report text
-{report_text}
+## annualization_review
+Set annualization_review to true when a line's YTD actual should NOT simply be
+scaled to twelve months: one-off or lumpy costs (insurance premiums, annual
+audits, corporate filings, storm damage, a single large repair), or lines whose
+YTD amount already covers the full year.

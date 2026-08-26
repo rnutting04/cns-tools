@@ -5,6 +5,16 @@ import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import bcrypt
+from dotenv import load_dotenv
+
+from app.config.settings import ENV_FILE
+
+# The app reads .env through pydantic-settings, which populates the Settings
+# object but never exports anything into os.environ. The seed passwords are also
+# not declared as Settings fields (and Config.extra = "ignore" drops them), so
+# without this they are unreachable from both places even when set in .env.
+# Loading the same ENV_FILE keeps the two from drifting apart.
+load_dotenv(ENV_FILE)
 
 from app.database import SessionLocal
 from app.models.association import Association, UserAssociation
@@ -22,7 +32,16 @@ def seed():
     manager_password = os.environ.get("SEED_MANAGER_PASSWORD")
 
     if not admin_password or not manager_password:
-        print("ERROR: SEED_ADMIN_PASSWORD and SEED_MANAGER_PASSWORD must be set.")
+        missing = [
+            name
+            for name, value in (
+                ("SEED_ADMIN_PASSWORD", admin_password),
+                ("SEED_MANAGER_PASSWORD", manager_password),
+            )
+            if not value
+        ]
+        print(f"ERROR: {' and '.join(missing)} must be set.")
+        print(f"Looked in the environment and in {ENV_FILE} (exists: {ENV_FILE.exists()}).")
         sys.exit(1)
 
     db = SessionLocal()
