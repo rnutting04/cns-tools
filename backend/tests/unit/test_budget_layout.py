@@ -247,6 +247,194 @@ class TestSubtotalRows:
         assert layout.subtotal_rows["MAINTENANCE::MAINTENANCE"] == 10
 
 
+class TestTitleBlock:
+    """Every rendered budget carries the same three-line heading:
+
+    SARABAY WOODS HOA
+    2026 APPROVED OPERATING BUDGET
+    JANUARY 1, 2026 - DECEMBER 31, 2026
+    """
+
+    def _render(self, rows, name="Sarabay Woods HOA", year=2027):
+        from app.services.budget.schema import IngestedLine, IngestResult
+        from app.services.budget.stages import assemble, project, render, validate
+        from app.services.budget.stages.ingest import _parse_excel_budget
+
+        raw = _bytes(_wb({"Budget": rows}))
+        lines, layout = _parse_excel_budget(raw, year)
+        ing = IngestResult(
+            months_elapsed=6,
+            lines=[
+                IngestedLine(
+                    label=x["label"],
+                    section=x["section"],
+                    prior_year=x["prior_year"],
+                    ytd_actual=(x["prior_year"] or 0) / 2,
+                    source_section=x.get("source_section"),
+                )
+                for x in lines
+            ],
+            subtotal_rows=layout.subtotal_rows,
+        )
+        projected, review_labels = project.run(ing)
+        budget = assemble.run(
+            ingest=ing,
+            projected=projected,
+            review_labels=review_labels,
+            association_name=name,
+            budget_year=year,
+            prior_reserve_schedule=None,
+        )
+        out = render.run(budget, validate.run(budget), raw)
+        return openpyxl.load_workbook(io.BytesIO(out.xlsx_bytes))["Budget"]
+
+    def _title_at(self, ws, col=1):
+        for r in range(1, 12):
+            v = ws.cell(row=r, column=col).value
+            if isinstance(v, str) and v.strip().endswith("HOA"):
+                return [str(ws.cell(row=r + i, column=col).value or "").strip() for i in range(3)]
+        return []
+
+    def test_added_when_the_sheet_has_no_title(self):
+        """Headers on row 1 leave no room — rows must be inserted."""
+        ws = self._render(BUDGET_ROWS)
+        assert self._title_at(ws) == [
+            "SARABAY WOODS HOA",
+            "2027 APPROVED OPERATING BUDGET",
+            "JANUARY 1, 2027 - DECEMBER 31, 2027",
+        ]
+
+    def test_existing_title_is_rewritten_in_place(self):
+        """SBW already carries a title; it is updated, not duplicated."""
+        rows = [
+            ["OLD NAME HOA", None, None, None],
+            ["2026 APPROVED OPERATING BUDGET", None, None, None],
+            ["JANUARY 1, 2026 - DECEMBER 31, 2026", None, None, None],
+            [None, None, None, None],
+            ["", "2025 BUDGET", "2025 PROJECTED", "2026 BUDGET"],
+            ["INCOME", None, None, None],
+            ["   Assessments", 100, 100, 120],
+            ["   TOTAL INCOME", 100, 100, 120],
+            ["EXPENSES", None, None, None],
+            ["ADMINISTRATION", None, None, None],
+            ["   Management", 100, 100, 120],
+            ["   TOTAL ADMINISTRATION", 100, 100, 120],
+        ]
+        ws = self._render(rows)
+        assert self._title_at(ws) == [
+            "SARABAY WOODS HOA",
+            "2027 APPROVED OPERATING BUDGET",
+            "JANUARY 1, 2027 - DECEMBER 31, 2027",
+        ]
+        # Rewritten, not appended: the superseded year appears nowhere.
+        text = [
+            str(ws.cell(row=r, column=1).value or "") for r in range(1, min(ws.max_row, 12) + 1)
+        ]
+        assert not any("2026 APPROVED" in t for t in text)
+
+    def test_subtotal_formulas_survive_the_row_shift(self):
+        """Inserting title rows must not leave =SUM formulas pointing at the
+        wrong rows — openpyxl does not rewrite references when rows move."""
+        ws = self._render(BUDGET_ROWS)
+        totals = [
+            ws.cell(row=r, column=2).value
+            for r in range(1, ws.max_row + 1)
+            if str(ws.cell(row=r, column=1).value or "").strip().upper().startswith("TOTAL")
+        ]
+        assert totals, "no TOTAL rows found"
+        assert all(isinstance(v, str) and v.startswith("=") for v in totals), totals
+
+
+class TestColumnHeaders:
+    def _render(self, rows, year=2027):
+        from app.services.budget.schema import IngestedLine, IngestResult
+        from app.services.budget.stages import assemble, project, render, validate
+        from app.services.budget.stages.ingest import _parse_excel_budget
+
+        raw = _bytes(_wb({"Budget": rows}))
+        lines, layout = _parse_excel_budget(raw, year)
+        ing = IngestResult(
+            months_elapsed=6,
+            lines=[
+                IngestedLine(
+                    label=x["label"],
+                    section=x["section"],
+                    prior_year=x["prior_year"],
+                    ytd_actual=(x["prior_year"] or 0) / 2,
+                    source_section=x.get("source_section"),
+                )
+                for x in lines
+            ],
+            subtotal_rows=layout.subtotal_rows,
+        )
+        projected, review_labels = project.run(ing)
+        budget = assemble.run(
+            ingest=ing,
+            projected=projected,
+            review_labels=review_labels,
+            association_name="Test HOA",
+            budget_year=year,
+            prior_reserve_schedule=None,
+        )
+        out = render.run(budget, validate.run(budget), raw)
+        wb2 = openpyxl.load_workbook(io.BytesIO(out.xlsx_bytes))["Budget"]
+        return wb2, build_layout(openpyxl.load_workbook(io.BytesIO(out.xlsx_bytes)), year)
+
+    def test_all_three_headers_roll_forward_keeping_their_wording(self):
+        """Associations word these headers their own way. Only the year changes."""
+        rows = [
+            ["", "2025 ACTUAL", "2025 PROJECTED", "2026 ADOPTED"],
+            ["INCOME", None, None, None],
+            ["   Assessments", 100, 100, 120],
+            ["   TOTAL INCOME", 100, 100, 120],
+            ["EXPENSES", None, None, None],
+            ["ADMINISTRATION", None, None, None],
+            ["   Management", 100, 100, 120],
+            ["   TOTAL ADMINISTRATION", 100, 100, 120],
+        ]
+        ws, layout = self._render(rows)
+        headers = [ws.cell(row=layout.header_row, column=c).value for c in (2, 3, 4)]
+        assert headers == ["2026 ACTUAL", "2026 PROJECTED", "2027 ADOPTED"]
+
+    def test_proposed_header_names_the_new_year_but_values_are_untouched(self):
+        """The manager fills this column in; the heading must still say which
+        year they are filling in for."""
+        rows = [
+            ["", "2025 BUDGET", "2025 PROJECTED", "2026 BUDGET"],
+            ["INCOME", None, None, None],
+            ["   Assessments", 100, 100, 555],
+            ["   TOTAL INCOME", 100, 100, 555],
+            ["EXPENSES", None, None, None],
+            ["ADMINISTRATION", None, None, None],
+            ["   Management", 100, 100, 555],
+            ["   TOTAL ADMINISTRATION", 100, 100, 555],
+        ]
+        ws, layout = self._render(rows)
+        assert ws.cell(row=layout.header_row, column=4).value == "2027 BUDGET"
+
+        # The manager's figures survive.
+        values = [
+            ws.cell(row=r, column=4).value
+            for r in range(layout.header_row + 1, ws.max_row + 1)
+            if str(ws.cell(row=r, column=1).value or "").strip() == "Assessments"
+        ]
+        assert values == [555]
+
+    def test_header_without_a_year_falls_back_to_a_default(self):
+        rows = [
+            ["", "BUDGET", "PROJECTED", "PROPOSED"],
+            ["INCOME", None, None, None],
+            ["   Assessments", 100, 100, 120],
+            ["   TOTAL INCOME", 100, 100, 120],
+            ["EXPENSES", None, None, None],
+            ["ADMINISTRATION", None, None, None],
+            ["   Management", 100, 100, 120],
+            ["   TOTAL ADMINISTRATION", 100, 100, 120],
+        ]
+        ws, layout = self._render(rows)
+        assert "2026" in str(ws.cell(row=layout.header_row, column=2).value)
+
+
 class TestGlAccounts:
     def test_gl_codes_are_read_and_sent_to_the_extractor(self):
         """The workbook and the report word lines differently ("Assessments" vs

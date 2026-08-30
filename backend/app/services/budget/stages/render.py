@@ -18,6 +18,7 @@
 # formatting the association has added are preserved automatically.
 
 import io
+import re
 from collections import defaultdict
 from copy import copy
 from dataclasses import dataclass
@@ -142,6 +143,92 @@ def _detect_column_positions(ws, budget_year: int, wb=None):
 def _row_shift(row: int, inserted_at: list[int]) -> int:
     """How far *row* moved down after rows were inserted above it."""
     return sum(1 for at in inserted_at if at <= row)
+
+
+_HEADER_YEAR_RE = re.compile(r"\b20\d{2}\b")
+
+
+def _set_header(ws, header_row: int, col: int, year: int, fallback: str) -> None:
+    """
+    Roll a column header forward to *year*, keeping the association's wording.
+
+    Associations word these headers their own way — "2026 ADOPTED",
+    "2026 PROPOSED BUDGET", "2026 Approved Budget", "Projected 2025" — so only
+    the year is replaced. Rewriting the whole header to a house style would
+    erase the sheet's own vocabulary for no benefit. The fallback is used only
+    when the existing header carries no year to swap.
+    """
+    cell = ws.cell(row=header_row, column=col)
+    current = cell.value
+    if isinstance(current, str) and _HEADER_YEAR_RE.search(current):
+        cell.value = _HEADER_YEAR_RE.sub(str(year), current, count=1)
+    else:
+        cell.value = fallback
+
+
+_TITLE_RE = re.compile(r"operating\s+budget", re.I)
+_MONTHS_RE = re.compile(r"january\s+1\s*,", re.I)
+
+
+def _title_lines(association_name: str, budget_year: int) -> list[str]:
+    """The three-line title block every association's budget should carry."""
+    return [
+        association_name.strip().upper(),
+        f"{budget_year} APPROVED OPERATING BUDGET",
+        f"JANUARY 1, {budget_year} - DECEMBER 31, {budget_year}",
+    ]
+
+
+def _ensure_title_block(ws, label_col: int, header_row: int, lines: list[str]) -> int:
+    """
+    Write the standard title block above the column headers.
+
+    Returns the number of rows INSERTED, so the caller can shift every row index
+    it already holds. Most workbooks already carry some form of title and are
+    rewritten in place; those with none (headers on row 1) get rows inserted.
+
+    Styling is copied from whatever title the sheet already had, so an
+    association's own fonts and merges survive.
+    """
+    # Find an existing title: a row above the headers mentioning "operating
+    # budget" (the middle line of the block).
+    middle = None
+    for row in range(1, header_row):
+        for col in range(1, min(ws.max_column, 4) + 1):
+            value = ws.cell(row=row, column=col).value
+            if isinstance(value, str) and _TITLE_RE.search(value):
+                middle = row
+                break
+        if middle:
+            break
+
+    inserted = 0
+    if middle is None:
+        # No title at all. Make room: three title rows plus a blank separator.
+        needed = 4 - (header_row - 1)
+        if needed > 0:
+            ws.insert_rows(1, needed)
+            inserted = needed
+            header_row += needed
+        middle = max(2, header_row - 3)
+
+    start = middle - 1
+    if start < 1:
+        ws.insert_rows(1, 1 - start + 1)
+        inserted += 1 - start + 1
+        start = 1
+        middle += 1
+
+    # Reuse the existing title's styling where there is one to copy.
+    template = ws.cell(row=middle, column=label_col)
+    for offset, text in enumerate(lines):
+        cell = ws.cell(row=start + offset, column=label_col)
+        cell.value = text
+        if template.has_style:
+            cell.font = copy(template.font)
+            cell.alignment = copy(template.alignment)
+
+    return inserted
 
 
 def _rows_for_sections(
@@ -282,6 +369,25 @@ def run(budget: BudgetOutput, review_flags: list[str], prev_year_xlsx_bytes: byt
         # headers instead of guessing row 1.
         lay = layout_mod.build_layout(wb, budget.budget_year)
         ws = wb[lay.sheet_title]
+
+        # Standard title block, written before anything else so that any rows it
+        # inserts are absorbed once, here, rather than invalidating row indexes
+        # computed later. openpyxl does not rewrite formula references when rows
+        # shift, so this cannot be done after the =SUM formulas are written.
+        title_offset = _ensure_title_block(
+            ws,
+            lay.label_col,
+            lay.header_row,
+            _title_lines(budget.association_name, budget.budget_year),
+        )
+        if title_offset:
+            lay.header_row += title_offset
+            lay.data_start_row += title_offset
+            lay.section_rows = {r + title_offset: s for r, s in lay.section_rows.items()}
+            lay.section_source_labels = {
+                r + title_offset: v for r, v in lay.section_source_labels.items()
+            }
+
         header_row = lay.header_row
         # Column A may hold GL codes with the real labels in column B; using the
         # detected column keeps label_to_rows keyed by text, not GL numbers.
@@ -294,18 +400,25 @@ def run(budget: BudgetOutput, review_flags: list[str], prev_year_xlsx_bytes: byt
         # results from the assessment preamble without destroying the formulas.
         wb_data = openpyxl.load_workbook(io.BytesIO(prev_year_xlsx_bytes), data_only=True)
         ws_data = wb_data[lay.sheet_title]
+        if title_offset:
+            # Keep the data-only copy row-aligned with the edited sheet.
+            ws_data.insert_rows(1, title_offset)
 
-        # Shift column headers to the new budget year.
-        #
-        # The proposed column is deliberately NOT touched — not its header, not
-        # its values, not its formulas. It is the manager's column: they set the
-        # new year's numbers there by hand, working from the prior-year and
-        # projected columns this stage fills in. Overwriting it (or blanking it)
-        # destroyed the starting point they edit from.
+        # Roll all three column headers forward a year, INCLUDING the proposed
+        # column. Its values and formulas are still left alone — that column
+        # belongs to the manager, who types the new year's numbers into it — but
+        # its heading has to say the year those numbers are for, otherwise the
+        # sheet ends up with two columns both labelled last year.
         prior_year_int = budget.budget_year - 1
-        ws.cell(row=header_row, column=prior_col).value = f"{prior_year_int} Budget"
+        _set_header(ws, header_row, prior_col, prior_year_int, f"{prior_year_int} Budget")
         if projected_col is not None:
-            ws.cell(row=header_row, column=projected_col).value = f"Projected {prior_year_int}"
+            _set_header(
+                ws, header_row, projected_col, prior_year_int, f"Projected {prior_year_int}"
+            )
+        if proposed_col is not None:
+            _set_header(
+                ws, header_row, proposed_col, budget.budget_year, f"{budget.budget_year} BUDGET"
+            )
 
         data_start = header_row + 1
 
@@ -502,7 +615,8 @@ def run(budget: BudgetOutput, review_flags: list[str], prev_year_xlsx_bytes: byt
         # Rows shift when new line items are inserted above them, so the
         # layout's recorded subtotal rows are re-based by that shift.
         _sheet_subtotal_rows = {
-            group: (r + _row_shift(r, _inserted_at)) for group, r in budget.subtotal_rows.items()
+            group: (r + title_offset + _row_shift(r + title_offset, _inserted_at))
+            for group, r in budget.subtotal_rows.items()
         }
 
         for line in budget.lines:
