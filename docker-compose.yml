@@ -21,17 +21,23 @@ services:
     depends_on:
       - postgres
 
-  minio:
-    image: minio/minio
+  # S3-compatible object storage for local development.
+  #
+  # This was minio/minio until MinIO deleted its public images in September
+  # 2026 (Docker Hub returns 404; the quay.io mirror now refuses anonymous
+  # pulls), which broke `docker compose pull` outright. SeaweedFS is a
+  # maintained, still-public drop-in that speaks the S3 API.
+  #
+  # It stays on port 9000 so existing .env files keep working unchanged.
+  # Anonymous access is allowed, so SPACES_KEY/SPACES_SECRET can be any
+  # non-empty values locally — boto3 still signs, SeaweedFS just doesn't check.
+  s3:
+    image: chrislusf/seaweedfs:3.97
     ports:
       - "9000:9000"
-      - "9001:9001"
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
-    command: server /data --console-address ":9001"
+    command: server -dir=/data -s3 -s3.port=9000 -ip=0.0.0.0
     volumes:
-      - minio_data:/data
+      - s3_data:/data
 
   redis:
     image: redis:7-alpine
@@ -42,5 +48,5 @@ services:
 
 volumes:
   postgres_data:
-  minio_data:
+  s3_data:
   redis_data:

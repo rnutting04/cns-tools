@@ -64,28 +64,15 @@ jobs:
           --health-timeout=5s
           --health-retries=5
 
-      minio:
-        image: minio/minio
-        env:
-          MINIO_ROOT_USER: local_access_key
-          MINIO_ROOT_PASSWORD: local_secret_key
-        ports:
-          - 9000:9000
-        options: >-
-          --health-cmd="curl -f http://localhost:9000/minio/health/live || exit 1"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=5
-        volumes:
-          - /tmp/minio-data:/data
-        command: server /data --console-address ":9001"
-
     env:
       DATABASE_URL: postgresql://cs_user:localpassword@localhost:5432/cs_tool_hub
       SECRET_KEY: ci_secret_key
+      # No object-storage container runs in CI. StorageService is lazy and
+      # every test mocks its methods, so these only have to satisfy Settings'
+      # required fields — nothing connects to this endpoint.
       SPACES_ENDPOINT: http://localhost:9000
-      SPACES_KEY: local_access_key
-      SPACES_SECRET: local_secret_key
+      SPACES_KEY: ci_access_key
+      SPACES_SECRET: ci_secret_key
       SPACES_BUCKET: cs-tool-hub
       ANTHROPIC_API_KEY: sk-ant-ci-placeholder
       CELERY_TASK_ALWAYS_EAGER: true
