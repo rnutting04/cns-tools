@@ -12,6 +12,7 @@ from uuid import uuid4
 from sqlalchemy.orm import Session
 
 from app.models.association import Association, UserAssociation
+from app.models.budget_layout_profile import BudgetLayoutProfile
 from app.models.template import Template
 from app.models.user import User, UserRole
 from app.utils.auth import hash_password
@@ -101,3 +102,30 @@ def create_template(
     db.add(template)
     db.flush()
     return template
+
+
+_signature_counter = itertools.count(1)
+
+
+def create_layout_profile(
+    db: Session,
+    *,
+    confirmed_by: User | None = None,
+    confirmed: bool = True,
+    signature: str | None = None,
+    sheet_title: str = "2027 Proposed Budget",
+) -> BudgetLayoutProfile:
+    profile = BudgetLayoutProfile(
+        signature=signature or f"sig{next(_signature_counter):028d}"[:32],
+        sheet_title=sheet_title,
+        header_row=4,
+        label_col=1,
+        proposed_col=5,
+        section_rows={},
+        value_cols=[],
+        confirmed=confirmed,
+        confirmed_by=confirmed_by.id if confirmed_by else None,
+    )
+    db.add(profile)
+    db.flush()
+    return profile

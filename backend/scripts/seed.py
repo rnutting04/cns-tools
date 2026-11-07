@@ -11,6 +11,7 @@ from app.config.settings import ENV_FILE
 from app.database import SessionLocal
 from app.models.association import Association, UserAssociation
 from app.models.budget_job import BudgetJob
+from app.models.budget_layout_profile import BudgetLayoutProfile
 from app.models.letter_job import LetterJob
 from app.models.user import User, UserRole
 
@@ -50,6 +51,16 @@ def seed():
     db.query(LetterJob).delete()
     db.query(UserAssociation).delete()
     db.query(Association).delete()
+    # Layout profiles are deliberately NOT deleted. They are keyed by workbook
+    # signature rather than by association or user, and each one represents a
+    # human sign-off that the pipeline reuses to avoid re-reviewing the same
+    # workbook shape — exactly the toil the table exists to prevent. Dropping
+    # them on every reseed would throw that work away. Clearing confirmed_by is
+    # enough to release the foreign key so the users below can be deleted; the
+    # confirmed layout itself survives.
+    db.query(BudgetLayoutProfile).update(
+        {BudgetLayoutProfile.confirmed_by: None}, synchronize_session=False
+    )
     db.query(User).delete()
     db.commit()
 

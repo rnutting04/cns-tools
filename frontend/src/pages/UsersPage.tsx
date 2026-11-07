@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Chip from '@mui/material/Chip'
@@ -27,12 +28,13 @@ import BlockIcon from '@mui/icons-material/Block'
 import DeleteForeverIcon from '@mui/icons-material/DeleteForever'
 import EditIcon from '@mui/icons-material/Edit'
 import EmailIcon from '@mui/icons-material/Email'
+import ForwardToInboxIcon from '@mui/icons-material/ForwardToInbox'
 import LockResetIcon from '@mui/icons-material/LockReset'
 import ManageAccountsIcon from '@mui/icons-material/ManageAccounts'
 import SearchIcon from '@mui/icons-material/Search'
 import WorkIcon from '@mui/icons-material/Work'
 import { DataGrid } from '@mui/x-data-grid'
-import type { GridColDef, GridRenderCellParams } from '@mui/x-data-grid'
+import type { GridColDef, GridRenderCellParams, GridRowSelectionModel } from '@mui/x-data-grid'
 import apiClient from '../api/client'
 import { fetchUsers, queryKeys } from '../api/queries'
 import { useAuth } from '../context/AuthContext'
@@ -51,6 +53,21 @@ const emptyCreateForm = {
   role: 'manager' as UserRole,
 }
 const emptyEditForm = { fname: '', lname: '', email: '', title: '', is_active: true }
+
+// Accounts are created by an admin before the person has ever signed in, so the
+// usual way to hand out access — "reset their password" — reads to the
+// recipient as a security alert for an account they didn't know they had. This
+// action issues the same kind of temporary password but sends the welcome
+// email, which is what you want for onboarding an existing account.
+const SEND_ACCESS_TOOLTIP = 'Send account access (welcome email + temporary password)'
+
+function accessDescription(names: string) {
+  return (
+    `Send ${names} a welcome email with a new temporary password. ` +
+    'Any password they already have will stop working, and they will be asked ' +
+    'to choose a new one on their next sign-in.'
+  )
+}
 
 // ─── Skeleton list ────────────────────────────────────────────────────────────
 
@@ -86,6 +103,7 @@ interface UserRowProps {
   onRoleChange: (u: User) => void
   onDeactivate: (u: User) => void
   onReset: (u: User) => void
+  onSendWelcome: (u: User) => void
   onPermanentDelete: (u: User) => void
 }
 
@@ -98,6 +116,7 @@ function UserRow({
   onRoleChange,
   onDeactivate,
   onReset,
+  onSendWelcome,
   onPermanentDelete,
 }: UserRowProps) {
   return (
@@ -136,6 +155,17 @@ function UserRow({
               <IconButton size="small" onClick={() => onEdit(user)}>
                 <EditIcon fontSize="small" />
               </IconButton>
+            </Tooltip>
+            <Tooltip title={SEND_ACCESS_TOOLTIP}>
+              <span>
+                <IconButton
+                  size="small"
+                  disabled={!user.is_active}
+                  onClick={() => onSendWelcome(user)}
+                >
+                  <ForwardToInboxIcon fontSize="small" />
+                </IconButton>
+              </span>
             </Tooltip>
             <Tooltip title="Reset password">
               <IconButton size="small" onClick={() => onReset(user)}>
@@ -214,6 +244,7 @@ export default function UsersPage() {
   }
 
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   const [search, setSearch] = useState('')
 
   const [createOpen, setCreateOpen] = useState(false)
@@ -237,6 +268,16 @@ export default function UsersPage() {
   const [resetTarget, setResetTarget] = useState<User | null>(null)
   const [resetLoading, setResetLoading] = useState(false)
 
+  const [welcomeTarget, setWelcomeTarget] = useState<User | null>(null)
+  const [welcomeLoading, setWelcomeLoading] = useState(false)
+
+  const [selection, setSelection] = useState<GridRowSelectionModel>({
+    type: 'include',
+    ids: new Set(),
+  })
+  const [bulkWelcomeOpen, setBulkWelcomeOpen] = useState(false)
+  const [bulkWelcomeLoading, setBulkWelcomeLoading] = useState(false)
+
   const [permanentDeleteTarget, setPermanentDeleteTarget] = useState<User | null>(null)
   const [permanentDeleteLoading, setPermanentDeleteLoading] = useState(false)
 
@@ -247,6 +288,23 @@ export default function UsersPage() {
       `${u.fname} ${u.lname} ${u.email} ${u.title}`.toLowerCase().includes(q),
     )
   }, [rows, search])
+
+  // The grid's selection model is either an explicit set of ids or, after
+  // "select all", the complement of an excluded set — so resolve it against the
+  // currently filtered rows. Deactivated users are dropped: the backend skips
+  // them anyway, and counting them would overstate how many emails go out.
+  const selectedForWelcome = useMemo(() => {
+    const { type, ids } = selection
+    const chosen =
+      type === 'exclude'
+        ? filtered.filter((u) => !ids.has(u.id))
+        : filtered.filter((u) => ids.has(u.id))
+    return chosen.filter((u) => u.is_active)
+  }, [selection, filtered])
+
+  function clearSelection() {
+    setSelection({ type: 'include', ids: new Set() })
+  }
 
   function openCreate() {
     setCreateForm(emptyCreateForm)
@@ -339,6 +397,48 @@ export default function UsersPage() {
     }
   }
 
+  async function handleSendWelcome() {
+    if (!welcomeTarget) return
+    setWelcomeLoading(true)
+    setError(null)
+    try {
+      await apiClient.post(`/api/users/${welcomeTarget.id}/send-welcome`)
+      setNotice(`Welcome email sent to ${welcomeTarget.email}.`)
+      setWelcomeTarget(null)
+    } catch (err: unknown) {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      setError(detail ?? 'Failed to send the welcome email.')
+      setWelcomeTarget(null)
+    } finally {
+      setWelcomeLoading(false)
+    }
+  }
+
+  async function handleBulkWelcome() {
+    const ids = selectedForWelcome.map((u) => u.id)
+    if (ids.length === 0) return
+    setBulkWelcomeLoading(true)
+    setError(null)
+    try {
+      const { data } = await apiClient.post<{ sent: number; skipped: string[] }>(
+        '/api/users/send-welcome',
+        { user_ids: ids },
+      )
+      const skipped = data.skipped.length ? ` ${data.skipped.length} skipped.` : ''
+      setNotice(
+        `Welcome email${data.sent === 1 ? '' : 's'} sent to ${data.sent} user${data.sent === 1 ? '' : 's'}.${skipped}`,
+      )
+      setBulkWelcomeOpen(false)
+      clearSelection()
+    } catch (err: unknown) {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      setError(detail ?? 'Failed to send the welcome emails.')
+      setBulkWelcomeOpen(false)
+    } finally {
+      setBulkWelcomeLoading(false)
+    }
+  }
+
   async function handleDeactivate() {
     if (!deactivateTarget) return
     setDeactivateLoading(true)
@@ -403,7 +503,7 @@ export default function UsersPage() {
       {
         field: 'actions',
         headerName: 'Actions',
-        width: 160,
+        width: 190,
         sortable: false,
         renderCell: (params: GridRenderCellParams<User>) => (
           <Box display="flex" gap={0.5}>
@@ -411,6 +511,23 @@ export default function UsersPage() {
               <IconButton size="small" onClick={() => openEdit(params.row)}>
                 <EditIcon fontSize="small" />
               </IconButton>
+            </Tooltip>
+            <Tooltip
+              title={
+                params.row.is_active
+                  ? SEND_ACCESS_TOOLTIP
+                  : 'Reactivate this user before sending account access'
+              }
+            >
+              <span>
+                <IconButton
+                  size="small"
+                  disabled={!params.row.is_active}
+                  onClick={() => setWelcomeTarget(params.row)}
+                >
+                  <ForwardToInboxIcon fontSize="small" />
+                </IconButton>
+              </span>
             </Tooltip>
             <Tooltip title="Reset password">
               <IconButton size="small" onClick={() => setResetTarget(params.row)}>
@@ -477,13 +594,33 @@ export default function UsersPage() {
       {/* Header */}
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
         <Typography variant="h5">Users</Typography>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}>
-          New user
-        </Button>
+        <Box display="flex" gap={1}>
+          {/* Rolling the tool out to a batch of already-created accounts is the
+              common case, so the bulk action lives next to "New user" rather
+              than hidden behind the per-row menu. */}
+          {!isMobile && selectedForWelcome.length > 0 && (
+            <Button
+              variant="outlined"
+              startIcon={<ForwardToInboxIcon />}
+              onClick={() => setBulkWelcomeOpen(true)}
+            >
+              Send access to {selectedForWelcome.length}
+            </Button>
+          )}
+          <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}>
+            New user
+          </Button>
+        </Box>
       </Box>
 
       {(error || isError) && (
         <ErrorAlert message={error ?? 'Failed to load users.'} onClose={() => setError(null)} />
+      )}
+
+      {notice && (
+        <Alert severity="success" onClose={() => setNotice(null)} sx={{ mb: 2 }}>
+          {notice}
+        </Alert>
       )}
 
       {/* Search */}
@@ -526,6 +663,7 @@ export default function UsersPage() {
                 onRoleChange={openRoleChange}
                 onDeactivate={setDeactivateTarget}
                 onReset={setResetTarget}
+                onSendWelcome={setWelcomeTarget}
                 onPermanentDelete={setPermanentDeleteTarget}
               />
             ))}
@@ -539,6 +677,10 @@ export default function UsersPage() {
           autoHeight
           pageSizeOptions={[25, 50, 100]}
           initialState={{ pagination: { paginationModel: { pageSize: 25 } } }}
+          checkboxSelection
+          rowSelectionModel={selection}
+          onRowSelectionModelChange={setSelection}
+          isRowSelectable={(params) => Boolean((params.row as User).is_active)}
           disableRowSelectionOnClick
           sx={{ bgcolor: 'background.paper', borderRadius: 2 }}
         />
@@ -745,6 +887,34 @@ export default function UsersPage() {
         loading={resetLoading}
         onConfirm={handleReset}
         onCancel={() => setResetTarget(null)}
+      />
+
+      {/* Send account access confirm */}
+      <ConfirmDialog
+        open={!!welcomeTarget}
+        title="Send account access"
+        description={accessDescription(
+          `${welcomeTarget?.fname} ${welcomeTarget?.lname} (${welcomeTarget?.email})`,
+        )}
+        confirmLabel={welcomeLoading ? 'Sending…' : 'Send welcome email'}
+        confirmColor="primary"
+        loading={welcomeLoading}
+        onConfirm={handleSendWelcome}
+        onCancel={() => setWelcomeTarget(null)}
+      />
+
+      {/* Bulk send account access confirm */}
+      <ConfirmDialog
+        open={bulkWelcomeOpen}
+        title={`Send account access to ${selectedForWelcome.length} user${selectedForWelcome.length === 1 ? '' : 's'}`}
+        description={accessDescription(
+          `${selectedForWelcome.length} selected user${selectedForWelcome.length === 1 ? '' : 's'}`,
+        )}
+        confirmLabel={bulkWelcomeLoading ? 'Sending…' : 'Send welcome emails'}
+        confirmColor="primary"
+        loading={bulkWelcomeLoading}
+        onConfirm={handleBulkWelcome}
+        onCancel={() => setBulkWelcomeOpen(false)}
       />
 
       {/* Deactivate confirm */}

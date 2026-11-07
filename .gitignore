@@ -56,6 +56,9 @@ uploads/
 temp/
 *.tmp
 
+# Generated email previews (scripts/preview_emails.py)
+backend/test_data/email_previews/
+
 # Testing
 .pytest_cache/
 htmlcov/

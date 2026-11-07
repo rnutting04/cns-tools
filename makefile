@@ -1,4 +1,4 @@
-.PHONY: dev worker seed migrate reset stop logs ps install test test-backend test-frontend ci ci-backend ci-frontend help
+.PHONY: dev worker seed migrate reset stop logs ps install test test-backend test-frontend ci ci-backend ci-frontend mail-preview help
 
 dev:
 	docker compose up -d
@@ -31,6 +31,11 @@ ps:
 install:
 	cd backend && pip install -r requirements.txt
 
+# Render the email templates to backend/test_data/email_previews and open them.
+# Sends nothing and needs no services.
+mail-preview:
+	cd backend && venv/bin/python scripts/preview_emails.py --open
+
 # Backend tests need Postgres + MinIO running (make dev / docker compose up -d).
 test-backend:
 	cd backend && venv/bin/python -m pytest
@@ -60,6 +65,7 @@ help:
 	@echo "  make logs          - tail docker logs"
 	@echo "  make ps            - show container status"
 	@echo "  make install       - install python dependencies"
+	@echo "  make mail-preview  - render the email templates and open them in a browser"
 	@echo "  make test          - run backend + frontend test suites"
 	@echo "  make test-backend  - run backend pytest (needs docker services up)"
 	@echo "  make test-frontend - run frontend vitest"

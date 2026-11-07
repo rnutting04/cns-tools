@@ -10,6 +10,8 @@ from app.database import Base
 # import all models so alembic can detect them (side-effect: populates Base.metadata)
 from app.models.association import Association, UserAssociation  # noqa: F401
 from app.models.audit_event import AuditEvent  # noqa: F401
+from app.models.budget_job import BudgetJob  # noqa: F401
+from app.models.budget_layout_profile import BudgetLayoutProfile  # noqa: F401
 from app.models.letter_job import LetterJob  # noqa: F401
 from app.models.refresh_token import RefreshToken  # noqa: F401
 from app.models.template import Template  # noqa: F401

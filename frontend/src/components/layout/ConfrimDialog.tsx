@@ -10,6 +10,10 @@ interface Props {
   title: string
   description: string
   confirmLabel?: string
+  // Most confirms here guard a destructive action, so the button is red by
+  // default. Pass 'primary' for actions that are routine rather than risky
+  // (e.g. sending a welcome email) so red keeps meaning "careful".
+  confirmColor?: 'error' | 'primary'
   loading?: boolean
   onConfirm: () => void
   onCancel: () => void
@@ -20,6 +24,7 @@ export default function ConfirmDialog({
   title,
   description,
   confirmLabel = 'Confirm',
+  confirmColor = 'error',
   loading = false,
   onConfirm,
   onCancel,
@@ -34,7 +39,7 @@ export default function ConfirmDialog({
         <Button onClick={onCancel} disabled={loading}>
           Cancel
         </Button>
-        <Button variant="contained" color="error" onClick={onConfirm} disabled={loading}>
+        <Button variant="contained" color={confirmColor} onClick={onConfirm} disabled={loading}>
           {loading ? 'Processing…' : confirmLabel}
         </Button>
       </DialogActions>

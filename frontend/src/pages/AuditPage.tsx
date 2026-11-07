@@ -43,6 +43,9 @@ const ACTION_COLOR: Record<string, 'error' | 'warning' | 'info' | 'success' | 'd
   'user.role_changed': 'warning',
   'auth.login': 'success',
   'user.created': 'info',
+  'user.welcome_sent': 'info',
+  'user.welcome_sent_bulk': 'info',
+  'user.password_reset': 'warning',
   'user.password_changed': 'info',
   'user.updated': 'default',
 }

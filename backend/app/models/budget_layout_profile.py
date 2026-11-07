@@ -53,7 +53,13 @@ class BudgetLayoutProfile(Base):
     # How many jobs have reused this profile; makes the payoff visible.
     use_count = Column(Integer, nullable=False, default=0)
 
-    confirmed_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    # SET NULL rather than the default RESTRICT: the sign-off is a property of
+    # the workbook shape and outlives the account that made it, so a departed
+    # user must not block their own deletion. The profile stays confirmed; it
+    # just no longer records who confirmed it.
+    confirmed_by = Column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     confirmed_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(UTC))
 

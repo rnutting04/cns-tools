@@ -6,9 +6,13 @@ import Toolbar from '@mui/material/Toolbar'
 import Typography from '@mui/material/Typography'
 import useMediaQuery from '@mui/material/useMediaQuery'
 import { useTheme } from '@mui/material/styles'
+import DarkModeIcon from '@mui/icons-material/DarkModeOutlined'
+import LightModeIcon from '@mui/icons-material/LightModeOutlined'
 import LogoutIcon from '@mui/icons-material/Logout'
 import MenuIcon from '@mui/icons-material/Menu'
+import Tooltip from '@mui/material/Tooltip'
 import { useAuth } from '../../context/AuthContext'
+import { useColorMode } from '../../context/ColorModeContext'
 import { useNavigate } from 'react-router-dom'
 import CnsLogo from './CnsLogo'
 
@@ -18,6 +22,7 @@ interface Props {
 
 export default function TopBar({ onMenuClick }: Props) {
   const { user, logout } = useAuth()
+  const { mode, toggle } = useColorMode()
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('md'))
   const navigate = useNavigate()
@@ -26,7 +31,7 @@ export default function TopBar({ onMenuClick }: Props) {
     navigate('/login', { replace: true })
   }
   return (
-    <AppBar position="fixed" sx={{ zIndex: (t) => t.zIndex.drawer + 1, bgcolor: 'primary.main' }}>
+    <AppBar position="fixed" sx={{ zIndex: (t) => t.zIndex.drawer + 1 }}>
       <Toolbar>
         {isMobile && (
           <IconButton
@@ -42,13 +47,13 @@ export default function TopBar({ onMenuClick }: Props) {
 
         {/* Logo + app name */}
         <Box display="flex" alignItems="center" gap={1.5} sx={{ flexShrink: 0 }}>
-          <CnsLogo height={32} />
+          <CnsLogo height={32} tone="light" />
           {!isMobile && (
             <Box>
               <Typography
                 variant="subtitle2"
                 sx={{
-                  color: 'primary.contrastText',
+                  color: '#FFFFFF',
                   fontWeight: 700,
                   lineHeight: 1.1,
                   fontSize: '0.85rem',
@@ -72,10 +77,19 @@ export default function TopBar({ onMenuClick }: Props) {
         </Box>
 
         <Box flex={1} />
+        <Tooltip title={mode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
+          <IconButton color="inherit" onClick={toggle} aria-label="toggle colour mode">
+            {mode === 'dark' ? (
+              <LightModeIcon fontSize="small" />
+            ) : (
+              <DarkModeIcon fontSize="small" />
+            )}
+          </IconButton>
+        </Tooltip>
         {user && (
           <Box display="flex" alignItems="center" gap={{ xs: 1, sm: 2 }}>
             {!isMobile && (
-              <Typography variant="body2" sx={{ color: 'primary.contrastText', opacity: 0.85 }}>
+              <Typography variant="body2" sx={{ color: '#FFFFFF', opacity: 0.85 }}>
                 {user.fname} {user.lname}
               </Typography>
             )}

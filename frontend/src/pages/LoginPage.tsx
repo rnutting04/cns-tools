@@ -20,6 +20,7 @@ import Visibility from '@mui/icons-material/Visibility'
 import VisibilityOff from '@mui/icons-material/VisibilityOff'
 import { useAuth } from '../context/AuthContext'
 import CnsLogo from '../components/common/CnsLogo'
+import { brand } from '../theme'
 
 export default function LoginPage() {
   const theme = useTheme()
@@ -58,7 +59,7 @@ export default function LoginPage() {
         position: 'relative',
         overflow: 'hidden',
         px: 2,
-        background: 'linear-gradient(145deg, #0F2057 0%, #1E3D8F 45%, #1D7834 100%)',
+        background: `linear-gradient(145deg, ${brand.navyDark} 0%, ${brand.navy} 55%, ${brand.navyLight} 100%)`,
         // Subtle depth glows over the flat gradient.
         '&::before': {
           content: '""',
@@ -66,7 +67,9 @@ export default function LoginPage() {
           inset: 0,
           background:
             'radial-gradient(60% 55% at 15% 10%, rgba(255,255,255,0.10), transparent 60%),' +
-            'radial-gradient(50% 50% at 90% 90%, rgba(46,155,78,0.22), transparent 60%)',
+            // Gold glow where the green one used to be — the brand's only
+            // warm note, kept low-opacity so it reads as light, not as a wash.
+            'radial-gradient(55% 50% at 88% 88%, rgba(201,162,39,0.26), transparent 62%)',
           pointerEvents: 'none',
         },
       }}
@@ -86,7 +89,7 @@ export default function LoginPage() {
         <Box
           sx={{
             position: 'relative',
-            background: `linear-gradient(160deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`,
+            background: `linear-gradient(160deg, ${brand.navy} 0%, ${brand.navyDark} 100%)`,
             pt: 4.5,
             pb: 3.5,
             px: 4,
@@ -96,7 +99,7 @@ export default function LoginPage() {
             gap: 1.5,
           }}
         >
-          <CnsLogo height={56} showText={false} />
+          <CnsLogo height={56} showText={false} tone="light" />
           <Typography
             variant="subtitle2"
             sx={{
@@ -110,7 +113,7 @@ export default function LoginPage() {
           >
             Community Management Services, Inc.
           </Typography>
-          {/* Brand accent bar (green arc color) */}
+          {/* Gold rule, echoing the AAMC rules on the printed lockup. */}
           <Box
             sx={{
               position: 'absolute',

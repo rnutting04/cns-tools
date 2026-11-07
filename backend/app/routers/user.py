@@ -1,8 +1,9 @@
 # app/routers/users.py
+import secrets
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
@@ -29,6 +30,28 @@ class RoleUpdate(BaseModel):
 class ChangePasswordRequest(BaseModel):
     current_password: str
     new_password: str
+
+
+class SendWelcomeRequest(BaseModel):
+    user_ids: list[UUID] = Field(min_length=1, max_length=200)
+
+
+class SendWelcomeResult(BaseModel):
+    sent: int
+    skipped: list[str] = []
+
+
+def _issue_temp_password(user: User) -> str:
+    """Replace a user's password with a fresh single-use one.
+
+    Caller is responsible for logging the audit event, committing, and sending
+    the mail that carries the returned password. The password is only ever held
+    in memory and emailed — never stored in plaintext or written to the audit log.
+    """
+    temp_password = secrets.token_urlsafe(12)
+    user.password_hash = hash_password(temp_password)
+    user.password_change_required = True
+    return temp_password
 
 
 def _serialize_user_with_associations(user: User) -> dict:
@@ -62,7 +85,6 @@ def create_user(
 ):
     if db.query(User).filter(User.email == body.email).first():
         raise HTTPException(status_code=409, detail="Email already in use")
-    import secrets
 
     temp_password = secrets.token_urlsafe(12)
     user = User(
@@ -237,15 +259,11 @@ def reset_user_password(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
-    import secrets
-
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    temp_password = secrets.token_urlsafe(12)
-    user.password_hash = hash_password(temp_password)
-    user.password_change_required = True
+    temp_password = _issue_temp_password(user)
     log_event(
         db,
         actor=current_user,
@@ -257,3 +275,92 @@ def reset_user_password(
     db.commit()
 
     reset_password_email(user.email, user.fname, temp_password)
+
+
+# ─── Account access (welcome) ────────────────────────────────────────────────
+#
+# Accounts are provisioned by an admin before the user has ever signed in, so
+# for a rollout to existing accounts there is nobody to "reset" a password for —
+# the user has simply never received theirs. These two endpoints do mechanically
+# the same thing as reset-password (issue a fresh single-use password) but send
+# the welcome email instead, which reads as an invitation rather than a security
+# alert. Kept separate from reset-password so the audit trail distinguishes
+# "onboarded this person" from "an admin reset this person's password".
+
+
+@router.post("/{user_id}/send-welcome", status_code=204)
+def send_welcome_to_user(
+    user_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if not user.is_active:
+        raise HTTPException(
+            status_code=400,
+            detail="User is deactivated. Reactivate them before sending account access.",
+        )
+
+    temp_password = _issue_temp_password(user)
+    log_event(
+        db,
+        actor=current_user,
+        action="user.welcome_sent",
+        target_type="user",
+        target_id=str(user.id),
+        metadata={"email": user.email},
+    )
+    db.commit()
+
+    welcome_email(user.email, user.fname, temp_password)
+
+
+@router.post("/send-welcome", response_model=SendWelcomeResult)
+def send_welcome_bulk(
+    body: SendWelcomeRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """Issue account access to several existing users at once.
+
+    Deactivated and unknown users are skipped rather than failing the batch, so
+    one stale selection can't block a rollout to everyone else. All password
+    changes commit as a single transaction; the emails are queued afterwards so
+    a mail failure can't leave a user holding a password that was rolled back.
+    """
+    users = db.query(User).filter(User.id.in_(body.user_ids)).all()
+    by_id = {u.id: u for u in users}
+
+    issued: list[tuple[User, str]] = []
+    skipped: list[str] = []
+
+    for user_id in body.user_ids:
+        user = by_id.get(user_id)
+        if user is None:
+            skipped.append(f"{user_id} (not found)")
+            continue
+        if not user.is_active:
+            skipped.append(f"{user.email} (deactivated)")
+            continue
+        issued.append((user, _issue_temp_password(user)))
+
+    if issued:
+        log_event(
+            db,
+            actor=current_user,
+            action="user.welcome_sent_bulk",
+            target_type="user",
+            metadata={
+                "count": len(issued),
+                "emails": [u.email for u, _ in issued],
+                "skipped": skipped,
+            },
+        )
+    db.commit()
+
+    for user, temp_password in issued:
+        welcome_email(user.email, user.fname, temp_password)
+
+    return SendWelcomeResult(sent=len(issued), skipped=skipped)
