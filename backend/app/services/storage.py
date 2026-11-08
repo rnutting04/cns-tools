@@ -23,7 +23,10 @@ class StorageService:
     def __init__(self) -> None:
         self._client_instance = None
         self._bucket_ready = False
-        self._lock = threading.Lock()
+        # Reentrant: _ensure_bucket holds this while calling the _client
+        # property, which takes it again to build the client on first use.
+        # A plain Lock deadlocks there on the very first upload.
+        self._lock = threading.RLock()
 
     @property
     def _bucket(self) -> str:

@@ -6,11 +6,14 @@ frontend, plus local pre-commit hooks and CI gates.
 ## Backend (pytest)
 
 The backend tests use a **real Postgres** database (the models rely on
-JSONB / INET / UUID columns), and mock S3/MinIO where storage is touched.
+JSONB / INET / UUID columns), and mock object storage where it is touched.
 
 ```bash
-# 1. Start the local services (Postgres + MinIO)
-make dev            # or: docker compose up -d postgres minio
+# 1. Start the local services (Postgres, and object storage to run the app)
+make dev            # or: docker compose up -d postgres s3
+#
+# The test suite itself needs only Postgres - every test mocks object
+# storage, and StorageService connects lazily, so no S3 is required.
 
 # 2. Install runtime + dev/test dependencies
 cd backend
@@ -74,7 +77,8 @@ pre-commit run --all-files                     # optional: run against everythin
 
 - **frontend** — build, `typecheck`, and `test:coverage`.
 - **backend** — Alembic migrations, ruff lint of the test suite, and `pytest`
-  with coverage, against service Postgres + MinIO.
+  with coverage, against a service Postgres. No object-storage container runs:
+  `StorageService` connects lazily and every test mocks its methods.
 
 > Repo-wide `eslint` and `ruff` gates are not yet enforced in CI because the
 > existing application code has pre-existing violations. The pre-commit hooks

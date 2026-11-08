@@ -3,7 +3,7 @@
 A full-stack web app for managing **letter generation** (proxy votes, shareholder
 communications), **user/association management**, and **audit logging**. The backend is
 FastAPI + PostgreSQL with background letter rendering on Celery; the frontend is React +
-MUI. Generated DOCX files are stored in an S3-compatible object store (MinIO locally).
+MUI. Generated DOCX files are stored in an S3-compatible object store (SeaweedFS locally).
 
 This README covers getting a **local development** environment running. For testing
 details see [TESTING.md](TESTING.md).
@@ -12,9 +12,9 @@ details see [TESTING.md](TESTING.md).
 
 - **Backend:** FastAPI, SQLAlchemy + Alembic, PostgreSQL 15
 - **Background jobs:** Celery, Redis (broker + result backend)
-- **Storage:** MinIO (S3-compatible) for generated DOCX files
+- **Storage:** SeaweedFS (S3-compatible) for generated DOCX files
 - **Frontend:** React 19, TypeScript, MUI, Vite 8
-- **Infra (local):** Docker Compose — Postgres, pgAdmin, MinIO, Redis
+- **Infra (local):** Docker Compose — Postgres, pgAdmin, SeaweedFS (S3), Redis
 
 ## Prerequisites
 
@@ -47,7 +47,7 @@ cd ..
 # 4. Install pre-commit hooks (runs ruff + eslint on staged files automatically)
 pre-commit install
 
-# 5. Start Docker services (Postgres, MinIO, Redis, pgAdmin) and the API
+# 5. Start Docker services (Postgres, SeaweedFS, Redis, pgAdmin) and the API
 make dev                # runs `docker compose up -d` then uvicorn on :8000
 
 # 6. In a second shell — run migrations and seed initial data
@@ -77,8 +77,7 @@ Once running:
 | Frontend       | http://localhost:5173        | —                                          | Vite dev server                  |
 | PostgreSQL     | localhost:5432               | `cs_user` / `localpassword`                | Application database             |
 | pgAdmin        | http://localhost:5050        | `admin@admin.com` / `admin`                | DB admin UI                      |
-| MinIO API      | http://localhost:9000        | `local_access_key` / `local_secret_key`    | S3-compatible object storage     |
-| MinIO Console  | http://localhost:9001        | `local_access_key` / `local_secret_key`    | MinIO web console                |
+| S3 (SeaweedFS) | http://localhost:9000        | anonymous — any key/secret works           | S3-compatible object storage     |
 | Redis          | localhost:6379               | —                                          | Celery broker + result backend   |
 
 The DOCX storage bucket (`cs-tool-hub`) is created automatically on first use by the
@@ -91,13 +90,15 @@ committed `.example` template with working local defaults.
 
 | File             | Read by                | Key variables                                                                 |
 | ---------------- | ---------------------- | ----------------------------------------------------------------------------- |
-| `.env`           | Docker Compose         | `POSTGRES_*`, `PGADMIN_*`, `MINIO_ROOT_*`                                      |
+| `.env`           | Docker Compose         | `POSTGRES_*`, `PGADMIN_*`                                                      |
 | `backend/.env`   | FastAPI + Celery       | `DATABASE_URL`, `SECRET_KEY`, `SPACES_ENDPOINT`, `SPACES_KEY`, `SPACES_SECRET`, `SPACES_BUCKET` |
 | `frontend/.env`  | Vite                   | `VITE_API_URL` (defaults to `http://localhost:8000`)                          |
 
-The `SPACES_*` variables point the backend at MinIO locally: `SPACES_ENDPOINT` is the MinIO
-API URL, and `SPACES_KEY`/`SPACES_SECRET` match the `MINIO_ROOT_*` credentials in the root
-`.env`. In production these map to a real S3-compatible service (e.g. DigitalOcean Spaces).
+The `SPACES_*` variables point the backend at the local S3-compatible store on
+`http://localhost:9000`. That service is SeaweedFS (it was MinIO until MinIO removed its
+public container images in September 2026). It accepts anonymous access, so
+`SPACES_KEY`/`SPACES_SECRET` can be any non-empty values locally. In production these map
+to a real S3-compatible service (e.g. DigitalOcean Spaces).
 
 ## Common commands
 
@@ -164,7 +165,7 @@ backend/app/
   models/          — SQLAlchemy ORM (User, Association, Template, AuditEvent, LetterJob…)
   routers/         — auth, user, association, templates, managers, audit
   schemas/         — Pydantic request/response models
-  services/        — audit, renderers (DOCX), storage (MinIO/S3), letters/ (Celery tasks)
+  services/        — audit, renderers (DOCX), storage (S3), letters/ (Celery tasks)
   utils/           — auth (JWT + bcrypt), field enrichment
 
 frontend/src/

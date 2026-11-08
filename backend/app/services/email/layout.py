@@ -145,41 +145,30 @@ def steps(items: list[str]) -> str:
 
 
 def _logo_mark() -> str:
-    """The C&S lockup rebuilt as styled text.
+    """The real logo, served from the frontend's static assets.
 
-    The app renders the real PNG, but email can't: Gmail strips data: URIs on
-    images and every client lets the recipient block remote ones, so a hosted
-    logo is a logo that is often simply absent. Three table cells of serif
-    text reproduce the mark's structure — navy letterforms, gold ampersand —
-    with nothing left to fetch.
+    Two routes were rejected first: data: URIs (Gmail strips them from img
+    tags) and inline CID attachments (patchy support through Resend). That
+    leaves a hosted image, which is what every other sender does.
+
+    Its weakness is that some clients - Outlook desktop most notably - block
+    remote images from external senders until the reader clicks through. The
+    alt text is therefore a real fallback, not an afterthought: it is styled
+    navy and serif so a blocked header still reads as the company name rather
+    than as a broken box.
     """
-    # The three letters live in their own nested table so they stay tight.
-    # Put them in sibling cells of the wordmark's row and the wider wordmark
-    # stretches the row, pushing C, & and S apart.
-    letters = (
-        f'<td valign="bottom" style="font-family:{SERIF};font-size:36px;'
-        f'font-weight:700;color:{NAVY};line-height:1;">C</td>'
-        f'<td valign="bottom" style="font-family:{SERIF};font-size:34px;'
-        f'font-style:italic;font-weight:700;color:{GOLD};line-height:1;">&amp;</td>'
-        f'<td valign="bottom" style="font-family:{SERIF};font-size:36px;'
-        f'font-weight:700;color:{NAVY};line-height:1;">S</td>'
+    src = f"{settings.FRONTEND_URL.rstrip('/')}/email-logo.png"
+    # 191x125 source, scaled to 140 wide; the explicit height stops Outlook
+    # reserving the wrong box before the image arrives.
+    img = (
+        f'<img src="{escape(src, quote=True)}" width="140" height="92" '
+        f'alt="C&amp;S Community Management Services, Inc." '
+        f'style="display:block;border:0;outline:none;text-decoration:none;'
+        f'font-family:{SERIF};font-size:15px;font-weight:700;color:{NAVY};" />'
     )
-    mark = (
-        f'<table role="presentation" cellpadding="0" cellspacing="0" '
-        f'border="0"><tr>{letters}</tr></table>'
-    )
-    return (
-        f'<table role="presentation" cellpadding="0" cellspacing="0" border="0">'
-        f'<tr><td align="center" style="padding:0 0 2px;">{mark}</td></tr>'
-        f'<tr><td align="center" style="font-family:{SERIF};font-size:8px;'
-        f"font-weight:600;letter-spacing:1.1px;color:{NAVY};"
-        f'white-space:nowrap;">COMMUNITY MANAGEMENT SERVICES</td></tr>'
-        f'<tr><td style="padding:5px 0 0;font-size:0;line-height:0;">'
-        f'<table role="presentation" cellpadding="0" cellspacing="0" border="0" '
-        f'width="100%"><tr><td height="2" bgcolor="{GOLD}" '
-        f'style="font-size:0;line-height:0;">&nbsp;</td></tr></table></td></tr>'
-        f"</table>"
-    )
+    # No extra rule beneath: the artwork already carries its own gold AAMC
+    # rules, and adding another reads as a doubled line.
+    return img
 
 
 def _preheader(text: str) -> str:

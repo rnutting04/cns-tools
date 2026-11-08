@@ -94,10 +94,30 @@ class TestLayout:
         body = html.split("</head>", 1)[1]
         assert 'style="' in body
 
-    def test_logo_needs_no_remote_image(self):
+    def test_logo_is_a_hosted_image_with_a_usable_fallback(self):
+        """Outlook blocks remote images from external senders by default, so
+        the header has to survive the image never loading."""
         html = layout.render(preheader="p", title="t", blocks=[])
-        assert "<img" not in html
-        assert "<svg" not in html
+        assert "email-logo.png" in html
+        # Alt text is the fallback, and it must name the company.
+        assert 'alt="C&amp;S Community Management Services, Inc."' in html
+        # Explicit dimensions so Outlook reserves the right box.
+        assert 'width="140"' in html and 'height="92"' in html
+
+    def test_blocked_logo_falls_back_to_styled_alt_text(self):
+        """With images off the alt text is all that is left, so it has to read
+        as the company name rather than as a broken box."""
+        html = layout.render(preheader="p", title="t", blocks=[])
+        img = html[html.index("<img") : html.index("/>", html.index("<img"))]
+        assert "C&amp;S Community Management Services" in img
+        assert layout.NAVY in img
+        assert "Georgia" in img
+
+    def test_logo_url_follows_the_configured_frontend(self, monkeypatch):
+        monkeypatch.setattr(layout.settings, "FRONTEND_URL", "https://tools.example.com/")
+        html = layout.render(preheader="p", title="t", blocks=[])
+        # Trailing slash on the setting must not produce a doubled slash.
+        assert "https://tools.example.com/email-logo.png" in html
 
     def test_preheader_is_hidden(self):
         html = layout.render(preheader="secret preview", title="t", blocks=[])

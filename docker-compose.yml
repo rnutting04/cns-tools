@@ -35,9 +35,21 @@ services:
     image: chrislusf/seaweedfs:3.97
     ports:
       - "9000:9000"
-    command: server -dir=/data -s3 -s3.port=9000 -ip=0.0.0.0
+    # -ip is the address the master, volume and filer components advertise to
+    # each other, so it must be routable: 0.0.0.0 is a valid bind address but
+    # not a valid destination, and object writes hang retrying it. -ip.bind
+    # keeps the listeners on all interfaces so Docker's port map still works.
+    command: >-
+      server -dir=/data -s3 -s3.port=9000
+      -ip=localhost -ip.bind=0.0.0.0
     volumes:
       - s3_data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:9000/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   redis:
     image: redis:7-alpine
