@@ -335,7 +335,7 @@ export default function DashboardPage() {
           <Box textAlign="center" py={5} px={2}>
             <InboxOutlinedIcon sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
             <Typography color="text.secondary" variant="body2">
-              No jobs yet. Generate a letter or budget to get started.
+              No jobs yet. Generate a letter to get started.
             </Typography>
           </Box>
         ) : (
@@ -386,15 +386,17 @@ export default function DashboardPage() {
             color="primary"
           />
         </Grid>
-        <Grid size={{ xs: 12, sm: 6, md: 4 }}>
-          <QuickLink
-            icon={<AccountBalanceIcon />}
-            label="Budget generator"
-            description="Draft an HOA operating budget from financial reports"
-            to="/ai/budget"
-            color="secondary"
-          />
-        </Grid>
+        {isAdmin && (
+          <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+            <QuickLink
+              icon={<AccountBalanceIcon />}
+              label="Budget generator"
+              description="Draft an HOA operating budget from financial reports"
+              to="/ai/budget"
+              color="secondary"
+            />
+          </Grid>
+        )}
         <Grid size={{ xs: 12, sm: 6, md: 4 }}>
           <QuickLink
             icon={<TableChartIcon />}

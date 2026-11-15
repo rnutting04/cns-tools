@@ -69,6 +69,7 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Budget generator',
     to: '/ai/budget',
     icon: <AccountBalanceIcon fontSize="small" />,
+    roles: ['admin', 'super_admin'],
   },
   { label: 'Excel tools', to: '/excel', icon: <TableChartIcon fontSize="small" /> },
   {

@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, require_admin
 from app.models.budget_job import BudgetJob
 from app.models.budget_layout_profile import BudgetLayoutProfile
 from app.models.letter_job import JobStatus
@@ -22,7 +22,8 @@ from app.services.budget import layout_profiles
 from app.services.budget.tasks import AWAITING_LAYOUT_REVIEW, generate_budget_task
 from app.services.storage import storage_service
 
-router = APIRouter(prefix="/budget", tags=["budget"])
+# Budget generation is admin-only for now.
+router = APIRouter(prefix="/budget", tags=["budget"], dependencies=[Depends(require_admin)])
 
 
 @router.post("/generate", response_model=BudgetJobAcceptedResponse, status_code=202)

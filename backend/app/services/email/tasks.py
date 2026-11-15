@@ -42,8 +42,7 @@ def welcome_email(to: str, fname: str, temp_password: str) -> None:
             layout.heading(f"Welcome, {fname}"),
             layout.paragraph(
                 "Your <b>C&amp;S Tools</b> account is ready. C&amp;S Tools is where we "
-                "generate association budgets, produce owner letters and manage "
-                "association records in one place."
+                "produce owner letters and manage association records in one place."
             ),
             layout.paragraph("Use the temporary credentials below for your first sign-in:"),
             layout.credentials(to, temp_password),

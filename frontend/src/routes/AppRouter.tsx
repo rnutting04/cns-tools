@@ -57,7 +57,14 @@ export default function AppRouter() {
           />
           <Route path="excel" element={<ExcelToolsPage />} />
           <Route path="ai" element={<Navigate to="/ai/budget" replace />} />
-          <Route path="ai/budget" element={<BudgetGeneratorPage />} />
+          <Route
+            path="ai/budget"
+            element={
+              <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
+                <BudgetGeneratorPage />
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="audit"
             element={

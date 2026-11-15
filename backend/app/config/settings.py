@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     RESEND_API_KEY: str = ""
     # Avoid "no-reply" addresses (hurts deliverability/trust). Use a monitored
     # mailbox and set EMAIL_REPLY_TO so recipients can actually reply.
-    EMAIL_FROM: str = "C&S Dev Services <notifications@cns-tools.com>"
+    EMAIL_FROM: str = "C&S Dev Services <notifications@mail.cscmsi.net>"
     EMAIL_REPLY_TO: str = ""
     # In any non-production environment, all outgoing email is redirected to
     # LOCAL_EMAIL_TO (see sender.py) so we never email real users while testing.
