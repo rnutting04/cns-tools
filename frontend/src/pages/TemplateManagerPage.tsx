@@ -25,6 +25,7 @@ import AddIcon from '@mui/icons-material/Add'
 import BlockIcon from '@mui/icons-material/Block'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import DeleteIcon from '@mui/icons-material/Delete'
+import DownloadIcon from '@mui/icons-material/Download'
 import EditIcon from '@mui/icons-material/Edit'
 import UploadFileIcon from '@mui/icons-material/UploadFile'
 import { DataGrid } from '@mui/x-data-grid'
@@ -33,6 +34,50 @@ import apiClient from '../api/client'
 import { fetchTemplates, queryKeys } from '../api/queries'
 import ErrorAlert from '../components/layout/ErrorAlert'
 import type { FieldRow, FieldDefinition, Template, RendererType } from '../types'
+import { downloadFromUrl } from '../utils/download'
+
+async function downloadTemplateFile(template: Template): Promise<void> {
+  const { data } = await apiClient.get<{ download_url: string; filename: string }>(
+    `/api/templates/${template.id}/download`,
+  )
+  await downloadFromUrl(data.download_url, data.filename)
+}
+
+function DownloadTemplateButton({
+  template,
+  onError,
+}: {
+  template: Template
+  onError: (msg: string) => void
+}) {
+  const [busy, setBusy] = useState(false)
+
+  const handleClick = async () => {
+    setBusy(true)
+    try {
+      await downloadTemplateFile(template)
+    } catch {
+      onError('Failed to download template.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Tooltip title="Download current .docx">
+      <span>
+        <IconButton
+          size="small"
+          onClick={handleClick}
+          disabled={busy}
+          aria-label="Download template"
+        >
+          {busy ? <CircularProgress size={16} /> : <DownloadIcon fontSize="small" />}
+        </IconButton>
+      </span>
+    </Tooltip>
+  )
+}
 
 const EMPTY_FIELD: Omit<FieldDefinition, 'options'> & { options: string; auto_populate: boolean } =
   {
@@ -364,11 +409,14 @@ function TemplateDialog({
                 onChange={(e) => setFile(e.target.files?.[0] ?? null)}
               />
             </Button>
-            {!file && currentFileName && mode !== 'create' && (
-              <Typography variant="caption" color="text.secondary" display="block" mt={0.5}>
-                {mode === 'edit' ? 'Current file: ' : 'Will copy: '}
-                {currentFileName}
-              </Typography>
+            {!file && currentFileName && mode !== 'create' && template && (
+              <Box display="flex" alignItems="center" gap={0.5} mt={0.5}>
+                <Typography variant="caption" color="text.secondary">
+                  {mode === 'edit' ? 'Current file: ' : 'Will copy: '}
+                  {currentFileName}
+                </Typography>
+                <DownloadTemplateButton template={template} onError={setError} />
+              </Box>
             )}
           </Box>
 
@@ -411,12 +459,14 @@ function TemplateRow({
   onEdit,
   onDuplicate,
   onDeactivate,
+  onError,
 }: {
   template: Template
   isLast: boolean
   onEdit: (t: Template) => void
   onDuplicate: (t: Template) => void
   onDeactivate: (id: string) => void
+  onError: (msg: string) => void
 }) {
   return (
     <Box>
@@ -454,6 +504,7 @@ function TemplateRow({
         </Box>
 
         <Box display="flex" gap={0.5}>
+          <DownloadTemplateButton template={template} onError={onError} />
           <Tooltip title="Edit">
             <IconButton size="small" onClick={() => onEdit(template)}>
               <EditIcon fontSize="small" />
@@ -558,9 +609,10 @@ export default function TemplateManagerPage() {
       headerName: '',
       sortable: false,
       filterable: false,
-      width: 150,
+      width: 190,
       renderCell: (params: GridRenderCellParams<Template>) => (
         <Box>
+          <DownloadTemplateButton template={params.row} onError={setError} />
           <Tooltip title="Edit">
             <IconButton
               size="small"
@@ -660,6 +712,7 @@ export default function TemplateManagerPage() {
               onEdit={(t) => setDialog({ mode: 'edit', template: t })}
               onDuplicate={(t) => setDialog({ mode: 'duplicate', template: t })}
               onDeactivate={handleDeactivate}
+              onError={setError}
             />
           ))}
         </Paper>

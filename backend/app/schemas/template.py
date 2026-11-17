@@ -35,6 +35,11 @@ class TemplateResponse(BaseModel):
         from_attributes = True
 
 
+class TemplateDownloadResponse(BaseModel):
+    download_url: str
+    filename: str
+
+
 class LetterGenerateRequest(BaseModel):
     template_id: UUID
     field_values: dict[str, Any]

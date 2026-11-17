@@ -514,3 +514,29 @@ class TestDuplicateTemplate:
         source = factories.create_template(db_session)
         resp = client.post(f"/api/templates/{source.id}/duplicate")
         assert resp.status_code == 403
+
+
+class TestDownloadTemplate:
+    def test_admin_gets_url_and_original_filename(self, client, db_session, as_user, fake_storage):
+        as_user(role=UserRole.admin)
+        template = factories.create_template(db_session, fields=[ASSOCIATION_FIELD])
+        template.docx_path = f"templates/{template.id}/Electronic Ballot.docx"
+        db_session.flush()
+
+        resp = client.get(f"/api/templates/{template.id}/download")
+        assert resp.status_code == 200
+        assert resp.json() == {
+            "download_url": "http://storage/download-url",
+            "filename": "Electronic Ballot.docx",
+        }
+
+    def test_manager_is_forbidden(self, client, db_session, as_user, fake_storage):
+        as_user(role=UserRole.manager)
+        template = factories.create_template(db_session, fields=[ASSOCIATION_FIELD])
+        resp = client.get(f"/api/templates/{template.id}/download")
+        assert resp.status_code == 403
+
+    def test_unknown_template_returns_404(self, client, as_user, fake_storage):
+        as_user(role=UserRole.admin)
+        resp = client.get(f"/api/templates/{uuid.uuid4()}/download")
+        assert resp.status_code == 404

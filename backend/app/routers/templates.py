@@ -21,6 +21,7 @@ from app.schemas.template import (
     LetterJobDetailResponse,
     LetterJobResponse,
     LetterJobStatusResponse,
+    TemplateDownloadResponse,
     TemplateResponse,
 )
 from app.services.audit import log_event
@@ -120,6 +121,22 @@ def list_templates(
     _: User = Depends(get_current_user),
 ):
     return db.query(Template).filter(Template.is_active.is_(True)).all()
+
+
+@router.get("/templates/{template_id}/download", response_model=TemplateDownloadResponse)
+def download_template(
+    template_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """Mint a short-lived URL for the template's current .docx (incl. inactive ones)."""
+    template = db.query(Template).filter(Template.id == template_id).first()
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    return TemplateDownloadResponse(
+        download_url=storage_service.generate_presigned_url(template.docx_path, expires=300),
+        filename=os.path.basename(template.docx_path),
+    )
 
 
 @router.patch("/templates/{template_id}", response_model=TemplateResponse)
