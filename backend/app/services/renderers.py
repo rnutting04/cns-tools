@@ -378,9 +378,12 @@ def _build_electronic_ballot_table(doc: Document, candidates: list[str]):
 
     Candidates are split evenly across the two sides.
     """
-    # name / checkbox / name / checkbox: 9000 twips (6.25") fits a standard
-    # 6.5" text block, and names get enough room not to wrap at 12pt.
-    widths = [3700, 800, 3700, 800]
+    # name / checkbox / name / checkbox. Names get ~2.1" (no wrap at 12pt for
+    # typical names) and each box sits flush-left in its column so it hugs the
+    # name. The left box column is wider by `side_gap`; that unused space to the
+    # right of the box is what separates the two halves of the ballot.
+    name_w, box_w, side_gap = 3000, 500, 1000
+    widths = [name_w, box_w + side_gap, name_w, box_w]
     row_gap = Pt(12)
 
     tmp = doc.add_table(rows=0, cols=4)
@@ -398,7 +401,7 @@ def _build_electronic_ballot_table(doc: Document, candidates: list[str]):
         r.font.size = Pt(12)
 
         p_box = box_cell.paragraphs[0]
-        p_box.alignment = 1  # center
+        p_box.alignment = 0  # left: keep the box close to the name
         p_box.paragraph_format.space_before = Pt(0)
         p_box.paragraph_format.space_after = row_gap
         r_box = p_box.add_run("☐")  # ballot box
