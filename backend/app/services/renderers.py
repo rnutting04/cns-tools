@@ -367,23 +367,22 @@ def _build_electronic_ballot_table(doc: Document, candidates: list[str]):
     """
     Build a borderless 4-column table in a two-up ballot layout:
 
-        1. Patricia Costa      ☐      5. Ed Malachowski      ☐
-        2. Daniel Gilreath     ☐      6. Paul Melton         ☐
+        ☐ 1. Patricia Costa           ☐ 5. Ed Malachowski
+        ☐ 2. Daniel Gilreath          ☐ 6. Paul Melton
 
     Columns:
-      1 = left numbered candidate
-      2 = left checkbox
-      3 = right numbered candidate
-      4 = right checkbox
+      1 = left checkbox
+      2 = left numbered candidate
+      3 = right checkbox
+      4 = right numbered candidate
 
     Candidates are split evenly across the two sides.
     """
-    # name / checkbox / name / checkbox. Names get ~2.1" (no wrap at 12pt for
-    # typical names) and each box sits flush-left in its column so it hugs the
-    # name. The left box column is wider by `side_gap`; that unused space to the
-    # right of the box is what separates the two halves of the ballot.
+    # checkbox / name / checkbox / name. Names get ~2.1" (no wrap at 12pt for
+    # typical names). The left name column is wider by `side_gap`; that unused
+    # space after the name is what separates the two halves of the ballot.
     name_w, box_w, side_gap = 3000, 500, 1000
-    widths = [name_w, box_w + side_gap, name_w, box_w]
+    widths = [box_w, name_w + side_gap, box_w, name_w]
     row_gap = Pt(12)
 
     tmp = doc.add_table(rows=0, cols=4)
@@ -392,7 +391,7 @@ def _build_electronic_ballot_table(doc: Document, candidates: list[str]):
     right = candidates[(len(candidates) + 1) // 2 :]
     rows_needed = max(len(left), len(right))
 
-    def _fill(name_cell, box_cell, number: int, name: str) -> None:
+    def _fill(box_cell, name_cell, number: int, name: str) -> None:
         p = name_cell.paragraphs[0]
         p.alignment = 0  # left
         p.paragraph_format.space_before = Pt(0)
@@ -401,7 +400,7 @@ def _build_electronic_ballot_table(doc: Document, candidates: list[str]):
         r.font.size = Pt(12)
 
         p_box = box_cell.paragraphs[0]
-        p_box.alignment = 0  # left: keep the box close to the name
+        p_box.alignment = 2  # right: keep the box close to the number/name
         p_box.paragraph_format.space_before = Pt(0)
         p_box.paragraph_format.space_after = row_gap
         r_box = p_box.add_run("☐")  # ballot box

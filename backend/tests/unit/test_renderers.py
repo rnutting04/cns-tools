@@ -123,7 +123,12 @@ class TestElectronicBallotRenderer:
         )
         tbl = docx_tables(out)[0]._tbl
         grid = [int(c.get(qn("w:w"))) for c in tbl.tblGrid.findall(qn("w:gridCol"))]
-        assert grid == [3000, 1500, 3000, 500]
+        assert grid == [500, 4000, 500, 3000]
+        first_row = docx_tables(out)[0].rows[0].cells
+        assert first_row[0].text == "☐"
+        assert first_row[1].text == "1. Cand 0"
+        assert first_row[2].text == "☐"
+        assert first_row[3].text == "5. Cand 4"
         assert tbl.tblPr.find(qn("w:tblLayout")).get(qn("w:type")) == "fixed"
         assert len(docx_tables(out)[0].rows) == 4  # 7 candidates -> 4 + 3
 
