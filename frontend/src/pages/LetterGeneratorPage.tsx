@@ -58,6 +58,27 @@ function getRendererType(template: Template | null): RendererType {
   return (template?.renderer_type ?? 'simple') as RendererType
 }
 
+function isBallot(type: RendererType): boolean {
+  return type === 'ballot' || type === 'electronic_ballot'
+}
+
+// Ballot templates get a built-in "Open positions" input (sent as
+// candidate_vote_limit). Template-defined fields for the same value are hidden
+// so the user isn't asked twice.
+const BALLOT_LIMIT_KEYS = new Set(['candidate_vote_limit', 'candidate_count'])
+
+function getManualFields(template: Template) {
+  const ballot = isBallot(getRendererType(template))
+  return template.fields.filter(
+    (f) => !AUTO_POPULATE_KEYS.has(f.key) && !(ballot && BALLOT_LIMIT_KEYS.has(f.key)),
+  )
+}
+
+function parseVoteLimit(value: unknown): number | null {
+  const n = Number(value)
+  return Number.isInteger(n) && n >= 1 ? n : null
+}
+
 function getAssociationFieldKey(template: Template | null): string {
   return template?.fields.find((f) => f.type === 'association')?.key ?? 'association_id'
 }
@@ -387,7 +408,7 @@ function FieldsStep({
   const selectedAssociation = getSelectedAssociation(values, associations, template)
   const selectedManager = getSelectedManager(values, managers, template)
 
-  const manualFields = template.fields.filter((f) => !AUTO_POPULATE_KEYS.has(f.key))
+  const manualFields = getManualFields(template)
 
   return (
     <Box display="flex" flexDirection="column" gap={3} maxWidth={640}>
@@ -575,6 +596,22 @@ function FieldsStep({
                   </FormControl>
                 )}
 
+                <TextField
+                  label="Open positions"
+                  type="number"
+                  size="small"
+                  fullWidth
+                  value={String(values.candidate_vote_limit ?? '')}
+                  onChange={(e) => onChange('candidate_vote_limit', e.target.value)}
+                  slotProps={{ htmlInput: { min: 1, step: 1 } }}
+                  error={
+                    values.candidate_vote_limit !== undefined &&
+                    values.candidate_vote_limit !== '' &&
+                    parseVoteLimit(values.candidate_vote_limit) === null
+                  }
+                  helperText='Voters may choose up to this many candidates ("vote for no more than …")'
+                />
+
                 <BallotCandidateEditor
                   candidates={candidates}
                   onChange={(c) => onChange('candidates', c)}
@@ -673,8 +710,17 @@ function GenerateStep({
           </>
         )}
 
-        {(rendererType === 'ballot' || rendererType === 'electronic_ballot') && (
+        {isBallot(rendererType) && (
           <>
+            <Divider />
+            <Box display="flex" justifyContent="space-between" mt={1} mb={1}>
+              <Typography variant="body2" color="text.secondary">
+                Open positions
+              </Typography>
+              <Typography variant="body2" fontWeight={600}>
+                {String(values.candidate_vote_limit ?? '—')}
+              </Typography>
+            </Box>
             <Divider />
             <Box display="flex" justifyContent="space-between" mt={1}>
               <Typography variant="body2" color="text.secondary">
@@ -824,6 +870,7 @@ export default function LetterGeneratorPage() {
       // Ballot renderers require a year selection and at least one non-empty candidate
       if (rendererType === 'ballot' || rendererType === 'electronic_ballot') {
         if (rendererType === 'ballot' && !fieldValues.ballot_year) return false
+        if (parseVoteLimit(fieldValues.candidate_vote_limit) === null) return false
 
         const candidates = Array.isArray(fieldValues.candidates)
           ? (fieldValues.candidates as string[])
@@ -839,7 +886,7 @@ export default function LetterGeneratorPage() {
         if (votes.some((vote) => !isProxyVoteComplete(vote))) return false
       }
 
-      const manualFields = selectedTemplate.fields.filter((f) => !AUTO_POPULATE_KEYS.has(f.key))
+      const manualFields = getManualFields(selectedTemplate)
 
       return manualFields.every((f) => {
         const value = fieldValues[f.key]

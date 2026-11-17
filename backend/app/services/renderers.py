@@ -163,6 +163,47 @@ def _set_cell_width(cell, width_twips: int) -> None:
     tcPr.append(tcW)
 
 
+def _set_fixed_column_widths(table, widths_twips: list[int]) -> None:
+    """
+    Pin a table's column widths so Word honors them.
+
+    python-docx seeds tblGrid with equal columns spanning the page, and Word's
+    autofit layout follows that grid over per-cell tcW values — so without this
+    narrow "name" columns wrap and wide "checkbox" columns waste space.
+    """
+    tbl = table._tbl
+    tblPr = tbl.tblPr
+
+    layout = tblPr.find(qn("w:tblLayout"))
+    if layout is None:
+        layout = OxmlElement("w:tblLayout")
+        tblPr.append(layout)
+    layout.set(qn("w:type"), "fixed")
+
+    tblW = tblPr.find(qn("w:tblW"))
+    if tblW is None:
+        tblW = OxmlElement("w:tblW")
+        tblPr.append(tblW)
+    tblW.set(qn("w:w"), str(sum(widths_twips)))
+    tblW.set(qn("w:type"), "dxa")
+
+    grid = tbl.tblGrid
+    for col, width in zip(grid.findall(qn("w:gridCol")), widths_twips, strict=False):
+        col.set(qn("w:w"), str(width))
+
+    for row in table.rows:
+        for cell, width in zip(row.cells, widths_twips, strict=False):
+            _set_cell_width(cell, width)
+
+
+def _keep_rows_intact(table) -> None:
+    """Prevent any row from splitting across a page break."""
+    for row in table.rows:
+        trPr = row._tr.get_or_add_trPr()
+        if trPr.find(qn("w:cantSplit")) is None:
+            trPr.append(OxmlElement("w:cantSplit"))
+
+
 def _replace_anchor(doc: Document, anchor: str, new_elements: list) -> bool:
     """
     Find the first body paragraph containing `anchor`, replace it
@@ -193,7 +234,12 @@ def _replace_anchor(doc: Document, anchor: str, new_elements: list) -> bool:
 def _build_ballot_field_values(field_values: dict) -> tuple[list[str], dict]:
     candidates = list(field_values.get("candidates") or [])
 
-    raw_limit = field_values.get("candidate_vote_limit", 0)
+    # The generator's built-in "Open positions" input sends candidate_vote_limit.
+    # Older templates may instead define their own field keyed candidate_count;
+    # honor it rather than clobbering the user's value with 0 below.
+    raw_limit = field_values.get("candidate_vote_limit")
+    if raw_limit in (None, ""):
+        raw_limit = field_values.get("candidate_count", 0)
     try:
         vote_limit = int(raw_limit)
     except (TypeError, ValueError):
@@ -332,62 +378,45 @@ def _build_electronic_ballot_table(doc: Document, candidates: list[str]):
 
     Candidates are split evenly across the two sides.
     """
+    # name / checkbox / name / checkbox: 9000 twips (6.25") fits a standard
+    # 6.5" text block, and names get enough room not to wrap at 12pt.
+    widths = [3700, 800, 3700, 800]
+    row_gap = Pt(12)
+
     tmp = doc.add_table(rows=0, cols=4)
 
     left = candidates[: (len(candidates) + 1) // 2]
     right = candidates[(len(candidates) + 1) // 2 :]
-
     rows_needed = max(len(left), len(right))
+
+    def _fill(name_cell, box_cell, number: int, name: str) -> None:
+        p = name_cell.paragraphs[0]
+        p.alignment = 0  # left
+        p.paragraph_format.space_before = Pt(0)
+        p.paragraph_format.space_after = row_gap
+        r = p.add_run(f"{number}. {name}")
+        r.font.size = Pt(12)
+
+        p_box = box_cell.paragraphs[0]
+        p_box.alignment = 1  # center
+        p_box.paragraph_format.space_before = Pt(0)
+        p_box.paragraph_format.space_after = row_gap
+        r_box = p_box.add_run("☐")  # ballot box
+        r_box.font.size = Pt(12)
+        # Pin a font that has the glyph so Word doesn't fall back per-cell
+        # (which rendered some boxes lighter/smaller than others).
+        r_box.font.name = "Segoe UI Symbol"
+        r_box._element.rPr.rFonts.set(qn("w:eastAsia"), "Segoe UI Symbol")
 
     for i in range(rows_needed):
         row = tmp.add_row().cells
-
-        # Left side
         if i < len(left):
-            p = row[0].paragraphs[0]
-            p.alignment = 0  # left
-            p.paragraph_format.space_before = Pt(0)
-            p.paragraph_format.space_after = Pt(0)
-            r = p.add_run(f"{i + 1}. {left[i]}")
-            r.font.size = Pt(12)
-
-            p_box = row[1].paragraphs[0]
-            p_box.alignment = 1  # center
-            p_box.paragraph_format.space_before = Pt(0)
-            p_box.paragraph_format.space_after = Pt(0)
-            r_box = p_box.add_run("\u2610")  # ☐
-            r_box.font.size = Pt(12)
-        else:
-            row[0].text = ""
-            row[1].text = ""
-
-        # Right side
+            _fill(row[0], row[1], i + 1, left[i])
         if i < len(right):
-            right_num = len(left) + i + 1
+            _fill(row[2], row[3], len(left) + i + 1, right[i])
 
-            p = row[2].paragraphs[0]
-            p.alignment = 0  # left
-            p.paragraph_format.space_before = Pt(0)
-            p.paragraph_format.space_after = Pt(0)
-            r = p.add_run(f"{right_num}. {right[i]}")
-            r.font.size = Pt(12)
-
-            p_box = row[3].paragraphs[0]
-            p_box.alignment = 1  # center
-            p_box.paragraph_format.space_before = Pt(0)
-            p_box.paragraph_format.space_after = Pt(0)
-            r_box = p_box.add_run("\u2610")  # ☐
-            r_box.font.size = Pt(12)
-        else:
-            row[2].text = ""
-            row[3].text = ""
-
-        # Tight widths so the layout resembles the sample more closely
-        _set_cell_width(row[0], 3000)  # left name
-        _set_cell_width(row[1], 450)  # left checkbox
-        _set_cell_width(row[2], 3000)  # right name
-        _set_cell_width(row[3], 450)  # right checkbox
-
+    _set_fixed_column_widths(tmp, widths)
+    _keep_rows_intact(tmp)
     _set_no_borders(tmp._tbl)
 
     # center the whole table
