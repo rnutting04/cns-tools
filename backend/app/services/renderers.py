@@ -363,48 +363,88 @@ def ballot_renderer(template_bytes: bytes, field_values: dict) -> bytes:
 # field_values["candidates"] must be a list of candidate full-name strings.
 
 
+# Approximate Arial/Helvetica advance widths (1/1000 em). Used only to size the
+# ballot's name columns to the longest name so the checkbox sits right after
+# it; exactness isn't needed, there's a safety margin below.
+_GLYPH_WIDTHS: dict[str, int] = {
+    **dict.fromkeys("ijl", 222),
+    **dict.fromkeys(" .,'!ftI", 278),
+    **dict.fromkeys("r-()", 333),
+    **dict.fromkeys("ckJsvxyz", 500),
+    **dict.fromkeys("FTZL", 611),
+    **dict.fromkeys("ABEKPSVXY", 667),
+    **dict.fromkeys("CDHNRUw", 722),
+    **dict.fromkeys("GOQ", 778),
+    **dict.fromkeys("Mm", 833),
+    "W": 944,
+}
+_DEFAULT_GLYPH_WIDTH = 556  # most lowercase letters and digits
+
+_CELL_MARGINS_TWIPS = 216  # Word's default 0.075" left + right cell padding
+
+
+def _estimate_text_twips(text: str, size_pt: int) -> int:
+    em = sum(_GLYPH_WIDTHS.get(ch, _DEFAULT_GLYPH_WIDTH) for ch in text) / 1000
+    return round(em * size_pt * 20 * 1.05)  # 20 twips/pt; +5% for font variance
+
+
 def _build_electronic_ballot_table(doc: Document, candidates: list[str]):
     """
     Build a borderless 4-column table in a two-up ballot layout:
 
-        ☐ 1. Patricia Costa           ☐ 5. Ed Malachowski
-        ☐ 2. Daniel Gilreath          ☐ 6. Paul Melton
+        1. Patricia Costa ☐           5. Ed Malachowski ☐
+        2. Daniel Gilreath ☐          6. Paul Melton ☐
 
     Columns:
-      1 = left checkbox
-      2 = left numbered candidate
-      3 = right checkbox
-      4 = right numbered candidate
+      1 = left numbered candidate
+      2 = left checkbox
+      3 = right numbered candidate
+      4 = right checkbox
 
-    Candidates are split evenly across the two sides.
+    Candidates are split evenly across the two sides. Each name column is sized
+    to the longest entry on its side, so the checkboxes stay vertically aligned
+    yet sit just after the names instead of at a fixed distance.
     """
-    # checkbox / name / checkbox / name. Names get ~2.1" (no wrap at 12pt for
-    # typical names). The left name column is wider by `side_gap`; that unused
-    # space after the name is what separates the two halves of the ballot.
-    name_w, box_w, side_gap = 3000, 500, 1000
-    widths = [box_w, name_w + side_gap, box_w, name_w]
+    font_pt = 12
+    box_w = 450  # checkbox glyph + cell padding
+    side_gap = 1000  # extra space after the left checkboxes, between the halves
+    min_name_w, max_name_w = 1500, 4200  # beyond max, very long names wrap
     row_gap = Pt(12)
-
-    tmp = doc.add_table(rows=0, cols=4)
 
     left = candidates[: (len(candidates) + 1) // 2]
     right = candidates[(len(candidates) + 1) // 2 :]
     rows_needed = max(len(left), len(right))
 
-    def _fill(box_cell, name_cell, number: int, name: str) -> None:
+    left_labels = [f"{i + 1}. {name}" for i, name in enumerate(left)]
+    right_labels = [f"{len(left) + i + 1}. {name}" for i, name in enumerate(right)]
+
+    def _name_col_width(labels: list[str]) -> int:
+        longest = max((_estimate_text_twips(s, font_pt) for s in labels), default=0)
+        return min(max(longest + _CELL_MARGINS_TWIPS, min_name_w), max_name_w)
+
+    widths = [
+        _name_col_width(left_labels),
+        box_w + side_gap,
+        _name_col_width(right_labels),
+        box_w,
+    ]
+
+    tmp = doc.add_table(rows=0, cols=4)
+
+    def _fill(name_cell, box_cell, label: str) -> None:
         p = name_cell.paragraphs[0]
         p.alignment = 0  # left
         p.paragraph_format.space_before = Pt(0)
         p.paragraph_format.space_after = row_gap
-        r = p.add_run(f"{number}. {name}")
-        r.font.size = Pt(12)
+        r = p.add_run(label)
+        r.font.size = Pt(font_pt)
 
         p_box = box_cell.paragraphs[0]
-        p_box.alignment = 2  # right: keep the box close to the number/name
+        p_box.alignment = 0  # left: hug the name column
         p_box.paragraph_format.space_before = Pt(0)
         p_box.paragraph_format.space_after = row_gap
         r_box = p_box.add_run("☐")  # ballot box
-        r_box.font.size = Pt(12)
+        r_box.font.size = Pt(font_pt)
         # Pin a font that has the glyph so Word doesn't fall back per-cell
         # (which rendered some boxes lighter/smaller than others).
         r_box.font.name = "Segoe UI Symbol"
@@ -413,9 +453,9 @@ def _build_electronic_ballot_table(doc: Document, candidates: list[str]):
     for i in range(rows_needed):
         row = tmp.add_row().cells
         if i < len(left):
-            _fill(row[0], row[1], i + 1, left[i])
+            _fill(row[0], row[1], left_labels[i])
         if i < len(right):
-            _fill(row[2], row[3], len(left) + i + 1, right[i])
+            _fill(row[2], row[3], right_labels[i])
 
     _set_fixed_column_widths(tmp, widths)
     _keep_rows_intact(tmp)

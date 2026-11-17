@@ -112,7 +112,14 @@ class TestElectronicBallotRenderer:
         for n in names:
             assert n in text
 
-    def test_columns_have_fixed_name_and_checkbox_widths(self):
+    @staticmethod
+    def _grid(out):
+        from docx.oxml.ns import qn
+
+        tbl = docx_tables(out)[0]._tbl
+        return [int(c.get(qn("w:w"))) for c in tbl.tblGrid.findall(qn("w:gridCol"))]
+
+    def test_layout_is_number_name_then_checkbox_with_fixed_widths(self):
         # Word follows tblGrid under autofit; equal grid columns made long names wrap.
         from docx.oxml.ns import qn
 
@@ -121,16 +128,35 @@ class TestElectronicBallotRenderer:
         out = renderers.electronic_ballot_renderer(
             template, {"candidates": names, "candidate_vote_limit": 4}
         )
-        tbl = docx_tables(out)[0]._tbl
-        grid = [int(c.get(qn("w:w"))) for c in tbl.tblGrid.findall(qn("w:gridCol"))]
-        assert grid == [500, 4000, 500, 3000]
-        first_row = docx_tables(out)[0].rows[0].cells
-        assert first_row[0].text == "☐"
-        assert first_row[1].text == "1. Cand 0"
-        assert first_row[2].text == "☐"
-        assert first_row[3].text == "5. Cand 4"
-        assert tbl.tblPr.find(qn("w:tblLayout")).get(qn("w:type")) == "fixed"
-        assert len(docx_tables(out)[0].rows) == 4  # 7 candidates -> 4 + 3
+        table = docx_tables(out)[0]
+        first_row = table.rows[0].cells
+        assert [c.text for c in first_row] == ["1. Cand 0", "☐", "5. Cand 4", "☐"]
+        assert table._tbl.tblPr.find(qn("w:tblLayout")).get(qn("w:type")) == "fixed"
+        assert len(table.rows) == 4  # 7 candidates -> 4 + 3
+
+        # Checkbox columns are fixed; the left one carries the gap between halves.
+        grid = self._grid(out)
+        assert grid[1] == 1450
+        assert grid[3] == 450
+
+    def test_name_columns_fit_longest_name_per_side(self):
+        template = make_docx(["{{BLOCK:ELECTRONIC_BALLOT_CANDIDATES}}"])
+        short = renderers.electronic_ballot_renderer(
+            template, {"candidates": ["Al Bo", "Cy Do", "Ed Fu", "Gi Ho"]}
+        )
+        long_left = renderers.electronic_ballot_renderer(
+            template, {"candidates": ["Richard Potochnik", "Cy Do", "Ed Fu", "Gi Ho"]}
+        )
+        # Short names collapse to the minimum so boxes sit close to the names...
+        assert self._grid(short)[0] == 1500
+        # ...and a long name widens only its own side's column.
+        assert self._grid(long_left)[0] > 1500
+        assert self._grid(long_left)[2] == self._grid(short)[2]
+
+    def test_very_long_names_are_capped(self):
+        template = make_docx(["{{BLOCK:ELECTRONIC_BALLOT_CANDIDATES}}"])
+        out = renderers.electronic_ballot_renderer(template, {"candidates": ["X" * 80, "Y"]})
+        assert self._grid(out)[0] == 4200
 
 
 class TestRegistry:
