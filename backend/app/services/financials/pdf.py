@@ -1,0 +1,159 @@
+"""PDF text geometry for scanned-and-OCR'd monthly financial packets.
+
+The packets are scans with an OCR text layer, so the text is *mostly* right
+but the layout is not trustworthy: amounts drift a few points above or below
+their label row, adjacent numbers fuse (``7,855.597,499.70``), and words get
+glued together (``G/LBalance``). Everything here works from word bounding
+boxes rather than from the OCR's own line order, and every value keeps the
+box it came from so a human can be shown exactly where it was read.
+"""
+
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass, field
+from decimal import Decimal
+from pathlib import Path
+from typing import BinaryIO
+
+import pdfplumber
+
+# A money amount with exactly two decimals. The lookahead rejects
+# percentages and longer decimals ("2.95%", "1.00000").
+_AMOUNT_RE = re.compile(r"\d{1,3}(?:,\d{3})*\.\d{2}(?![\d%])")
+# OCR sometimes fuses neighbouring columns into one token: "7,855.597,499.70"
+# is 7,855.59 + 7,499.70. Exactly-two-decimals makes the split unambiguous.
+_ONE = r"\d{1,3}(?:,\d{3})*\.\d{2}"
+_FUSED_RE = re.compile(rf"(?:{_ONE}){{2,}}")
+# Whole-dollar amounts (insurance schedule). Requires a thousands separator
+# or a bare 1-3 digit number so GL codes / years are not picked up.
+_WHOLE_RE = re.compile(r"(?<![\d.,/])\d{1,3}(?:,\d{3})*(?![\d.,/%])")
+
+
+@dataclass(frozen=True)
+class BBox:
+    x0: float
+    top: float
+    x1: float
+    bottom: float
+
+    @property
+    def cx(self) -> float:
+        return (self.x0 + self.x1) / 2
+
+    @property
+    def cy(self) -> float:
+        return (self.top + self.bottom) / 2
+
+    def union(self, other: BBox) -> BBox:
+        return BBox(
+            min(self.x0, other.x0),
+            min(self.top, other.top),
+            max(self.x1, other.x1),
+            max(self.bottom, other.bottom),
+        )
+
+    @staticmethod
+    def union_all(boxes: list[BBox]) -> BBox:
+        out = boxes[0]
+        for b in boxes[1:]:
+            out = out.union(b)
+        return out
+
+
+@dataclass
+class Word:
+    text: str
+    bbox: BBox
+
+
+@dataclass
+class Line:
+    words: list[Word]
+
+    @property
+    def text(self) -> str:
+        return " ".join(w.text for w in self.words)
+
+    @property
+    def bbox(self) -> BBox:
+        return BBox.union_all([w.bbox for w in self.words])
+
+    @property
+    def key(self) -> str:
+        """Letters-only lowercase form, immune to OCR spacing ("TOTALREVENUES")."""
+        return squash(self.text)
+
+
+@dataclass
+class Page:
+    number: int  # 1-based
+    width: float
+    height: float
+    words: list[Word]
+    lines: list[Line] = field(default_factory=list)
+
+    @property
+    def text(self) -> str:
+        return "\n".join(line.text for line in self.lines)
+
+    def header_key(self, n_lines: int = 6) -> str:
+        return squash(" ".join(line.text for line in self.lines[:n_lines]))
+
+    def header_words(self, n_lines: int = 6) -> set[str]:
+        return {squash(w.text) for line in self.lines[:n_lines] for w in line.words} - {""}
+
+
+def squash(s: str) -> str:
+    return re.sub(r"[^a-z]", "", s.lower())
+
+
+def parse_amounts(text: str) -> list[Decimal]:
+    """Every two-decimal amount in ``text``, signed. ``(1.00)`` and ``-1.00`` are negative."""
+    out: list[Decimal] = []
+    for token in text.split():
+        core = token.strip("()-$|")
+        if _FUSED_RE.fullmatch(core):
+            matches = list(re.finditer(_ONE, token))
+        else:
+            matches = list(_AMOUNT_RE.finditer(token))
+        for m in matches:
+            value = Decimal(m.group().replace(",", ""))
+            before = token[max(0, m.start() - 2) : m.start()]
+            if "(" in before or before.endswith("-"):
+                value = -value
+            out.append(value)
+    return out
+
+
+def parse_whole_amounts(text: str) -> list[Decimal]:
+    return [Decimal(m.group().replace(",", "")) for m in _WHOLE_RE.finditer(text)]
+
+
+def group_lines(words: list[Word], tolerance: float = 3.5) -> list[Line]:
+    """Cluster words into visual lines by vertical center."""
+    lines: list[list[Word]] = []
+    centers: list[float] = []
+    for w in sorted(words, key=lambda w: (w.bbox.cy, w.bbox.x0)):
+        if lines and abs(w.bbox.cy - centers[-1]) <= tolerance:
+            lines[-1].append(w)
+            n = len(lines[-1])
+            centers[-1] += (w.bbox.cy - centers[-1]) / n
+        else:
+            lines.append([w])
+            centers.append(w.bbox.cy)
+    return [Line(sorted(ws, key=lambda w: w.bbox.x0)) for ws in lines]
+
+
+def load_pages(source: str | Path | BinaryIO) -> list[Page]:
+    pages: list[Page] = []
+    with pdfplumber.open(source) as pdf:
+        for i, pg in enumerate(pdf.pages, start=1):
+            words = [
+                Word(w["text"], BBox(w["x0"], w["top"], w["x1"], w["bottom"]))
+                for w in pg.extract_words(keep_blank_chars=False, use_text_flow=False)
+            ]
+            page = Page(number=i, width=float(pg.width), height=float(pg.height), words=words)
+            page.lines = group_lines(words)
+            pages.append(page)
+    return pages

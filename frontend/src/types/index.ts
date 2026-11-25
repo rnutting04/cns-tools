@@ -290,3 +290,38 @@ export interface LetterJobStatus {
   status: JobStatus
   download_url: string | null
 }
+
+// ── Financial packet checks ───────────────────────────────────────────────
+
+export type FinancialCheckStatus = 'pass' | 'fail' | 'review' | 'missing' | 'not_applicable'
+
+export interface FinancialCheckSide {
+  source: string
+  label: string
+  amount: number | null
+  page: number | null
+  /** true = confirmed by the report's own arithmetic; false = that arithmetic failed (likely OCR) */
+  verified: boolean | null
+  /** data: URL of the highlighted region of the scanned page */
+  image: string | null
+}
+
+export interface FinancialCheckResult {
+  id: string
+  title: string
+  status: FinancialCheckStatus
+  difference: number | null
+  tolerance: number
+  notes: string[]
+  left: FinancialCheckSide | null
+  right: FinancialCheckSide | null
+}
+
+/** Response from POST /api/financials/check */
+export interface FinancialCheckReport {
+  filename: string
+  page_count: number
+  reports_found: string[]
+  summary: Record<FinancialCheckStatus, number>
+  checks: FinancialCheckResult[]
+}

@@ -15,6 +15,7 @@ import WorkHistoryIcon from '@mui/icons-material/WorkHistory'
 import FolderIcon from '@mui/icons-material/Folder'
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance'
 import TableChartIcon from '@mui/icons-material/TableChart'
+import FactCheckIcon from '@mui/icons-material/FactCheck'
 import SettingsIcon from '@mui/icons-material/Settings'
 import SecurityIcon from '@mui/icons-material/Security'
 import { NavLink, useLocation } from 'react-router-dom'
@@ -70,6 +71,11 @@ const NAV_ITEMS: NavItem[] = [
     to: '/ai/budget',
     icon: <AccountBalanceIcon fontSize="small" />,
     roles: ['admin', 'super_admin'],
+  },
+  {
+    label: 'Financial review',
+    to: '/financials',
+    icon: <FactCheckIcon fontSize="small" />,
   },
   { label: 'Excel tools', to: '/excel', icon: <TableChartIcon fontSize="small" /> },
   {
