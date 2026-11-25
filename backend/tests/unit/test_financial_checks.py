@@ -11,6 +11,7 @@ from app.services.financials.extract import (
     PageType,
     classify,
     extract_packet,
+    parse_ap_aging,
     parse_balance_sheet,
     parse_prepaid_assessments,
 )
@@ -198,6 +199,36 @@ class TestReviewRouting:
         assert all(i.ok for i in total.identities)
 
 
+class TestAPAging:
+    def _page(self, grand: str, bank_totals: list[str], assoc: str) -> Page:
+        rows = [(30, [(30, "AP"), (50, "DS"), (70, "Aging"), (105, "Detail")])]
+        rows.append((45, [(30, "Vendor"), (90, "Date"), (130, "Invoice"), (200, "Current")]))
+        y = 70
+        for i, t in enumerate(bank_totals):
+            rows.append(
+                (y, [(30, f"100{i}"), (60, "Oper"), (90, "Truist"), (140, "Totals:"), (300, t)])
+            )
+            y += 15
+        rows.append((y, [(30, "Morton"), (75, "Village"), (115, "Totals:"), (300, assoc)]))
+        rows.append((y + 15, [(240, "Total:"), (275, grand)]))
+        return make_page(rows, number=14)
+
+    def test_total_ties_to_gl_2010_with_both_identities(self):
+        page = self._page("$38,789.77", ["8,156.27", "30,633.50"], "38,789.77")
+        assert classify(page) is PageType.AP_AGING
+        rep = parse_ap_aging([page])
+        assert rep.total.amount == D("38789.77")
+        assert [i.ok for i in rep.identities] == [True, True]
+
+    def test_total_that_disagrees_with_its_buckets_is_unverified(self):
+        rep = parse_ap_aging([self._page("$5,688.72", ["5,588.72"], "5,588.72")])
+        assert rep.total.verified is False
+
+    def test_absent_report_is_not_applicable(self):
+        results = {r.id: r for r in run_checks(extract_packet([_balance_sheet()]))}
+        assert results["accounts_payable"].status is Status.NOT_APPLICABLE
+
+
 class TestBankMatching:
     def test_rec_matched_on_exact_account_suffix(self):
         bs = _balance_sheet()
@@ -312,6 +343,7 @@ EXPECTED = {
         "prepaid_assessments": Status.PASS,
         "prepaid_insurance": Status.PASS,  # 4,011.00 vs whole-dollar 4,010
         "accrued_expenses": Status.PASS,
+        "accounts_payable": Status.NOT_APPLICABLE,
         # Titled "Reserves Schedule"; ties to reserve assets less reserve
         # liabilities (279,126.07 - 1,895.00 = 277,231.07).
         "reserve_schedule": Status.PASS,
@@ -332,6 +364,7 @@ EXPECTED = {
         "prepaid_assessments": Status.PASS,
         "prepaid_insurance": Status.PASS,
         "accrued_expenses": Status.PASS,
+        "accounts_payable": Status.PASS,
         "reserve_schedule": Status.PASS,
         "net_income:operating": Status.PASS,
         "net_income:reserve": Status.PASS,
@@ -349,6 +382,7 @@ EXPECTED = {
         "prepaid_assessments": Status.PASS,
         "prepaid_insurance": Status.PASS,
         "accrued_expenses": Status.PASS,
+        "accounts_payable": Status.PASS,
         "reserve_schedule": Status.PASS,
         "net_income:operating": Status.PASS,
         "net_income:reserve": Status.PASS,
@@ -369,7 +403,27 @@ EXPECTED = {
         "prepaid_assessments": Status.PASS,
         "prepaid_insurance": Status.PASS,
         "accrued_expenses": Status.PASS,
+        "accounts_payable": Status.NOT_APPLICABLE,
         "reserve_schedule": Status.MISSING,
+        "net_income:operating": Status.PASS,
+        "net_income:reserve": Status.PASS,
+    },
+    # Year end: has the AP DS Aging Detail (Total 5,588.72 = GL 2010). Page 2
+    # of CSC_Prepaid is titled "CSE Prepaid" in OCR. Prepaid insurance is a
+    # real 1.84 difference: 193,667.84 vs a whole-dollar schedule of 193,666
+    # over 2 policies (rounding allows at most 1.00).
+    "MOR December 2025.pdf": {
+        "bank:2752": Status.PASS,
+        "bank_rec_zero:2752": Status.PASS,
+        "bank:2760": Status.PASS,
+        "bank_rec_zero:2760": Status.PASS,
+        "ar": Status.PASS,
+        "prepaid_expenses": Status.NOT_APPLICABLE,
+        "prepaid_assessments": Status.PASS,
+        "prepaid_insurance": Status.FAIL,
+        "accrued_expenses": Status.PASS,
+        "accounts_payable": Status.PASS,
+        "reserve_schedule": Status.PASS,
         "net_income:operating": Status.PASS,
         "net_income:reserve": Status.PASS,
     },
@@ -432,4 +486,6 @@ def test_real_packet(name):
     _, results = check_packet(path)
     got = {r.id: r.status for r in results}
     assert {k: got.get(k) for k in EXPECTED[name]} == EXPECTED[name]
-    assert not [r for r in results if r.status is Status.FAIL]
+    # No mismatches beyond the real ones listed above.
+    expected_fails = {k for k, v in EXPECTED[name].items() if v is Status.FAIL}
+    assert not [r.id for r in results if r.status is Status.FAIL and r.id not in expected_fails]

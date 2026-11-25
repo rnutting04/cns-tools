@@ -300,6 +300,33 @@ def run_checks(packet: Packet) -> list[CheckResult]:
         )
     )
 
+    # 6b. Accounts payable vs AP DS Aging Detail. The report usually comes
+    # only at year end, so its absence is N/A, not "missing". Its Total covers
+    # operating and reserve payables, so it ties to the 2010 Total column.
+    ap_row = bs.find("2010", ("accountspayable",))
+    if packet.ap_aging is None:
+        results.append(
+            CheckResult(
+                "accounts_payable",
+                "Accounts Payable (2010)",
+                Status.NOT_APPLICABLE,
+                Side.of("balance sheet", _bs(ap_row), ap_row.label) if ap_row else None,
+                None,
+                notes=["No AP aging detail in this packet (usually included at year end)."],
+            )
+        )
+    else:
+        results.append(
+            _schedule_check(
+                packet,
+                "accounts_payable",
+                "Accounts Payable (2010)",
+                ap_row,
+                packet.ap_aging,
+                "AP aging detail",
+            )
+        )
+
     # 7. Reserve assets vs reserve schedule. The schedule's balance is the
     # reserve *fund* balance: reserve assets less anything the reserve fund
     # owes (e.g. reserve accounts payable). CAR (1,895.00) and BCC

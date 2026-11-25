@@ -43,6 +43,7 @@ class PageType(StrEnum):
     INSURANCE_SCHEDULE = "insurance_schedule"
     RESERVE_SCHEDULE = "reserve_schedule"
     CHECK_REGISTER = "check_register"
+    AP_AGING = "ap_aging"
     OTHER = "other"
 
 
@@ -62,6 +63,9 @@ def classify(page: Page) -> PageType:
         return PageType.RESERVE_SCHEDULE
     if "accruedprepaid" in h:
         return PageType.ACCRUED_PREPAID
+    # "AP DS Aging Detail": vendor payables aging, usually only at year end.
+    if "agingdetail" in h:
+        return PageType.AP_AGING
     # Title words can land on different OCR lines ("NAMES" above "CSC AR"),
     # so also accept the words anywhere in the header, in any order.
     if "arnames" in h or {"ar", "names"} <= page.header_words(8):
@@ -122,14 +126,21 @@ _WORD_RULES: tuple[tuple[PageType, frozenset[str], tuple[frozenset[str], ...]], 
         (frozenset({"invoices"}), frozenset({"vendor"})),
     ),
     (
+        # Not keyed on "CSC": MOR Dec 2025 page 2 read "CSC_Prepaid" as
+        # "CSE Prepaid". The Property Address column is distinctive enough.
         PageType.PREPAID_ASSESSMENTS,
-        frozenset({"csc", "prepaid"}),
-        (frozenset({"resident"}), frozenset({"account"})),
+        frozenset({"prepaid"}),
+        (frozenset({"property", "address"}), frozenset({"csc", "resident"})),
     ),
     (
         PageType.CHECK_REGISTER,
         frozenset({"check", "register"}),
         (frozenset({"department"}), frozenset({"vendor"}), frozenset({"date"})),
+    ),
+    (
+        PageType.AP_AGING,
+        frozenset({"aging", "detail"}),
+        (frozenset({"vendor"}), frozenset({"invoice"})),
     ),
 )
 
@@ -942,6 +953,64 @@ def parse_reserve_schedule(page: Page) -> ReportTotal:
     )
 
 
+def parse_ap_aging(pages: list[Page]) -> ReportTotal:
+    """AP DS Aging Detail: invoices grouped by bank account. Each bank ends
+    with "<bank> Totals: current 30 60 90", the association with
+    "<Association> Totals: ..." and the report with "Total: $X" — the
+    figure that ties to GL 2010 (operating and reserve payables together).
+
+    Identities: the association's aging buckets, and the per-bank buckets,
+    each sum to the grand total.
+    """
+    identities: list[Identity] = []
+    totals_lines: list[tuple[Page, Line]] = []  # every "... Totals:" line, in order
+    grand: Value | None = None
+    unread: tuple[Page, Line] | None = None
+    for page in pages:
+        for ln in page.lines:
+            if ln.key == "total":  # "Total: $5,588.72"
+                a = _amounts_on(ln, page, "AP aging — Total")
+                if a:
+                    grand, unread = a[-1], None
+                else:
+                    unread = (page, ln)
+            elif "totals" in ln.key:
+                totals_lines.append((page, ln))
+
+    if grand is None:
+        return _guess_total(
+            PageType.AP_AGING, unread, identities, "AP aging — Total", "the AP aging Total"
+        )
+
+    def bucket_sum(page: Page, ln: Line) -> tuple[Decimal, list[Value]]:
+        vals = _amounts_on(ln, page, ln.text)
+        return sum((v.amount for v in vals), Decimal(0)), vals
+
+    if totals_lines:
+        # The last "Totals:" line is the association's; the rest are banks.
+        assoc_page, assoc_ln = totals_lines[-1]
+        s, _ = bucket_sum(assoc_page, assoc_ln)
+        _settle(
+            identities,
+            "AP aging: association aging buckets sum to Total",
+            s,
+            grand.amount,
+            [grand],
+            grand.page,
+        )
+        banks = totals_lines[:-1]
+        if banks:
+            _settle(
+                identities,
+                "AP aging: bank account totals sum to Total",
+                sum((bucket_sum(p, ln)[0] for p, ln in banks), Decimal(0)),
+                grand.amount,
+                [grand],
+                grand.page,
+            )
+    return ReportTotal(PageType.AP_AGING, grand, identities, rows=len(totals_lines))
+
+
 # --------------------------------------------------------------------------
 # Packet
 # --------------------------------------------------------------------------
@@ -959,6 +1028,7 @@ class Packet:
     prepaid_expenses: ReportTotal | None
     insurance: ReportTotal | None
     reserve_schedule: ReportTotal | None
+    ap_aging: ReportTotal | None = None
 
 
 def extract_packet(pages: list[Page]) -> Packet:
@@ -993,7 +1063,9 @@ def extract_packet(pages: list[Page]) -> Packet:
     rs = first(PageType.RESERVE_SCHEDULE)
     ar_pages = by_type.get(PageType.AR_AGING)
     pp_pages = by_type.get(PageType.PREPAID_ASSESSMENTS)
+    apa_pages = by_type.get(PageType.AP_AGING)
     return Packet(
+        ap_aging=parse_ap_aging(apa_pages) if apa_pages else None,
         page_types=types,
         balance_sheet=parse_balance_sheet(bs_pages) if bs_pages else None,
         income_expense=ie,
