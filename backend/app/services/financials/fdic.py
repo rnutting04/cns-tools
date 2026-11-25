@@ -22,14 +22,24 @@ from .pdf import squash
 FDIC_LIMIT = Decimal("250000")
 
 # Canonical name -> letters-only aliases. Short aliases (< 5 letters) must
-# start a word ("OZK8/12/27" -> "ozk"); longer ones may appear anywhere and
-# tolerate one OCR letter error.
+# be a whole word once digits are stripped ("OZK8/12/27" -> "ozk", "HUN");
+# longer ones may appear anywhere and tolerate one OCR letter error.
+# Abbreviations seen on the balance sheets: "R-CD HUN ...", "R-CD CEN ...",
+# "Oper Cent ICS".
 INSTITUTIONS: dict[str, tuple[str, ...]] = {
     "Truist": ("truist",),
-    "Huntington": ("huntington",),
-    "Centennial": ("centennial",),
+    "Huntington": ("huntington", "hun"),
+    "Centennial": ("centennial", "cen", "cent"),
     "Bank OZK": ("ozk",),
-    "American Momentum Bank (AMB)": ("amb", "americanmomentum"),
+    "Hancock Whitney": ("hancock", "hancockwhitney"),
+    "SouthState": ("southstate",),
+    "Suncoast Credit Union": ("suncoast",),
+    "Liberty": ("liberty",),
+    "United Community": ("united",),
+    "Climate First": ("climate", "climatefirst"),
+    "RBC": ("rbc", "rbcwealth"),
+    "EverBank": ("everbank",),
+    "American Momentum Bank (AMB)": ("amb", "am", "americanmomentum"),
     "Ameris": ("ameris", "amerius"),
     "Merrill Lynch": ("merrill", "merrilllynch"),
     "Charles Schwab": ("schwab",),
@@ -112,7 +122,7 @@ def identify(label: str) -> str | None:
     for name, aliases in INSTITUTIONS.items():
         for alias in aliases:
             if len(alias) < 5:
-                if any(w.startswith(alias) for w in words):
+                if alias in words:
                     return name
             elif alias in full or any(len(w) >= 6 and _within_one_edit(alias, w) for w in words):
                 return name

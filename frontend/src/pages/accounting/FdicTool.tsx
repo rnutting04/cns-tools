@@ -1,178 +1,317 @@
-import Alert from '@mui/material/Alert'
+import { Fragment, useMemo, useState } from 'react'
 import Box from '@mui/material/Box'
 import Chip from '@mui/material/Chip'
-import Paper from '@mui/material/Paper'
+import Collapse from '@mui/material/Collapse'
+import IconButton from '@mui/material/IconButton'
 import Table from '@mui/material/Table'
 import TableBody from '@mui/material/TableBody'
 import TableCell from '@mui/material/TableCell'
 import TableHead from '@mui/material/TableHead'
 import TableRow from '@mui/material/TableRow'
+import TextField from '@mui/material/TextField'
+import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
-import WarningAmberIcon from '@mui/icons-material/WarningAmber'
-import CheckCircleIcon from '@mui/icons-material/CheckCircle'
-import type { UploadItem } from '../../hooks/createUploadStore'
-import type { FdicReport } from '../../types'
-import { money, useStoreUpload } from './helpers'
-import { DropZone, ItemStatus, ToolHeader } from './shared'
-import { fdicStore } from './stores'
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
+import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline'
+import type { AccountingJobResult, FdicAccount, FdicSectionResult } from '../../types'
+import { money } from './helpers'
+import JobRunner from './JobRunner'
 
-function ResultCard({ item }: { item: UploadItem<FdicReport> }) {
-  const r = item.result
-  const over = r?.institutions.filter((i) => i.over_limit) ?? []
+type Filter = 'all' | 'over' | 'unknown' | 'problems'
+
+const fdic = (r: AccountingJobResult): FdicSectionResult | null =>
+  'problem' in r.result ? null : (r.result as FdicSectionResult)
+
+function AccountLine({ a }: { a: FdicAccount }) {
+  const doubt = a.source.verified === false
   return (
-    <Paper variant="outlined" sx={{ borderRadius: 2, mb: 2, overflow: 'hidden' }}>
-      <Box
-        display="flex"
-        alignItems="center"
-        gap={1.5}
-        px={2}
-        py={1.25}
-        bgcolor="action.hover"
-        flexWrap="wrap"
-      >
-        <Typography variant="subtitle2" fontWeight={700} noWrap sx={{ minWidth: 0, flex: 1 }}>
-          {item.name}
-        </Typography>
-        {r?.balance_sheet_found &&
-          (over.length ? (
-            <Chip
-              size="small"
-              color="warning"
-              icon={<WarningAmberIcon />}
-              label={`${over.length} bank${over.length === 1 ? '' : 's'} at or over ${money(r.limit).replace('.00', '')}`}
+    <Box display="flex" justifyContent="space-between" gap={2}>
+      <Typography variant="body2" color="text.secondary">
+        {a.label}
+        {a.network && (
+          <Chip
+            size="small"
+            variant="outlined"
+            label="ICS/CDARS"
+            sx={{ ml: 1, height: 18, fontSize: 11 }}
+          />
+        )}
+        {doubt && (
+          <Tooltip title="The balance sheet's own totals didn't add up on this row — possible OCR misread">
+            <ErrorOutlineIcon
+              sx={{ fontSize: 15, color: 'warning.main', ml: 0.5, verticalAlign: 'middle' }}
             />
-          ) : (
-            <Chip
-              size="small"
-              color="success"
-              variant="outlined"
-              icon={<CheckCircleIcon />}
-              label="All banks under the limit"
-            />
-          ))}
-        <ItemStatus item={item} store={fdicStore} />
-      </Box>
-
-      {item.status === 'error' && (
-        <Typography variant="body2" color="error.main" px={2} py={1.5}>
-          {item.error}
-        </Typography>
-      )}
-      {r && !r.balance_sheet_found && (
-        <Alert severity="warning" sx={{ m: 2 }}>
-          No balance sheet found in this PDF.
-        </Alert>
-      )}
-
-      {r?.balance_sheet_found && (
-        <Box sx={{ overflowX: 'auto' }}>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>Bank</TableCell>
-                <TableCell>Accounts</TableCell>
-                <TableCell align="right">Total</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {r.institutions.map((inst) => (
-                <TableRow
-                  key={inst.name}
-                  sx={{ bgcolor: inst.over_limit ? 'rgba(237, 108, 2, 0.08)' : undefined }}
-                >
-                  <TableCell sx={{ verticalAlign: 'top', whiteSpace: 'nowrap' }}>
-                    <Typography variant="body2" fontWeight={700}>
-                      {inst.name}
-                    </Typography>
-                    {inst.over_limit && (
-                      <Chip size="small" color="warning" label="Over FDIC limit" sx={{ mt: 0.5 }} />
-                    )}
-                  </TableCell>
-                  <TableCell sx={{ verticalAlign: 'top' }}>
-                    {inst.accounts.map((a) => (
-                      <Box key={a.label} display="flex" justifyContent="space-between" gap={2}>
-                        <Typography variant="body2" color="text.secondary">
-                          {a.label}
-                          {a.network && (
-                            <Chip
-                              size="small"
-                              variant="outlined"
-                              label="ICS/CDARS"
-                              sx={{ ml: 1, height: 18, fontSize: 11 }}
-                            />
-                          )}
-                        </Typography>
-                        <Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums' }}>
-                          {money(a.amount)}
-                        </Typography>
-                      </Box>
-                    ))}
-                    {inst.notes.map((n) => (
-                      <Typography
-                        key={n}
-                        variant="caption"
-                        color="text.secondary"
-                        display="block"
-                        mt={0.5}
-                      >
-                        {n}
-                      </Typography>
-                    ))}
-                  </TableCell>
-                  <TableCell
-                    align="right"
-                    sx={{
-                      verticalAlign: 'top',
-                      fontWeight: 700,
-                      fontVariantNumeric: 'tabular-nums',
-                      color: inst.over_limit ? 'warning.main' : undefined,
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {money(inst.total)}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </Box>
-      )}
-
-      {r && r.unrecognized.length > 0 && (
-        <Alert severity="warning" sx={{ m: 2 }}>
-          Couldn&apos;t tell which bank these deposit accounts are at, so they aren&apos;t in the
-          totals above:
-          {r.unrecognized.map((a) => (
-            <Box key={a.label} display="flex" justifyContent="space-between" gap={2} mt={0.5}>
-              <span>{a.label}</span>
-              <span>{money(a.amount)}</span>
-            </Box>
-          ))}
-        </Alert>
-      )}
-    </Paper>
+          </Tooltip>
+        )}
+      </Typography>
+      <Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+        {money(a.amount)}
+      </Typography>
+    </Box>
   )
 }
 
-export default function FdicTool() {
-  const { items, add, errorBanner } = useStoreUpload(fdicStore, 'a PDF')
+function Row({ r }: { r: AccountingJobResult }) {
+  const [open, setOpen] = useState(false)
+  const v = fdic(r)
+  const over = v?.institutions.filter((i) => i.over_limit) ?? []
   return (
-    <Box>
-      <ToolHeader title="FDIC exposure">
-        Adds up the association&apos;s bank and CD balances at each bank from the balance sheet and
-        flags any bank holding $250,000 or more.
-      </ToolHeader>
-      <DropZone
-        accept=".pdf,application/pdf"
-        buttonLabel="Choose PDFs"
-        hint="Balance sheets or full financial packets — drop several at once"
-        onFiles={add}
-        onClear={items.length ? () => fdicStore.clear() : undefined}
-      />
-      {errorBanner}
-      {items.map((item) => (
-        <ResultCard key={item.id} item={item} />
-      ))}
-    </Box>
+    <Fragment>
+      <TableRow
+        hover
+        onClick={() => v && setOpen((o) => !o)}
+        sx={{ cursor: v ? 'pointer' : 'default' }}
+      >
+        <TableCell sx={{ verticalAlign: 'top' }}>
+          <Typography variant="body2" fontWeight={600}>
+            {r.association}
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            {r.first_page === r.last_page
+              ? `page ${r.first_page}`
+              : `pages ${r.first_page}–${r.last_page}`}
+          </Typography>
+          {!v && (
+            <Typography variant="caption" color="warning.main" display="block">
+              {(r.result as { problem: string }).problem}
+            </Typography>
+          )}
+        </TableCell>
+        <TableCell sx={{ verticalAlign: 'top' }}>
+          {over.length ? (
+            <Box display="flex" gap={0.75} flexWrap="wrap">
+              {over.map((i) => (
+                <Chip
+                  key={i.name}
+                  size="small"
+                  color="warning"
+                  label={`${i.name} ${money(i.total)}`}
+                />
+              ))}
+            </Box>
+          ) : v ? (
+            <Typography variant="body2" color="text.secondary">
+              —
+            </Typography>
+          ) : null}
+        </TableCell>
+        <TableCell sx={{ verticalAlign: 'top' }}>
+          {v && (
+            <Typography variant="body2" color="text.secondary">
+              {v.institutions.map((i) => `${i.name} ${money(i.total)}`).join(' · ') ||
+                'No deposits found'}
+            </Typography>
+          )}
+          {v && v.unrecognized.length > 0 && (
+            <Typography variant="caption" color="warning.main" display="block">
+              {v.unrecognized.length} account{v.unrecognized.length === 1 ? '' : 's'} at an
+              unrecognized bank
+            </Typography>
+          )}
+        </TableCell>
+        <TableCell sx={{ verticalAlign: 'top', width: 40 }}>
+          {v && (
+            <IconButton size="small" aria-label={open ? 'Hide accounts' : 'Show accounts'}>
+              <ExpandMoreIcon
+                fontSize="small"
+                sx={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }}
+              />
+            </IconButton>
+          )}
+        </TableCell>
+      </TableRow>
+      {v && (
+        <TableRow>
+          <TableCell colSpan={4} sx={{ py: 0, borderBottom: open ? undefined : 'none' }}>
+            <Collapse in={open} unmountOnExit>
+              <Box
+                py={1.5}
+                display="grid"
+                gap={1.5}
+                gridTemplateColumns={{ md: 'repeat(2, minmax(0, 1fr))' }}
+              >
+                {v.institutions.map((i) => (
+                  <Box key={i.name}>
+                    <Box display="flex" justifyContent="space-between" mb={0.25}>
+                      <Typography variant="body2" fontWeight={700}>
+                        {i.name}
+                      </Typography>
+                      <Typography
+                        variant="body2"
+                        fontWeight={700}
+                        color={i.over_limit ? 'warning.main' : undefined}
+                        sx={{ fontVariantNumeric: 'tabular-nums' }}
+                      >
+                        {money(i.total)}
+                      </Typography>
+                    </Box>
+                    {i.accounts.map((a) => (
+                      <AccountLine key={a.label} a={a} />
+                    ))}
+                    {i.notes.map((n) => (
+                      <Typography key={n} variant="caption" color="text.secondary" display="block">
+                        {n}
+                      </Typography>
+                    ))}
+                  </Box>
+                ))}
+                {v.unrecognized.length > 0 && (
+                  <Box>
+                    <Typography variant="body2" fontWeight={700} color="warning.main">
+                      Bank not recognized (not in totals)
+                    </Typography>
+                    {v.unrecognized.map((a) => (
+                      <AccountLine key={a.label} a={a} />
+                    ))}
+                  </Box>
+                )}
+              </Box>
+            </Collapse>
+          </TableCell>
+        </TableRow>
+      )}
+    </Fragment>
+  )
+}
+
+function ResultsTable({ results, running }: { results: AccountingJobResult[]; running: boolean }) {
+  const [filter, setFilter] = useState<Filter>('all')
+  const [q, setQ] = useState('')
+
+  const counts = useMemo(() => {
+    const c = { all: results.length, over: 0, unknown: 0, problems: 0 }
+    for (const r of results) {
+      const v = fdic(r)
+      if (!v) c.problems++
+      else {
+        if (v.institutions.some((i) => i.over_limit)) c.over++
+        if (v.unrecognized.length) c.unknown++
+      }
+    }
+    return c
+  }, [results])
+
+  const shown = results.filter((r) => {
+    if (q && !r.association.toLowerCase().includes(q.toLowerCase())) return false
+    const v = fdic(r)
+    if (filter === 'problems') return !v
+    if (filter === 'over') return Boolean(v?.institutions.some((i) => i.over_limit))
+    if (filter === 'unknown') return Boolean(v?.unrecognized.length)
+    return true
+  })
+
+  if (!results.length) {
+    return running ? (
+      <Typography variant="body2" color="text.secondary">
+        Results appear here as each association is finished.
+      </Typography>
+    ) : null
+  }
+
+  const FILTERS: [Filter, string][] = [
+    ['all', `All ${counts.all}`],
+    ['over', `$250k or more at a bank ${counts.over}`],
+    ['unknown', `Unrecognized bank ${counts.unknown}`],
+    ['problems', `Needs a person ${counts.problems}`],
+  ]
+
+  return (
+    <>
+      <Box display="flex" gap={1} flexWrap="wrap" alignItems="center" mb={1.5}>
+        {FILTERS.map(([f, label]) => (
+          <Chip
+            key={f}
+            label={label}
+            onClick={() => setFilter(f)}
+            color={filter === f ? 'primary' : f === 'over' && counts.over ? 'warning' : 'default'}
+            variant={filter === f ? 'filled' : 'outlined'}
+          />
+        ))}
+        <TextField
+          size="small"
+          placeholder="Find association"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          sx={{ ml: { sm: 'auto' }, minWidth: 200 }}
+        />
+      </Box>
+      <Box sx={{ overflowX: 'auto' }}>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Association</TableCell>
+              <TableCell>At or over $250,000</TableCell>
+              <TableCell>All banks</TableCell>
+              <TableCell />
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {shown.map((r) => (
+              <Row key={`${r.association}-${r.first_page}`} r={r} />
+            ))}
+          </TableBody>
+        </Table>
+      </Box>
+    </>
+  )
+}
+
+function toCsv(results: AccountingJobResult[]) {
+  const rows: (string | number | null)[][] = [
+    ['Association', 'Pages', 'Bank', 'Total at bank', 'At or over $250k', 'Accounts', 'Notes'],
+  ]
+  for (const r of results) {
+    const pages = `${r.first_page}-${r.last_page}`
+    const v = fdic(r)
+    if (!v) {
+      rows.push([
+        r.association,
+        pages,
+        null,
+        null,
+        null,
+        null,
+        (r.result as { problem: string }).problem,
+      ])
+      continue
+    }
+    for (const i of v.institutions) {
+      rows.push([
+        r.association,
+        pages,
+        i.name,
+        i.total,
+        i.over_limit ? 'Yes' : 'No',
+        i.accounts.map((a) => `${a.label} (${money(a.amount)})`).join('; '),
+        i.notes.join(' '),
+      ])
+    }
+    for (const a of v.unrecognized) {
+      rows.push([
+        r.association,
+        pages,
+        'Unrecognized',
+        a.amount,
+        null,
+        a.label,
+        'Bank not recognized',
+      ])
+    }
+  }
+  return rows
+}
+
+export default function FdicTool() {
+  return (
+    <JobRunner
+      tool="fdic"
+      title="FDIC exposure"
+      csvName="fdic-exposure.csv"
+      toCsv={toCsv}
+      hint="The combined Balance Sheet for all associations — or a single association's"
+      description="Adds up every association's bank and CD balances at each bank from its balance sheet and flags any bank holding $250,000 or more."
+    >
+      {(results, running) => <ResultsTable results={results} running={running} />}
+    </JobRunner>
   )
 }

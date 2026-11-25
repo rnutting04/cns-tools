@@ -398,8 +398,41 @@ def _bs_columns(line: Line) -> dict[str, Word]:
     return found
 
 
-def _bs_header(page: Page) -> Line | None:
-    return next((ln for ln in page.lines if len(_bs_columns(ln)) == len(COLUMNS)), None)
+def _fund_columns(line: Line, page: Page) -> dict[str, BBox] | None:
+    """Fallback header for master associations, whose balance sheets show
+    per-fund columns ("Lagoons I Oper | Misc | Total") instead of
+    Operating / Reserve / Total. Needs a line, entirely in the figures area,
+    ending in "Total" with at least one other column to its left. Columns
+    other than Total are named fund1, fund2, ... (no department meaning)."""
+    words = line.words
+    if len(words) < 2 or any(w.bbox.x0 < page.width * 0.4 for w in words):
+        return None
+    if not _within_one_edit(squash(words[-1].text), "total"):
+        return None
+    groups: list[list[Word]] = [[words[0]]]
+    for w in words[1:]:
+        if w.bbox.x0 - groups[-1][-1].bbox.x1 > 10:
+            groups.append([w])
+        else:
+            groups[-1].append(w)
+    if len(groups) < 2:
+        return None
+    cols = {f"fund{i}": BBox.union_all([w.bbox for w in g]) for i, g in enumerate(groups[:-1], 1)}
+    cols["total"] = BBox.union_all([w.bbox for w in groups[-1]])
+    return cols
+
+
+def _bs_header(page: Page) -> tuple[Line, dict[str, BBox]] | None:
+    """The column header line and each column's box."""
+    for ln in page.lines:
+        cols = _bs_columns(ln)
+        if len(cols) == len(COLUMNS):
+            return ln, {c: w.bbox for c, w in cols.items()}
+    for ln in page.lines[:12]:
+        fund = _fund_columns(ln, page)
+        if fund:
+            return ln, fund
+    return None
 
 
 def parse_balance_sheet(pages: Page | list[Page]) -> BalanceSheet:
@@ -418,11 +451,11 @@ def parse_balance_sheet(pages: Page | list[Page]) -> BalanceSheet:
     centers: dict[str, float] = {}
     label_limit = 0.0
     for page in pages:
-        header = _bs_header(page)
-        if header is not None:
-            cols = _bs_columns(header)
-            centers = {c: w.bbox.cx for c, w in cols.items()}
-            label_limit = min(w.bbox.x0 for w in cols.values()) - 12
+        found = _bs_header(page)
+        if found is not None:
+            header, cols = found
+            centers = {c: b.cx for c, b in cols.items()}
+            label_limit = min(b.x0 for b in cols.values()) - 12
             body = [w for w in page.words if w.bbox.top > header.bbox.bottom]
         else:
             # Continuation page: skip the repeated title, period and
@@ -482,11 +515,13 @@ def _balance_sheet(first_page: int, rows: list[BSRow]) -> BalanceSheet:
 
     identities: list[Identity] = []
     for row in rows:
-        parts = [row.values[c] for c in ("operating", "reserve") if c in row.values]
+        # Columns left of Total sum to it: operating + reserve, or a master
+        # association's fund columns.
+        parts = [v for c, v in row.values.items() if c != "total"]
         if "total" in row.values and parts:
             _settle(
                 identities,
-                f"{row.label}: operating + reserve = total",
+                f"{row.label}: columns sum to total",
                 sum((p.amount for p in parts), Decimal(0)),
                 row.values["total"].amount,
                 [*parts, row.values["total"]],
@@ -498,10 +533,12 @@ def _balance_sheet(first_page: int, rows: list[BSRow]) -> BalanceSheet:
                 v.note = "two amounts read into the same cell"
 
     sheet = BalanceSheet(first_page, rows, identities)
+    # Operating/Reserve/Total, or fund1..N/Total on a master association's sheet.
+    all_cols = sorted({c for r in rows for c in r.values})
 
     bank_total = next((r for r in rows if r.key.startswith("totalbank")), None)
     if bank_total:
-        for col in COLUMNS:
+        for col in all_cols:
             parts = [r.values[col] for r in sheet.bank_rows if col in r.values]
             if col in bank_total.values and parts:
                 _settle(
@@ -516,7 +553,7 @@ def _balance_sheet(first_page: int, rows: list[BSRow]) -> BalanceSheet:
     assets = next((r for r in rows if r.key == "totalassets"), None)
     l_and_e = next((r for r in rows if r.key.startswith("totalliabilities")), None)
     if assets and l_and_e:
-        for col in COLUMNS:
+        for col in all_cols:
             if col in assets.values and col in l_and_e.values:
                 _settle(
                     identities,

@@ -1,3 +1,4 @@
+from app.models.accounting_job import AccountingJob as AccountingJob
 from app.models.association import Association as Association
 from app.models.association import UserAssociation as UserAssociation
 from app.models.audit_event import AuditEvent as AuditEvent

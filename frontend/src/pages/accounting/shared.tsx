@@ -3,16 +3,10 @@ import { useRef, useState } from 'react'
 import type { DragEvent, ReactNode } from 'react'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
-import CircularProgress from '@mui/material/CircularProgress'
-import IconButton from '@mui/material/IconButton'
 import Paper from '@mui/material/Paper'
-import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
-import CloseIcon from '@mui/icons-material/Close'
-import ReplayIcon from '@mui/icons-material/Replay'
 import RestartAltIcon from '@mui/icons-material/RestartAlt'
 import UploadFileIcon from '@mui/icons-material/UploadFile'
-import type { UploadItem, UploadStore } from '../../hooks/createUploadStore'
 
 /** A tool's title and one-line description. */
 export function ToolHeader({ title, children }: { title: string; children: ReactNode }) {
@@ -103,46 +97,5 @@ export function DropZone({
         }}
       />
     </Paper>
-  )
-}
-
-/** Status / retry / remove controls for one uploaded file. */
-export function ItemStatus<T>({ item, store }: { item: UploadItem<T>; store: UploadStore<T> }) {
-  return (
-    <Box display="flex" alignItems="center" gap={1} flexShrink={0}>
-      {item.status === 'queued' && (
-        <Typography variant="caption" color="text.secondary">
-          Waiting…
-        </Typography>
-      )}
-      {item.status === 'running' && (
-        <>
-          <CircularProgress size={14} />
-          <Typography variant="caption" color="text.secondary">
-            Reading…
-          </Typography>
-        </>
-      )}
-      {item.status === 'error' && (
-        <Button
-          size="small"
-          startIcon={<ReplayIcon fontSize="small" />}
-          onClick={() => store.retry(item.id)}
-        >
-          Retry
-        </Button>
-      )}
-      {item.status !== 'running' && (
-        <Tooltip title="Remove">
-          <IconButton
-            size="small"
-            aria-label={`Remove ${item.name}`}
-            onClick={() => store.remove(item.id)}
-          >
-            <CloseIcon fontSize="small" />
-          </IconButton>
-        </Tooltip>
-      )}
-    </Box>
   )
 }

@@ -1,7 +1,4 @@
 /** Non-component helpers shared by the Accounting tools. */
-import { useState } from 'react'
-import ErrorAlert from '../../components/layout/ErrorAlert'
-import type { UploadStore } from '../../hooks/createUploadStore'
 
 const moneyFmt = new Intl.NumberFormat('en-US', {
   minimumFractionDigits: 2,
@@ -14,14 +11,19 @@ export function money(n: number | null | undefined): string {
   return n < 0 ? `(${moneyFmt.format(-n)})` : moneyFmt.format(n)
 }
 
-/** Items from an upload store, an add() that reports rejected files, and its error banner. */
-export function useStoreUpload<T>(store: UploadStore<T>, kind: string) {
-  const items = store.useItems()
-  const [error, setError] = useState<string | null>(null)
-  const add = (files: File[]) => {
-    const { rejected } = store.add(files)
-    setError(rejected.length ? `Skipped (not ${kind}): ${rejected.join(', ')}` : null)
+/** Download rows as a CSV file (opens in Excel). */
+export function downloadCsv(rows: (string | number | null | undefined)[][], filename: string) {
+  const cell = (v: string | number | null | undefined) => {
+    const s = v === null || v === undefined ? '' : String(v)
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
   }
-  const errorBanner = error ? <ErrorAlert message={error} onClose={() => setError(null)} /> : null
-  return { items, add, errorBanner }
+  const blob = new Blob([rows.map((r) => r.map(cell).join(',')).join('\r\n')], {
+    type: 'text/csv;charset=utf-8',
+  })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
 }

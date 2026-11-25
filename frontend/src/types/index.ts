@@ -413,6 +413,50 @@ export interface FdicInstitution {
   notes: string[]
 }
 
+export type AccountingTool = 'fdic' | 'revenue_threshold'
+
+/** A background run over a combined multi-association PDF */
+export interface AccountingJobSummary {
+  id: string
+  tool: AccountingTool
+  filename: string
+  status: 'pending' | 'processing' | 'complete' | 'failed'
+  total_pages: number | null
+  pages_done: number
+  current_association: string | null
+  associations_done: number
+  flagged_count: number
+  error_detail: string | null
+  created_at: string | null
+  finished_at: string | null
+}
+
+export interface FdicSectionResult {
+  limit: number
+  institutions: FdicInstitution[]
+  unrecognized: FdicAccount[]
+}
+
+export interface RevenueSectionResult {
+  ytd_actual: RevenueBasis
+  annual: RevenueBasis
+}
+
+/** `problem` is set when the association's section couldn't be processed */
+export type SectionResult = { problem: string } | FdicSectionResult | RevenueSectionResult
+
+export interface AccountingJobResult {
+  association: string
+  first_page: number
+  last_page: number
+  flagged: boolean
+  result: SectionResult
+}
+
+export interface AccountingJobDetail extends AccountingJobSummary {
+  results: AccountingJobResult[]
+}
+
 /** Response from POST /api/accounting/fdic */
 export interface FdicReport {
   filename: string

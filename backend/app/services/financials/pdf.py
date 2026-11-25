@@ -11,6 +11,7 @@ box it came from so a human can be shown exactly where it was read.
 from __future__ import annotations
 
 import re
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
@@ -118,10 +119,38 @@ def squash(s: str) -> str:
     return re.sub(r"[^a-z]", "", s.lower())
 
 
+# OCR look-alikes inside a number: "§2,511.92" is 52,511.92, "1O0.00" is 100.00.
+_LOOKALIKE = str.maketrans({"§": "5", "O": "0", "o": "0", "l": "1", "I": "1", "|": "1"})
+_LOOKALIKE_CHARS = set("§OolI|")
+_AMOUNT_FULL = re.compile(r"\d{1,3}(?:,\d{3})*\.\d{2}")
+# OCR read the decimal point as a comma: "268,27", "0,00".
+_COMMA_DECIMAL = re.compile(r"\d{1,3}(?:,\d{3})*,\d{2}")
+
+
+def _repair_amount_token(token: str) -> str:
+    """Fix OCR character slips in a token that is otherwise a money amount.
+    Only applied when the repaired text is a valid amount, so words and
+    codes are left alone."""
+    lead = len(token) - len(token.lstrip("(-$"))
+    trail = len(token) - len(token.rstrip(")"))
+    core = token[lead : len(token) - trail]
+    if not core:
+        return token
+    fixed = core
+    if _LOOKALIKE_CHARS & set(core) and sum(c.isdigit() for c in core) >= 3:
+        candidate = core.translate(_LOOKALIKE)
+        if _AMOUNT_FULL.fullmatch(candidate) or _COMMA_DECIMAL.fullmatch(candidate):
+            fixed = candidate
+    if _COMMA_DECIMAL.fullmatch(fixed):
+        fixed = fixed[:-3] + "." + fixed[-2:]
+    return token[:lead] + fixed + token[len(token) - trail :]
+
+
 def parse_amounts(text: str) -> list[Decimal]:
     """Every two-decimal amount in ``text``, signed. ``(1.00)`` and ``-1.00`` are negative."""
     out: list[Decimal] = []
     for token in text.split():
+        token = _repair_amount_token(token)
         core = token.strip("()-$|")
         if _FUSED_RE.fullmatch(core):
             matches = list(re.finditer(_ONE, token))
@@ -188,20 +217,70 @@ def estimate_skew(lines: list[Line]) -> float:
     return slopes[len(slopes) // 2]
 
 
-# OCR takes ~2.5s a page; this keeps a request well inside gunicorn's 60s
-# timeout even for a document that is entirely image/vector pages.
+# OCR takes ~0.7-2.5s a page; this keeps a web request well inside
+# gunicorn's 60s timeout even for a document that is entirely image/vector
+# pages. Background jobs pass no limit.
 MAX_OCR_PAGES = 12
 
+# A number OCR split at its thousands separator: "388," + "748.91",
+# "28" + "843.36", "(1" + "234.56)".
+_SPLIT_HEAD = re.compile(r"^\(?-?\$?\d{1,3}(?:,\d{3})*,?$")
+_SPLIT_TAIL = re.compile(r"^\d{3}(?:,\d{3})*\.\d{2}\)?$")
+_SPLIT_GAP = 6.0  # points; real columns are 20+ apart
 
-def load_pages(source: str | Path | BinaryIO, ocr: bool = True) -> list[Page]:
-    """Pages with their words and lines. With ``ocr``, a page that has no
-    text layer (printed-to-PDF vector text, or an un-OCR'd scan) is read
-    with Tesseract when it's installed (first ``MAX_OCR_PAGES`` such pages);
-    ``Page.ocr`` marks those pages."""
+
+def merge_split_numbers(words: list[Word]) -> list[Word]:
+    """Rejoin amounts OCR broke at a thousands separator into one word."""
+    out = sorted(words, key=lambda w: (round(w.bbox.cy), w.bbox.x0))
+    merged = True
+    while merged:
+        merged = False
+        for i, head in enumerate(out):
+            if not _SPLIT_HEAD.match(head.text):
+                continue
+            for j, tail in enumerate(out):
+                if (
+                    j != i
+                    and _SPLIT_TAIL.match(tail.text)
+                    and abs(tail.bbox.cy - head.bbox.cy) < 3
+                    and 0 <= tail.bbox.x0 - head.bbox.x1 <= _SPLIT_GAP
+                ):
+                    text = head.text.rstrip(",") + "," + tail.text
+                    out[i] = Word(text, head.bbox.union(tail.bbox))
+                    del out[j]
+                    merged = True
+                    break
+            if merged:
+                break
+    return out
+
+
+def build_page(
+    number: int, width: float, height: float, words: list[Word], ocr: bool = False
+) -> Page:
+    """A Page from words: repair split numbers, group lines, take out tilt."""
+    words = merge_split_numbers(words)
+    page = Page(number=number, width=width, height=height, words=words)
+    page.ocr = ocr
+    page.lines = group_lines(words)
+    skew = estimate_skew(page.lines)
+    if abs(skew) >= MIN_SKEW:
+        # A tilted scan: figures on the right of a row drift onto the row
+        # above/below. Regroup with the tilt taken out.
+        page.skew = skew
+        page.lines = group_lines(words, skew=skew)
+    return page
+
+
+def iter_pages(
+    source: str | Path | BinaryIO, max_ocr_pages: int | None = MAX_OCR_PAGES
+) -> Iterator[Page]:
+    """Pages one at a time. A page with no text layer (printed-to-PDF vector
+    text, or an un-OCR'd scan) is read with Tesseract when it's installed,
+    up to ``max_ocr_pages`` (None = no limit); ``Page.ocr`` marks those."""
     from .ocr import ocr_page  # local import: ocr imports this module
 
-    pages: list[Page] = []
-    ocr_budget = MAX_OCR_PAGES if ocr else 0
+    budget = max_ocr_pages
     with pdfplumber.open(source) as pdf:
         for i, pg in enumerate(pdf.pages, start=1):
             words = [
@@ -209,18 +288,22 @@ def load_pages(source: str | Path | BinaryIO, ocr: bool = True) -> list[Page]:
                 for w in pg.extract_words(keep_blank_chars=False, use_text_flow=False)
             ]
             used_ocr = False
-            if not words and ocr_budget > 0:
-                ocr_budget -= 1
+            if not words and (budget is None or budget > 0):
+                if budget is not None:
+                    budget -= 1
                 words = ocr_page(pg) or []
                 used_ocr = bool(words)
-            page = Page(number=i, width=float(pg.width), height=float(pg.height), words=words)
-            page.ocr = used_ocr
-            page.lines = group_lines(words)
-            skew = estimate_skew(page.lines)
-            if abs(skew) >= MIN_SKEW:
-                # A tilted scan: figures on the right of a row drift onto the
-                # row above/below. Regroup with the tilt taken out.
-                page.skew = skew
-                page.lines = group_lines(words, skew=skew)
-            pages.append(page)
-    return pages
+            width, height = float(pg.width), float(pg.height)
+            # Free pdfplumber's per-page cache: a combined file is 500+ pages.
+            pg.close()
+            yield build_page(i, width, height, words, used_ocr)
+
+
+def page_count(source: str | Path | BinaryIO) -> int:
+    with pdfplumber.open(source) as pdf:
+        return len(pdf.pages)
+
+
+def load_pages(source: str | Path | BinaryIO, ocr: bool = True) -> list[Page]:
+    """All pages (see ``iter_pages``); ``ocr=False`` skips OCR entirely."""
+    return list(iter_pages(source, MAX_OCR_PAGES if ocr else 0))
