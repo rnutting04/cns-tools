@@ -302,7 +302,9 @@ export interface FinancialCheckSide {
   page: number | null
   /** true = confirmed by the report's own arithmetic; false = that arithmetic failed (likely OCR) */
   verified: boolean | null
-  /** data: URL of the highlighted region of the scanned page */
+  /** amount was picked by its position on the page (line didn't parse cleanly) — confirm it */
+  guessed: boolean
+  /** data: URL of the highlighted region of the scanned page (or where the figure should be) */
   image: string | null
 }
 

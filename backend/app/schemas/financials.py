@@ -11,7 +11,10 @@ class FinancialCheckSide(BaseModel):
     # False: that arithmetic failed — likely an OCR misread.
     # None: nothing on the report to confirm it against.
     verified: bool | None
-    image: str | None  # data: URL of the highlighted page region
+    # The line didn't parse cleanly, so the amount was picked by its position
+    # on the page. Shown as a best guess for a human to confirm.
+    guessed: bool = False
+    image: str | None  # data: URL of the highlighted page region (or where it should be)
 
 
 class FinancialCheckResult(BaseModel):

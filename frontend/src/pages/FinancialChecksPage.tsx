@@ -97,9 +97,20 @@ function SideView({ side, heading }: { side: FinancialCheckSide | null; heading:
         {side.page ? ` · page ${side.page}` : ''}
       </Typography>
       <Box display="flex" alignItems="center" gap={0.5}>
-        <Typography variant="body2" fontWeight={600} sx={{ fontVariantNumeric: 'tabular-nums' }}>
-          {fmt(side.amount)}
-        </Typography>
+        {side.amount === null ? (
+          <Typography variant="body2" color="text.disabled">
+            {side.image ? 'Not read — see highlighted area' : 'Not found'}
+          </Typography>
+        ) : (
+          <Typography variant="body2" fontWeight={600} sx={{ fontVariantNumeric: 'tabular-nums' }}>
+            {fmt(side.amount)}
+          </Typography>
+        )}
+        {side.guessed && side.verified !== true && (
+          <Tooltip title="This line didn't read cleanly, so the amount was picked by its position on the page. Confirm it against the image.">
+            <Chip size="small" label="Best guess" color="warning" variant="outlined" />
+          </Tooltip>
+        )}
         {side.verified === true && (
           <Tooltip title="Confirmed by the report's own totals">
             <VerifiedIcon sx={{ fontSize: 16, color: 'success.main' }} />
@@ -169,16 +180,25 @@ function CheckRow({ check }: { check: FinancialCheckResult }) {
         <Typography variant="body2" sx={{ gridColumn: { xs: '1 / -1', md: 'auto' } }}>
           {check.title}
         </Typography>
-        {[check.left?.amount, check.right?.amount].map((a, i) => (
-          <Typography
-            key={i}
-            variant="body2"
-            textAlign="right"
-            sx={{ display: { xs: 'none', md: 'block' }, fontVariantNumeric: 'tabular-nums' }}
-          >
-            {fmt(a)}
-          </Typography>
-        ))}
+        {[check.left, check.right].map((side, i) => {
+          const guess = Boolean(side?.guessed && side.verified !== true)
+          return (
+            <Typography
+              key={i}
+              variant="body2"
+              textAlign="right"
+              title={guess ? 'Best guess — confirm against the image' : undefined}
+              sx={{
+                display: { xs: 'none', md: 'block' },
+                fontVariantNumeric: 'tabular-nums',
+                fontStyle: guess ? 'italic' : 'normal',
+              }}
+            >
+              {fmt(side?.amount)}
+              {guess ? '?' : ''}
+            </Typography>
+          )
+        })}
         <Typography
           variant="body2"
           textAlign="right"

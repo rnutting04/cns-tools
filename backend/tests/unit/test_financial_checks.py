@@ -14,7 +14,14 @@ from app.services.financials.extract import (
     parse_balance_sheet,
     parse_prepaid_assessments,
 )
-from app.services.financials.pdf import BBox, Page, Word, group_lines, parse_amounts
+from app.services.financials.pdf import (
+    BBox,
+    Page,
+    Word,
+    estimate_skew,
+    group_lines,
+    parse_amounts,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -175,6 +182,74 @@ class TestBankMatching:
         assert results["bank:6045"].status is Status.MISSING
 
 
+_IE_COLS = (200, 250, 300, 350, 400, 450, 500)  # YTD actual is the 4th column
+
+
+def _ie_page(rows: list[tuple[list[str], list[str | None]]], number: int = 2) -> Page:
+    """Operating I&E page. Each row is (label words, 7 amounts); None drops
+    that amount, as when OCR loses a figure."""
+    out = [
+        (30, [(30, "Operating"), (90, "Income"), (130, "and"), (155, "Expense")]),
+        (45, [(200, "Current"), (240, "Month"), (350, "Year"), (375, "To"), (390, "Date")]),
+    ]
+    for i, (label, amounts) in enumerate(rows):
+        cells = [(30 + 45 * j, w) for j, w in enumerate(label)]
+        cells += [(x, a) for x, a in zip(_IE_COLS, amounts, strict=True) if a is not None]
+        out.append((70 + 15 * i, cells))
+    return make_page(out, number=number)
+
+
+_REV = (["TOTAL", "REVENUES"], ["10.00", "9.00", "1.00", "100.00", "90.00", "10.00", "120.00"])
+_EXP = (["TOTAL", "EXPENSES"], ["6.00", "5.00", "(1.00)", "60.00", "50.00", "(10.00)", "80.00"])
+
+
+class TestDeskew:
+    def test_tilted_rows_regroup_onto_their_labels(self):
+        # Rows rise 0.013pt per pt to the right, as on CAR's I&E page.
+        slope = -0.013
+        words = []
+        for i, (label, amounts) in enumerate([_REV, _EXP, _REV, _EXP]):
+            top = 100 + 15 * i
+            for j, w in enumerate(label):
+                x = 30 + 45 * j
+                words.append(Word(w, BBox(x, top + slope * x, x + 40, top + 9 + slope * x)))
+            for x, a in zip(_IE_COLS, amounts, strict=True):
+                words.append(Word(a, BBox(x, top + slope * x, x + 40, top + 9 + slope * x)))
+        skew = estimate_skew(group_lines(words))
+        assert abs(skew - slope) < 0.001
+        lines = group_lines(words, skew=skew)
+        assert [len(parse_amounts(ln.text)) for ln in lines] == [7, 7, 7, 7]
+
+
+class TestIncomeExpenseFallback:
+    def _ie(self, rows):
+        return extract_packet([_balance_sheet(), _ie_page(rows)]).income_expense["operating"]
+
+    def test_excess_line_missing_a_figure_is_read_by_column(self):
+        excess = (["EXCESS", "REVENUE"], ["4.00", "4.00", None, "40.00", "40.00", "0.00", "40.00"])
+        net = self._ie([_REV, _EXP, excess]).ytd_net
+        assert net.amount == D("40.00")
+        assert net.guessed
+        assert net.verified is True  # revenues - expenses confirms the guess
+
+    def test_unconfirmed_guess_that_matches_still_needs_review(self):
+        # Balance sheet operating net income is (1.00); no totals to confirm the guess.
+        dues = (["Assessments"], ["1.00", "1.00", "0.00", "9.00", "9.00", "0.00", "12.00"])
+        excess = (["EXCESS", "REVENUE"], [None, "1.00", "0.00", "(1.00)", "0.00", "(1.00)", None])
+        packet = extract_packet([_balance_sheet(), _ie_page([dues, excess])])
+        r = next(r for r in run_checks(packet) if r.id == "net_income:operating")
+        assert r.right.amount == D("-1.00")
+        assert r.right.guessed
+        assert r.status is Status.REVIEW
+
+    def test_unreadable_figure_still_points_at_its_line(self):
+        packet = extract_packet([_balance_sheet(), _ie_page([(["EXCESS", "REVENUE"], [None] * 7)])])
+        r = next(r for r in run_checks(packet) if r.id == "net_income:operating")
+        assert r.status is Status.REVIEW
+        assert r.right.amount is None
+        assert r.right.page == 2 and r.right.bbox is not None
+
+
 # --------------------------------------------------------------------------
 # Real packets (not committed — they contain owner names and balances)
 # --------------------------------------------------------------------------
@@ -182,6 +257,24 @@ class TestBankMatching:
 TEST_DATA = Path(__file__).resolve().parents[2] / "test_data"
 
 EXPECTED = {
+    # Page 4 (operating I&E) is scanned ~0.75° off level: the right-hand
+    # figures sit up to 7pt above their labels until the page is deskewed.
+    "CAR October 2026.pdf": {
+        "bank:1702": Status.PASS,
+        "bank_rec_zero:1702": Status.PASS,
+        "bank:1745": Status.PASS,
+        "bank_rec_zero:1745": Status.PASS,
+        "bank:8621": Status.PASS,
+        "bank:8272": Status.PASS,
+        "ar": Status.PASS,
+        "prepaid_expenses": Status.PASS,
+        "prepaid_assessments": Status.PASS,
+        "prepaid_insurance": Status.PASS,  # 4,011.00 vs whole-dollar 4,010
+        "accrued_expenses": Status.PASS,
+        "reserve_schedule": Status.MISSING,
+        "net_income:operating": Status.PASS,
+        "net_income:reserve": Status.PASS,
+    },
     "BLE September 2026.pdf": {
         "bank:0263": Status.PASS,
         "bank_rec_zero:0263": Status.PASS,

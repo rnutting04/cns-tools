@@ -36,12 +36,25 @@ class Side:
     page: int | None
     bbox: BBox | None
     verified: bool | None
+    guessed: bool = False  # read by position; a human should confirm it
+    note: str = ""
 
     @classmethod
-    def of(cls, source: str, v: Value | None, label: str = "") -> Side:
+    def of(
+        cls,
+        source: str,
+        v: Value | None,
+        label: str = "",
+        searched: tuple[int, BBox] | None = None,
+    ) -> Side:
+        """``searched`` is where the figure should have been, so a reviewer
+        can still be shown that area when nothing could be read."""
         if v is None:
-            return cls(source, label, None, None, None, None)
-        return cls(source, label or v.label, v.amount, v.page, v.bbox, v.verified)
+            page, bbox = searched or (None, None)
+            return cls(source, label, None, page, bbox, None)
+        return cls(
+            source, label or v.label, v.amount, v.page, v.bbox, v.verified, v.guessed, v.note
+        )
 
 
 @dataclass
@@ -65,17 +78,32 @@ def _compare(
     notes: list[str] | None = None,
 ) -> CheckResult:
     notes = list(notes or [])
+    for side in (left, right):
+        if side.note and side.note not in notes:
+            notes.append(side.note)
     res = CheckResult(id, title, Status.REVIEW, left, right, tolerance=tolerance, notes=notes)
     if left.amount is None or right.amount is None:
         missing = left if left.amount is None else right
-        notes.append(f"Could not read the figure from the {missing.source}.")
+        msg = f"Could not read the figure from the {missing.source}."
+        if missing.bbox is not None:
+            msg += " The highlighted area is where it should be."
+        notes.append(msg)
         return res
     res.difference = left.amount - right.amount
+    # A positional guess that no report total confirmed always gets a human
+    # look, even when it happens to match.
+    unconfirmed_guess = any(s.guessed and s.verified is not True for s in (left, right))
     if abs(res.difference) <= tolerance + CENT:
-        # Two independent reads agreeing is its own confirmation.
-        res.status = Status.PASS
         if res.difference and tolerance:
             notes.append(f"Differs by {abs(res.difference):,.2f}, within rounding tolerance.")
+        if unconfirmed_guess:
+            notes.append("Best-guess read matches — confirm against the highlighted area.")
+            return res
+        # Two independent reads agreeing is its own confirmation.
+        res.status = Status.PASS
+        return res
+    if unconfirmed_guess:
+        notes.append("Best-guess read doesn't match — check the highlighted area.")
         return res
     if left.verified is False or right.verified is False:
         notes.append(
@@ -314,14 +342,17 @@ def run_checks(packet: Packet) -> list[CheckResult]:
                 )
             )
             continue
-        notes = [ie.ytd_net.note] if ie.ytd_net and ie.ytd_net.note else []
         results.append(
             _compare(
                 f"net_income:{dept}",
                 title,
                 left,
-                Side.of("income & expense report", ie.ytd_net),
-                notes=notes,
+                Side.of(
+                    "income & expense report",
+                    ie.ytd_net,
+                    f"{dept.title()} YTD net income",
+                    searched=ie.searched,
+                ),
             )
         )
 

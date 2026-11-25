@@ -92,6 +92,14 @@ class Page:
     height: float
     words: list[Word]
     lines: list[Line] = field(default_factory=list)
+    # Scan tilt as dy/dx (negative = rows rise to the right). Word boxes keep
+    # their true page position (so highlights land on the scan); only row
+    # matching uses the levelled position from ``level``.
+    skew: float = 0.0
+
+    def level(self, b: BBox) -> float:
+        """Vertical centre of ``b`` with the scan's tilt taken out."""
+        return b.cy - self.skew * b.cx
 
     @property
     def text(self) -> str:
@@ -130,19 +138,52 @@ def parse_whole_amounts(text: str) -> list[Decimal]:
     return [Decimal(m.group().replace(",", "")) for m in _WHOLE_RE.finditer(text)]
 
 
-def group_lines(words: list[Word], tolerance: float = 3.5) -> list[Line]:
-    """Cluster words into visual lines by vertical center."""
+def group_lines(words: list[Word], tolerance: float = 3.5, skew: float = 0.0) -> list[Line]:
+    """Cluster words into visual lines by vertical center, levelled for ``skew``."""
+
+    def y(w: Word) -> float:
+        return w.bbox.cy - skew * w.bbox.cx
+
     lines: list[list[Word]] = []
     centers: list[float] = []
-    for w in sorted(words, key=lambda w: (w.bbox.cy, w.bbox.x0)):
-        if lines and abs(w.bbox.cy - centers[-1]) <= tolerance:
+    for w in sorted(words, key=lambda w: (y(w), w.bbox.x0)):
+        if lines and abs(y(w) - centers[-1]) <= tolerance:
             lines[-1].append(w)
             n = len(lines[-1])
-            centers[-1] += (w.bbox.cy - centers[-1]) / n
+            centers[-1] += (y(w) - centers[-1]) / n
         else:
             lines.append([w])
-            centers.append(w.bbox.cy)
+            centers.append(y(w))
     return [Line(sorted(ws, key=lambda w: w.bbox.x0)) for ws in lines]
+
+
+# Below this the tilt moves a word under ~1pt across the page: leave it alone.
+MIN_SKEW = 0.002
+
+
+def estimate_skew(lines: list[Line]) -> float:
+    """Page tilt (dy/dx) from the rows of figures that already grouped.
+
+    Each line with 4+ amounts spread across the page gives a least-squares
+    slope; the median ignores the odd row OCR mangled. Even on a tilted
+    page the short runs of figures still group, so there are enough samples.
+    """
+    slopes: list[float] = []
+    for ln in lines:
+        ws = [w for w in ln.words if _AMOUNT_RE.search(w.text)]
+        if len(ws) < 4 or ws[-1].bbox.cx - ws[0].bbox.cx < 200:
+            continue
+        xs = [w.bbox.cx for w in ws]
+        ys = [w.bbox.cy for w in ws]
+        mx, my = sum(xs) / len(xs), sum(ys) / len(ys)
+        slopes.append(
+            sum((x - mx) * (yy - my) for x, yy in zip(xs, ys, strict=True))
+            / sum((x - mx) ** 2 for x in xs)
+        )
+    if len(slopes) < 3:
+        return 0.0
+    slopes.sort()
+    return slopes[len(slopes) // 2]
 
 
 def load_pages(source: str | Path | BinaryIO) -> list[Page]:
@@ -155,5 +196,11 @@ def load_pages(source: str | Path | BinaryIO) -> list[Page]:
             ]
             page = Page(number=i, width=float(pg.width), height=float(pg.height), words=words)
             page.lines = group_lines(words)
+            skew = estimate_skew(page.lines)
+            if abs(skew) >= MIN_SKEW:
+                # A tilted scan: figures on the right of a row drift onto the
+                # row above/below. Regroup with the tilt taken out.
+                page.skew = skew
+                page.lines = group_lines(words, skew=skew)
             pages.append(page)
     return pages

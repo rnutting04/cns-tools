@@ -35,6 +35,7 @@ def _side(side: Side | None, renderer: CropRenderer) -> FinancialCheckSide | Non
         amount=float(side.amount) if side.amount is not None else None,
         page=side.page,
         verified=side.verified,
+        guessed=side.guessed,
         image=image,
     )
 
