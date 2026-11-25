@@ -70,6 +70,15 @@ def classify(page: Page) -> PageType:
         return PageType.PREPAID_ASSESSMENTS
     if "checkregister" in h:
         return PageType.CHECK_REGISTER
+
+    # Fallbacks for titles OCR split across lines out of order — BCC Oct
+    # 2026 read "GL Balance Sheet" as "Sheet" above "GL Balance". Checked
+    # last, so they only apply to pages nothing above claimed.
+    words = page.header_words(8)
+    if {"balance", "sheet"} <= words and {"operating", "reserve", "total"} <= words:
+        return PageType.BALANCE_SHEET
+    if "schedule" in words and words & {"reserve", "reserves"} and "insurance" not in words:
+        return PageType.RESERVE_SCHEDULE
     return PageType.OTHER
 
 

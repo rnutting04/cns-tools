@@ -97,6 +97,24 @@ def _balance_sheet(prepaid_row_offset: float = 0) -> Page:
     )
 
 
+class TestClassify:
+    def test_balance_sheet_title_split_out_of_order(self):
+        # BCC Oct 2026: OCR read "GL Balance Sheet" as "Sheet" above "GL Balance".
+        page = make_page(
+            [
+                (35, [(30, "Sheet"), (300, "Friday,"), (340, "November")]),
+                (38.5, [(30, "GL"), (45, "Balance")]),
+                (56, [(30, "Period"), (70, "10/31/2026")]),
+                (87, [(293, "Operating"), (353, "Reserve"), (413, "Total")]),
+            ]
+        )
+        assert classify(page) is PageType.BALANCE_SHEET
+
+    def test_balance_word_alone_is_not_a_balance_sheet(self):
+        page = make_page([(30, [(30, "Statement"), (90, "Balance")]), (45, [(30, "Total")])])
+        assert classify(page) is PageType.OTHER
+
+
 class TestBalanceSheetGeometry:
     def test_values_placed_by_column_header(self):
         bs = parse_balance_sheet(_balance_sheet())
@@ -280,6 +298,23 @@ EXPECTED = {
     # Titled "GL Balance Sheet". Reserve AP of 30,633.50 sits between reserve
     # assets and the reserve schedule balance.
     "BCC September 2026.pdf": {
+        "bank:5711": Status.PASS,
+        "bank_rec_zero:5711": Status.PASS,
+        "bank:5738": Status.PASS,
+        "bank_rec_zero:5738": Status.PASS,
+        "bank:711": Status.PASS,
+        "bank_rec_zero:711": Status.PASS,
+        "ar": Status.PASS,
+        "prepaid_expenses": Status.PASS,
+        "prepaid_assessments": Status.PASS,
+        "prepaid_insurance": Status.PASS,
+        "accrued_expenses": Status.PASS,
+        "reserve_schedule": Status.PASS,
+        "net_income:operating": Status.PASS,
+        "net_income:reserve": Status.PASS,
+    },
+    # OCR put "Sheet" on the line above "GL Balance" in the title.
+    "BCC October 2026.pdf": {
         "bank:5711": Status.PASS,
         "bank_rec_zero:5711": Status.PASS,
         "bank:5738": Status.PASS,
