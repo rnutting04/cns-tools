@@ -17,6 +17,7 @@ import axios from 'axios'
 import apiClient from '../api/client'
 import ErrorAlert from '../components/layout/ErrorAlert'
 import type { ReserveScheduleIssue, ReserveScheduleReport } from '../types'
+import { ToolHeader } from './accounting/shared'
 
 const money = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 function fmt(n: number | null): string {
@@ -152,14 +153,11 @@ function ReserveScheduleCheck() {
   const nonNumbers = (report?.issues.length ?? 0) - negatives
 
   return (
-    <Paper variant="outlined" sx={{ p: { xs: 2, md: 3 }, borderRadius: 2 }}>
-      <Typography variant="h6" fontWeight={600}>
-        Reserve schedule
-      </Typography>
-      <Typography variant="body2" color="text.secondary" mb={2}>
+    <Box>
+      <ToolHeader title="Reserve schedule">
         Checks every association tab of the MASS Reserve Schedule workbook. No reserve
         component&apos;s Balance can be negative (totals aren&apos;t checked).
-      </Typography>
+      </ToolHeader>
 
       <Box
         onDragOver={(e) => {
@@ -247,20 +245,9 @@ function ReserveScheduleCheck() {
           ))}
         </>
       )}
-    </Paper>
-  )
-}
-
-export default function ExcelToolsPage() {
-  return (
-    <Box>
-      <Typography variant="h5" fontWeight={700} mb={0.5}>
-        Excel tools
-      </Typography>
-      <Typography color="text.secondary" mb={3}>
-        Upload a workbook to run its checks. Files are read in memory and not stored.
-      </Typography>
-      <ReserveScheduleCheck />
     </Box>
   )
 }
+
+/** Accounting tools → Reserve schedule (MASS workbook check). */
+export default ReserveScheduleCheck

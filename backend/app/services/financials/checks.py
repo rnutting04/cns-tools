@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from enum import StrEnum
 
-from .extract import CENT, BankRec, BSRow, Packet, ReportTotal, Value
+from .extract import CENT, BankRec, BSRow, Packet, PageType, ReportTotal, Value
 from .pdf import BBox
 
 
@@ -175,6 +175,24 @@ def _schedule_check(
 def run_checks(packet: Packet) -> list[CheckResult]:
     bs = packet.balance_sheet
     if bs is None:
+        bs_pages = [n for n, t in packet.page_types.items() if t is PageType.BALANCE_SHEET]
+        if bs_pages:
+            # Found but unreadable (e.g. its Operating/Reserve/Total header
+            # is too damaged). Point the reviewer at it rather than fail.
+            return [
+                CheckResult(
+                    "balance_sheet",
+                    "Balance sheet",
+                    Status.REVIEW,
+                    None,
+                    None,
+                    notes=[
+                        f"Balance sheet found on page {bs_pages[0]}, but its Operating / "
+                        "Reserve / Total columns couldn't be read, so nothing could be "
+                        "compared. Review this packet by hand."
+                    ],
+                )
+            ]
         return [
             CheckResult(
                 "balance_sheet",

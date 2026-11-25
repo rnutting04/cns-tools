@@ -96,6 +96,8 @@ class Page:
     # their true page position (so highlights land on the scan); only row
     # matching uses the levelled position from ``level``.
     skew: float = 0.0
+    # Words came from our own OCR (the PDF had no text layer on this page).
+    ocr: bool = False
 
     def level(self, b: BBox) -> float:
         """Vertical centre of ``b`` with the scan's tilt taken out."""
@@ -186,15 +188,33 @@ def estimate_skew(lines: list[Line]) -> float:
     return slopes[len(slopes) // 2]
 
 
-def load_pages(source: str | Path | BinaryIO) -> list[Page]:
+# OCR takes ~2.5s a page; this keeps a request well inside gunicorn's 60s
+# timeout even for a document that is entirely image/vector pages.
+MAX_OCR_PAGES = 12
+
+
+def load_pages(source: str | Path | BinaryIO, ocr: bool = True) -> list[Page]:
+    """Pages with their words and lines. With ``ocr``, a page that has no
+    text layer (printed-to-PDF vector text, or an un-OCR'd scan) is read
+    with Tesseract when it's installed (first ``MAX_OCR_PAGES`` such pages);
+    ``Page.ocr`` marks those pages."""
+    from .ocr import ocr_page  # local import: ocr imports this module
+
     pages: list[Page] = []
+    ocr_budget = MAX_OCR_PAGES if ocr else 0
     with pdfplumber.open(source) as pdf:
         for i, pg in enumerate(pdf.pages, start=1):
             words = [
                 Word(w["text"], BBox(w["x0"], w["top"], w["x1"], w["bottom"]))
                 for w in pg.extract_words(keep_blank_chars=False, use_text_flow=False)
             ]
+            used_ocr = False
+            if not words and ocr_budget > 0:
+                ocr_budget -= 1
+                words = ocr_page(pg) or []
+                used_ocr = bool(words)
             page = Page(number=i, width=float(pg.width), height=float(pg.height), words=words)
+            page.ocr = used_ocr
             page.lines = group_lines(words)
             skew = estimate_skew(page.lines)
             if abs(skew) >= MIN_SKEW:

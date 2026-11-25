@@ -9,6 +9,8 @@ from app.services.financials import Status, check_packet
 from app.services.financials.checks import run_checks
 from app.services.financials.extract import (
     PageType,
+    _has_word,
+    _page_of,
     classify,
     extract_packet,
     parse_ap_aging,
@@ -96,6 +98,61 @@ def _balance_sheet(prepaid_row_offset: float = 0) -> Page:
             ),
         ]
     )
+
+
+class TestOcrTolerance:
+    @pytest.mark.parametrize(
+        "word, header, found",
+        [
+            ("csc", {"cse", "prepaid"}, True),  # one letter wrong
+            ("reserve", {"reserves"}, True),  # plural
+            ("reserve", {"resexves"}, True),  # plural + one letter wrong
+            ("balance", {"balanc"}, True),  # letter dropped
+            ("prepaid", {"cscprepaid"}, True),  # run together
+            ("reconciliation", {"bankrecoxciliation"}, True),  # run together + typo
+            ("ar", {"or"}, False),  # short words must match exactly
+            ("sheet", {"street"}, False),  # two edits apart
+            ("register", {"registry", "reg"}, False),
+        ],
+    )
+    def test_has_word(self, word, header, found):
+        assert _has_word(header, word) is found
+
+    @pytest.mark.parametrize(
+        "footer, expected",
+        [
+            ("11/9/2026 2:34:08 PM Page 2of2", (2, 2)),
+            ("Page 2 of 6", (2, 6)),
+            ("2/5/2026 10:32:13 AM Page 30f 6", (3, 6)),  # OCR read "of" as "0f"
+            ("Page 10 of 12", (10, 12)),
+        ],
+    )
+    def test_page_of_footer(self, footer, expected):
+        page = make_page([(700, [(30 + 40 * i, w) for i, w in enumerate(footer.split())])])
+        assert _page_of(page) == expected
+
+    def test_untitled_page_continues_the_report_before_it(self):
+        def page(n, title):
+            rows = [(30, [(30, w) for w in title])] if title else []
+            rows.append(
+                (45, [(30, "Resident"), (90, "Contact"), (150, "Property"), (210, "Address")])
+            )
+            rows.append((700, [(30, "Page"), (60, str(n)), (75, "of"), (90, "2")]))
+            return make_page(rows, number=n)
+
+        packet = extract_packet([page(1, ["CSC_Prepaid"]), page(2, ["#@!%"])])
+        assert packet.page_types == {
+            1: PageType.PREPAID_ASSESSMENTS,
+            2: PageType.PREPAID_ASSESSMENTS,
+        }
+
+    def test_unreadable_balance_sheet_is_review_not_an_error(self):
+        page = make_page(
+            [(30, [(30, "Balance"), (75, "Sheet")]), (85, [(293, "Assets"), (353, "Equity")])]
+        )
+        assert classify(page) is PageType.BALANCE_SHEET
+        [result] = run_checks(extract_packet([page]))
+        assert result.status is Status.REVIEW
 
 
 class TestClassify:
@@ -194,6 +251,13 @@ class TestReviewRouting:
 
     def test_ocr_dropped_minus_sign_is_tolerated(self):
         pp = _prepaid_page(["-60.00", "40.00"], "-100.00")
+        total = parse_prepaid_assessments([pp])
+        assert total.total.amount == D("100.00")
+        assert all(i.ok for i in total.identities)
+
+    def test_total_with_ocr_punctuation_for_minus_is_read(self):
+        # AMC Oct 2026: "-11,030.10" read as "“11,030.10".
+        pp = _prepaid_page(["-60.00", "-40.00"], "“100.00")
         total = parse_prepaid_assessments([pp])
         assert total.total.amount == D("100.00")
         assert all(i.ok for i in total.identities)
@@ -405,6 +469,24 @@ EXPECTED = {
         "accrued_expenses": Status.PASS,
         "accounts_payable": Status.NOT_APPLICABLE,
         "reserve_schedule": Status.MISSING,
+        "net_income:operating": Status.PASS,
+        "net_income:reserve": Status.PASS,
+    },
+    # Prepaid assessment total OCR'd as "“11,030.10" (minus sign read as a quote).
+    "AMC October 2026.pdf": {
+        "bank:9298": Status.PASS,
+        "bank_rec_zero:9298": Status.PASS,
+        "bank:9301": Status.PASS,
+        "bank_rec_zero:9301": Status.PASS,
+        "bank:1715": Status.PASS,
+        "bank_rec_zero:1715": Status.PASS,
+        "ar": Status.PASS,
+        "prepaid_expenses": Status.NOT_APPLICABLE,
+        "prepaid_assessments": Status.PASS,
+        "prepaid_insurance": Status.PASS,
+        "accrued_expenses": Status.PASS,
+        "accounts_payable": Status.NOT_APPLICABLE,
+        "reserve_schedule": Status.PASS,
         "net_income:operating": Status.PASS,
         "net_income:reserve": Status.PASS,
     },

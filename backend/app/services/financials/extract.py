@@ -111,14 +111,10 @@ _WORD_RULES: tuple[tuple[PageType, frozenset[str], tuple[frozenset[str], ...]], 
         (frozenset({"policy"}), frozenset({"premium"}), frozenset({"policies"})),
     ),
     (
+        # "Reserves" matches "reserve" through the one-letter tolerance.
         PageType.RESERVE_SCHEDULE,
         frozenset({"schedule"}),
-        (
-            frozenset({"reserve", "receipts"}),
-            frozenset({"reserves", "receipts"}),
-            frozenset({"reserve", "expenses"}),
-            frozenset({"reserves", "expenses"}),
-        ),
+        (frozenset({"reserve", "receipts"}), frozenset({"reserve", "expenses"})),
     ),
     (
         PageType.ACCRUED_PREPAID,
@@ -142,6 +138,13 @@ _WORD_RULES: tuple[tuple[PageType, frozenset[str], tuple[frozenset[str], ...]], 
         frozenset({"aging", "detail"}),
         (frozenset({"vendor"}), frozenset({"invoice"})),
     ),
+    (
+        # "CSC AR Names": the 2-letter "AR" is too short to match loosely,
+        # so key on "Names" plus the aging columns.
+        PageType.AR_AGING,
+        frozenset({"names"}),
+        (frozenset({"resident", "days"}), frozenset({"current", "days"})),
+    ),
 )
 
 # Words whose presence rules a fallback out (another report shares the word).
@@ -151,11 +154,62 @@ _WORD_EXCLUDE: dict[PageType, frozenset[str]] = {
 }
 
 
+def _within_one_edit(a: str, b: str) -> bool:
+    """True if a and b differ by at most one inserted, deleted or changed letter."""
+    if a == b:
+        return True
+    la, lb = len(a), len(b)
+    if abs(la - lb) > 1:
+        return False
+    if la > lb:
+        a, b, la, lb = b, a, lb, la
+    i = 0
+    while i < la and a[i] == b[i]:
+        i += 1
+    # Skip the one differing letter: substitution if equal length, else insertion.
+    return a[i + (la == lb) :] == b[i + 1 :]
+
+
+def _has_word(words: set[str], w: str) -> bool:
+    """Is title/clue word ``w`` in the header, allowing for OCR damage?
+
+    - exact match;
+    - one letter wrong, missing or extra ("cse" for "csc", "reserves" for
+      "reserve", "balancc" for "balance") — for words of 3+ letters, so short
+      words like "ar" must match exactly;
+    - run together with a neighbour ("cscprepaid", "glbalance") — for words
+      of 5+ letters, so short words don't match by accident.
+    """
+    if w in words:
+        return True
+    # Plurals don't count as the one allowed error ("reserves" ~ "reserve").
+    forms = {x for x in words if len(x) >= 3} | {
+        x[:-1] for x in words if len(x) > 3 and x[-1] == "s"
+    }
+    if len(w) >= 3 and any(_within_one_edit(w, x) for x in forms):
+        return True
+    if len(w) < 5:
+        return False
+    # Run together with a neighbour, possibly also with one letter wrong:
+    # any slice of a longer token within one edit of w.
+    n = len(w)
+    for x in words:
+        if len(x) <= n:
+            continue
+        for i in range(len(x) - n + 2):
+            for size in (n - 1, n, n + 1):
+                if _within_one_edit(w, x[i : i + size]):
+                    return True
+    return False
+
+
 def _classify_by_words(words: set[str]) -> PageType:
     for kind, title, clues in _WORD_RULES:
-        if not title <= words or words & _WORD_EXCLUDE.get(kind, frozenset()):
+        if not all(_has_word(words, w) for w in title):
             continue
-        if any(c <= words for c in clues):
+        if words & _WORD_EXCLUDE.get(kind, frozenset()):
+            continue
+        if any(all(_has_word(words, w) for w in c) for c in clues):
             return kind
     return PageType.OTHER
 
@@ -332,15 +386,20 @@ class BalanceSheet:
 _CODE_RE = re.compile(r"^(\d{4}(?:\.[A-Z]{1,3})?)(?=\s|$)")
 
 
+def _bs_columns(line: Line) -> dict[str, Word]:
+    """The Operating/Reserve/Total header words on a line, keyed by column,
+    tolerating a one-letter OCR error ("Operatlng", "Reserv")."""
+    found: dict[str, Word] = {}
+    for w in line.words:
+        s = squash(w.text)
+        col = next((c for c in COLUMNS if len(s) >= 4 and _within_one_edit(s, c)), None)
+        if col and col not in found:
+            found[col] = w
+    return found
+
+
 def _bs_header(page: Page) -> Line | None:
-    return next(
-        (
-            ln
-            for ln in page.lines
-            if {"operating", "reserve", "total"} <= set(ln.text.lower().split())
-        ),
-        None,
-    )
+    return next((ln for ln in page.lines if len(_bs_columns(ln)) == len(COLUMNS)), None)
 
 
 def parse_balance_sheet(pages: Page | list[Page]) -> BalanceSheet:
@@ -361,8 +420,9 @@ def parse_balance_sheet(pages: Page | list[Page]) -> BalanceSheet:
     for page in pages:
         header = _bs_header(page)
         if header is not None:
-            centers = {w.text.lower(): w.bbox.cx for w in header.words if w.text.lower() in COLUMNS}
-            label_limit = min(w.bbox.x0 for w in header.words if w.text.lower() in COLUMNS) - 12
+            cols = _bs_columns(header)
+            centers = {c: w.bbox.cx for c, w in cols.items()}
+            label_limit = min(w.bbox.x0 for w in cols.values()) - 12
             body = [w for w in page.words if w.bbox.top > header.bbox.bottom]
         else:
             # Continuation page: skip the repeated title, period and
@@ -483,6 +543,52 @@ class IncomeExpense:
     derived: bool = False
     # Where the figure should be, when it couldn't be read at all.
     searched: tuple[int, BBox] | None = None
+    # TOTAL REVENUES: Year-to-Date Actual and Annual (budget) columns.
+    revenue_ytd: Value | None = None
+    revenue_annual: Value | None = None
+
+
+def _ie_column_x(pages: list[Page], index: int) -> float | None:
+    """x-centre of column ``index`` (0-6) from the 7-figure rows that parsed cleanly."""
+    xs = sorted(
+        toks[index][1].cx
+        for page in pages
+        for ln in page.lines
+        if len(toks := _amount_tokens(ln.words)) == 7
+    )
+    return xs[len(xs) // 2] if xs else None
+
+
+def read_revenues(pages: list[Page], department: str) -> tuple[Value | None, Value | None]:
+    """TOTAL REVENUES for one department: (YTD Actual, Annual).
+
+    Rows carry 7 figures: month actual/budget/variance, YTD actual/budget/
+    variance, annual. A clean row is confirmed by actual - budget = variance;
+    a damaged one is read by column position and flagged as a guess.
+    """
+    row: tuple[Page, Line] | None = None
+    for page in pages:
+        for ln in page.lines:
+            if _ie_label(ln) in ("totalrevenues", "totalrevenue", "revenues"):
+                row = (page, ln)
+    if row is None:
+        return None, None
+    page, ln = row
+    name = department.title()
+    a = _amounts_on(ln, page, ln.text)
+    if len(a) == 7:
+        ytd, annual = a[3], a[6]
+        ytd.verified = abs(a[3].amount - a[4].amount - a[5].amount) < CENT
+        ytd.label = f"{name} YTD Actual — Total Revenues"
+        annual.label = f"{name} Annual — Total Revenues"
+        return ytd, annual
+    note = "TOTAL REVENUES line didn't read cleanly; figure picked by its column position."
+    picks = []
+    for idx, what in ((3, "YTD Actual"), (6, "Annual")):
+        col = _ie_column_x(pages, idx)
+        label = f"{name} {what} — Total Revenues"
+        picks.append(_nearby_amount(page, ln, label, note, column_x=col) if col else None)
+    return picks[0], picks[1]
 
 
 def _ie_label(line: Line) -> str:
@@ -812,8 +918,10 @@ def parse_prepaid_assessments(pages: list[Page]) -> ReportTotal:
             a = _amounts_on(ln, page, "Prepaid assessment report total")
             if len(a) != 1:
                 continue
-            rest = re.sub(r"[-\d,.$\s|]", "", ln.text)
-            if not rest:
+            # The total stands alone on its line. Judge that by "no letters"
+            # rather than "only digits": OCR can turn the minus sign into
+            # stray punctuation (AMC Oct 2026 read "-11,030.10" as "“11,030.10").
+            if not re.search(r"[A-Za-z]", ln.text) and not _ACCOUNT_NO.search(ln.text):
                 total = a[0]
             elif _ACCOUNT_NO.search(ln.text):
                 rows.append(a[0])
@@ -1031,8 +1139,46 @@ class Packet:
     ap_aging: ReportTotal | None = None
 
 
+# "Page 2 of 6", "Page 2of6", and OCR's "Page 30f 6" (the "o" read as zero).
+_PAGE_OF = re.compile(r"page\s*(\d+)\s*[o0]f\s*(\d+)", re.IGNORECASE)
+
+
+def _page_of(page: Page) -> tuple[int, int] | None:
+    """The report's own "Page N of M" (footer or header), if printed."""
+    for ln in reversed(page.lines):
+        m = _PAGE_OF.search(ln.text)
+        if m:
+            return int(m.group(1)), int(m.group(2))
+    return None
+
+
+def _inherit_continuations(pages: list[Page], types: dict[int, PageType]) -> None:
+    """A report's later pages often lose or garble their title in OCR. If an
+    unrecognised page says "Page N of M" and the page before it is a known
+    report saying "Page N-1 of M", it's that report's next page."""
+    for prev, page in zip(pages, pages[1:], strict=False):
+        if types[page.number] is not PageType.OTHER or types[prev.number] is PageType.OTHER:
+            continue
+        here, before = _page_of(page), _page_of(prev)
+        if here and before and here[0] > 1 and before == (here[0] - 1, here[1]):
+            types[page.number] = types[prev.number]
+
+
+def _try_balance_sheet(pages: list[Page]) -> BalanceSheet | None:
+    """The balance sheet, or None if it can't be read. Never fails the whole
+    packet: the other reports still get checked, and run_checks reports the
+    unreadable balance sheet for review (page_types still records it)."""
+    if not pages:
+        return None
+    try:
+        return parse_balance_sheet(pages)
+    except ValueError:
+        return None
+
+
 def extract_packet(pages: list[Page]) -> Packet:
     types = {p.number: classify(p) for p in pages}
+    _inherit_continuations(pages, types)
     by_type: dict[PageType, list[Page]] = {}
     for p in pages:
         by_type.setdefault(types[p.number], []).append(p)
@@ -1057,6 +1203,7 @@ def extract_packet(pages: list[Page]) -> Packet:
         ]
         if dept_pages:
             ie[dept] = parse_income_expense(dept_pages, dept)
+            ie[dept].revenue_ytd, ie[dept].revenue_annual = read_revenues(dept_pages, dept)
 
     ap = first(PageType.ACCRUED_PREPAID)
     ins = first(PageType.INSURANCE_SCHEDULE)
@@ -1067,7 +1214,7 @@ def extract_packet(pages: list[Page]) -> Packet:
     return Packet(
         ap_aging=parse_ap_aging(apa_pages) if apa_pages else None,
         page_types=types,
-        balance_sheet=parse_balance_sheet(bs_pages) if bs_pages else None,
+        balance_sheet=_try_balance_sheet(bs_pages),
         income_expense=ie,
         bank_recs=[parse_bank_rec(g) for g in rec_groups],
         ar_aging=parse_ar_aging(ar_pages) if ar_pages else None,

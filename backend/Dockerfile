@@ -36,10 +36,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# Runtime-only system deps (libpq for psycopg, curl for healthcheck)
+# Runtime-only system deps (libpq for psycopg, curl for healthcheck,
+# tesseract-ocr to read PDFs that have no text layer — e.g. reports saved
+# with "Microsoft Print to PDF"; see app/services/financials/ocr.py)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
     curl \
+    tesseract-ocr \
     && rm -rf /var/lib/apt/lists/*
 
 # Non-root user for security

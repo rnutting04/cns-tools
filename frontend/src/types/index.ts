@@ -364,3 +364,62 @@ export interface ReserveScheduleReport {
   issues: ReserveScheduleIssue[]
   sheets: ReserveScheduleSheet[]
 }
+
+/** A figure read from a PDF, with where it came from */
+export interface SourceFigure {
+  label: string
+  amount: number
+  page: number
+  bbox: number[]
+  /** true: confirmed by the report's own arithmetic */
+  verified: boolean | null
+  /** read by column position because the line was damaged */
+  guessed: boolean
+}
+
+export type ReportTier = 'none' | 'compilation' | 'review' | 'audit'
+
+export interface RevenueBasis {
+  operating: SourceFigure | null
+  reserve: SourceFigure | null
+  total: number | null
+  tier: ReportTier | null
+  notes: string[]
+}
+
+/** Response from POST /api/accounting/revenue-threshold */
+export interface RevenueThresholdReport {
+  filename: string
+  page_count: number
+  /** pages read with OCR because the PDF had no text layer */
+  ocr_pages: number
+  ytd_actual: RevenueBasis
+  annual: RevenueBasis
+}
+
+export interface FdicAccount {
+  label: string
+  amount: number
+  /** ICS / CDARS reciprocal deposit */
+  network: boolean
+  source: SourceFigure
+}
+
+export interface FdicInstitution {
+  name: string
+  total: number
+  over_limit: boolean
+  accounts: FdicAccount[]
+  notes: string[]
+}
+
+/** Response from POST /api/accounting/fdic */
+export interface FdicReport {
+  filename: string
+  page_count: number
+  ocr_pages: number
+  limit: number
+  balance_sheet_found: boolean
+  institutions: FdicInstitution[]
+  unrecognized: FdicAccount[]
+}

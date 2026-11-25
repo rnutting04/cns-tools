@@ -24,6 +24,7 @@ import CloseIcon from '@mui/icons-material/Close'
 import ReplayIcon from '@mui/icons-material/Replay'
 import RestartAltIcon from '@mui/icons-material/RestartAlt'
 import ErrorAlert from '../components/layout/ErrorAlert'
+import { ToolHeader } from './accounting/shared'
 import {
   addPackets,
   clearSession,
@@ -522,13 +523,10 @@ export default function FinancialChecksPage() {
 
   return (
     <Box>
-      <Typography variant="h5" fontWeight={700} mb={0.5}>
-        Financial review
-      </Typography>
-      <Typography color="text.secondary" mb={3}>
+      <ToolHeader title="Financial review">
         Upload monthly financial packets to tie each balance sheet to its bank reconciliations and
         supporting reports. Add as many as you like; they&apos;re checked two at a time.
-      </Typography>
+      </ToolHeader>
 
       <Paper
         variant="outlined"

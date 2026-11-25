@@ -10,6 +10,10 @@ import JobsPage from '../pages/JobsPage'
 import TemplateManagerPage from '../pages/TemplateManagerPage'
 import ExcelToolsPage from '../pages/ExcelToolsPage'
 import FinancialChecksPage from '../pages/FinancialChecksPage'
+import AccountingLayout from '../pages/accounting/AccountingLayout'
+import AccountingOverview from '../pages/accounting/AccountingOverview'
+import FdicTool from '../pages/accounting/FdicTool'
+import RevenueThresholdTool from '../pages/accounting/RevenueThresholdTool'
 import BudgetGeneratorPage from '../pages/ai/BudgetGeneratorPage'
 import NotFoundPage from '../pages/NotFoundPage'
 import SettingsPage from '../pages/settings/SettingsPage'
@@ -56,8 +60,16 @@ export default function AppRouter() {
               </ProtectedRoute>
             }
           />
-          <Route path="excel" element={<ExcelToolsPage />} />
-          <Route path="financials" element={<FinancialChecksPage />} />
+          <Route path="accounting" element={<AccountingLayout />}>
+            <Route index element={<AccountingOverview />} />
+            <Route path="review" element={<FinancialChecksPage />} />
+            <Route path="audit-threshold" element={<RevenueThresholdTool />} />
+            <Route path="fdic" element={<FdicTool />} />
+            <Route path="reserve-schedule" element={<ExcelToolsPage />} />
+          </Route>
+          {/* Old locations, kept so bookmarks still work. */}
+          <Route path="financials" element={<Navigate to="/accounting/review" replace />} />
+          <Route path="excel" element={<Navigate to="/accounting/reserve-schedule" replace />} />
           <Route path="ai" element={<Navigate to="/ai/budget" replace />} />
           <Route
             path="ai/budget"

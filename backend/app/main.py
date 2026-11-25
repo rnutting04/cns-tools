@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config.settings import settings
 from app.routers import (
+    accounting,
     association,
     audit,
     auth,
@@ -40,6 +41,7 @@ app.include_router(budget.router, prefix="/api")
 app.include_router(jobs.router, prefix="/api")
 app.include_router(financials.router, prefix="/api")
 app.include_router(excel.router, prefix="/api")
+app.include_router(accounting.router, prefix="/api")
 
 
 @app.get("/health")
