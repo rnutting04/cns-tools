@@ -71,14 +71,81 @@ def classify(page: Page) -> PageType:
     if "checkregister" in h:
         return PageType.CHECK_REGISTER
 
-    # Fallbacks for titles OCR split across lines out of order — BCC Oct
-    # 2026 read "GL Balance Sheet" as "Sheet" above "GL Balance". Checked
-    # last, so they only apply to pages nothing above claimed.
-    words = page.header_words(8)
-    if {"balance", "sheet"} <= words and {"operating", "reserve", "total"} <= words:
-        return PageType.BALANCE_SHEET
-    if "schedule" in words and words & {"reserve", "reserves"} and "insurance" not in words:
-        return PageType.RESERVE_SCHEDULE
+    return _classify_by_words(page.header_words(8))
+
+
+# Fallbacks for titles OCR read out of order or split across lines (BCC Oct
+# 2026 read "GL Balance Sheet" as "Sheet" above "GL Balance"). Each needs
+# the title's words anywhere in the header, in any order, AND a second clue
+# from that report's own column headings, so a page that merely mentions
+# "balance" or "schedule" isn't claimed. Order matters: most specific first.
+_WORD_RULES: tuple[tuple[PageType, frozenset[str], tuple[frozenset[str], ...]], ...] = (
+    # (type, title words — all required, clues — any one set fully present)
+    (
+        PageType.BANK_REC,
+        frozenset({"bank", "reconciliation"}),
+        (frozenset({"statement"}), frozenset({"uncleared"}), frozenset({"summary"})),
+    ),
+    (
+        PageType.BALANCE_SHEET,
+        frozenset({"balance", "sheet"}),
+        # Continuation pages (FAI) have neither the column header nor Assets.
+        (
+            frozenset({"operating", "reserve", "total"}),
+            frozenset({"assets"}),
+            frozenset({"equity"}),
+        ),
+    ),
+    (
+        PageType.INCOME_EXPENSE,
+        frozenset({"income", "expense"}),
+        (frozenset({"actual", "budget"}), frozenset({"variance"})),
+    ),
+    (
+        PageType.INSURANCE_SCHEDULE,
+        frozenset({"schedule", "insurance"}),
+        (frozenset({"policy"}), frozenset({"premium"}), frozenset({"policies"})),
+    ),
+    (
+        PageType.RESERVE_SCHEDULE,
+        frozenset({"schedule"}),
+        (
+            frozenset({"reserve", "receipts"}),
+            frozenset({"reserves", "receipts"}),
+            frozenset({"reserve", "expenses"}),
+            frozenset({"reserves", "expenses"}),
+        ),
+    ),
+    (
+        PageType.ACCRUED_PREPAID,
+        frozenset({"accrued", "prepaid"}),
+        (frozenset({"invoices"}), frozenset({"vendor"})),
+    ),
+    (
+        PageType.PREPAID_ASSESSMENTS,
+        frozenset({"csc", "prepaid"}),
+        (frozenset({"resident"}), frozenset({"account"})),
+    ),
+    (
+        PageType.CHECK_REGISTER,
+        frozenset({"check", "register"}),
+        (frozenset({"department"}), frozenset({"vendor"}), frozenset({"date"})),
+    ),
+)
+
+# Words whose presence rules a fallback out (another report shares the word).
+_WORD_EXCLUDE: dict[PageType, frozenset[str]] = {
+    PageType.RESERVE_SCHEDULE: frozenset({"insurance"}),
+    PageType.PREPAID_ASSESSMENTS: frozenset({"accrued", "names"}),
+}
+
+
+def _classify_by_words(words: set[str]) -> PageType:
+    for kind, title, clues in _WORD_RULES:
+        if not title <= words or words & _WORD_EXCLUDE.get(kind, frozenset()):
+            continue
+        if any(c <= words for c in clues):
+            return kind
     return PageType.OTHER
 
 
@@ -254,8 +321,8 @@ class BalanceSheet:
 _CODE_RE = re.compile(r"^(\d{4}(?:\.[A-Z]{1,3})?)(?=\s|$)")
 
 
-def parse_balance_sheet(page: Page) -> BalanceSheet:
-    header = next(
+def _bs_header(page: Page) -> Line | None:
+    return next(
         (
             ln
             for ln in page.lines
@@ -263,15 +330,47 @@ def parse_balance_sheet(page: Page) -> BalanceSheet:
         ),
         None,
     )
-    if header is None:
-        raise ValueError(f"page {page.number}: balance sheet column header not found")
-    centers = {w.text.lower(): w.bbox.cx for w in header.words if w.text.lower() in COLUMNS}
-    label_limit = min(w.bbox.x0 for w in header.words if w.text.lower() in COLUMNS) - 12
-    body = [w for w in page.words if w.bbox.top > header.bbox.bottom]
 
+
+def parse_balance_sheet(pages: Page | list[Page]) -> BalanceSheet:
+    """Read the balance sheet, which may run over several pages.
+
+    FAI Oct 2026 continues onto a second page (Total Liability, Equity, Net
+    Income) that repeats the title but not the Operating/Reserve/Total
+    header; it's read with the first page's column positions.
+    """
+    if isinstance(pages, Page):
+        pages = [pages]
+    if _bs_header(pages[0]) is None:
+        raise ValueError(f"page {pages[0].number}: balance sheet column header not found")
+
+    rows: list[BSRow] = []
+    centers: dict[str, float] = {}
+    label_limit = 0.0
+    for page in pages:
+        header = _bs_header(page)
+        if header is not None:
+            centers = {w.text.lower(): w.bbox.cx for w in header.words if w.text.lower() in COLUMNS}
+            label_limit = min(w.bbox.x0 for w in header.words if w.text.lower() in COLUMNS) - 12
+            body = [w for w in page.words if w.bbox.top > header.bbox.bottom]
+        else:
+            # Continuation page: skip the repeated title, period and
+            # association name lines.
+            period = next(
+                (i for i, ln in enumerate(page.lines[:6]) if ln.key.startswith("period")), None
+            )
+            top = page.lines[period + 1].bbox.bottom if period is not None else 0
+            body = [w for w in page.words if w.bbox.top > top]
+        rows.extend(_bs_page_rows(page, body, centers, label_limit))
+
+    return _balance_sheet(pages[0].number, rows)
+
+
+def _bs_page_rows(
+    page: Page, body: list[Word], centers: dict[str, float], label_limit: float
+) -> list[BSRow]:
     label_lines = group_lines([w for w in body if w.bbox.x1 < label_limit], skew=page.skew)
     rows: list[BSRow] = []
-    section = ""
     for ln in label_lines:
         text = ln.text
         m = _CODE_RE.match(text)
@@ -300,7 +399,11 @@ def parse_balance_sheet(page: Page) -> BalanceSheet:
                 row.conflicts.append(val)
             else:
                 row.values[col] = val
+    return rows
 
+
+def _balance_sheet(first_page: int, rows: list[BSRow]) -> BalanceSheet:
+    section = ""
     for row in rows:
         if not row.values and not row.key.startswith("total"):
             section = row.key
@@ -316,14 +419,14 @@ def parse_balance_sheet(page: Page) -> BalanceSheet:
                 sum((p.amount for p in parts), Decimal(0)),
                 row.values["total"].amount,
                 [*parts, row.values["total"]],
-                page.number,
+                row.values["total"].page,
             )
         if row.conflicts:
             for v in [*row.values.values(), *row.conflicts]:
                 v.verified = False
                 v.note = "two amounts read into the same cell"
 
-    sheet = BalanceSheet(page.number, rows, identities)
+    sheet = BalanceSheet(first_page, rows, identities)
 
     bank_total = next((r for r in rows if r.key.startswith("totalbank")), None)
     if bank_total:
@@ -336,7 +439,7 @@ def parse_balance_sheet(page: Page) -> BalanceSheet:
                     sum((p.amount for p in parts), Decimal(0)),
                     bank_total.values[col].amount,
                     [*parts, bank_total.values[col]],
-                    page.number,
+                    bank_total.values[col].page,
                 )
 
     assets = next((r for r in rows if r.key == "totalassets"), None)
@@ -350,7 +453,7 @@ def parse_balance_sheet(page: Page) -> BalanceSheet:
                     assets.values[col].amount,
                     l_and_e.values[col].amount,
                     [assets.values[col], l_and_e.values[col]],
-                    page.number,
+                    l_and_e.values[col].page,
                 )
     return sheet
 
@@ -563,20 +666,42 @@ def _labeled(lines: list[Line], page: Page, pattern: str) -> Value | None:
     return None
 
 
-def parse_bank_rec(page: Page) -> BankRec:
-    lines = page.lines
-    m = next((_BANK_RE.search(ln.text) for ln in lines if _BANK_RE.search(ln.text)), None)
+def _bank_of(page: Page) -> re.Match[str] | None:
+    return next((m for ln in page.lines if (m := _BANK_RE.search(ln.text))), None)
+
+
+def parse_bank_rec(pages: Page | list[Page]) -> BankRec:
+    """One account's reconciliation. The summary at the bottom can spill
+    onto a following page with no "Bank:" line (FAI Oct 2026: Uncleared
+    Deposits through G/L and Balance Difference are on page 2 of 2)."""
+    if isinstance(pages, Page):
+        pages = [pages]
+    page = pages[0]
+    m = _bank_of(page)
     bank = m.group(1) if m else "unknown"
     last4 = m.group(2) if m else None
-    start = next((i for i, ln in enumerate(lines) if "reconciliationsummary" in ln.key), 0)
-    summary = lines[start:]
 
-    gl = _labeled(summary, page, r"GL\s*Balance:?")
-    checks = _labeled(summary, page, r"Uncleared\s*Checks,?\s*Credits:?")
-    deposits = _labeled(summary, page, r"Uncleared\s*Deposits,?\s*Debits:?")
-    gl_diff = _labeled(summary, page, r"GL\s*Difference:?")
-    statement = _labeled(summary, page, r"Statement\s*Balance:?")
-    bal_diff = _labeled(summary, page, r"GL\s*and\s*Balance\s*Difference:?")
+    summaries: list[tuple[Page, list[Line]]] = []
+    for i, pg in enumerate(pages):
+        lines = pg.lines
+        # On the first page the summary starts at "Reconciliation Summary:";
+        # the page header above it also says "G/L Balance".
+        start = next((j for j, ln in enumerate(lines) if "reconciliationsummary" in ln.key), 0)
+        summaries.append((pg, lines[start:] if i == 0 else lines))
+
+    def find(pattern: str) -> Value | None:
+        for pg, lines in summaries:
+            v = _labeled(lines, pg, pattern)
+            if v:
+                return v
+        return None
+
+    gl = find(r"GL\s*Balance:?")
+    checks = find(r"Uncleared\s*Checks,?\s*Credits:?")
+    deposits = find(r"Uncleared\s*Deposits,?\s*Debits:?")
+    gl_diff = find(r"GL\s*Difference:?")
+    statement = find(r"Statement\s*Balance:?")
+    bal_diff = find(r"GL\s*and\s*Balance\s*Difference:?")
 
     identities: list[Identity] = []
     if gl and checks and deposits and gl_diff:
@@ -845,7 +970,16 @@ def extract_packet(pages: list[Page]) -> Packet:
     def first(t: PageType) -> Page | None:
         return by_type.get(t, [None])[0]
 
-    bs_page = first(PageType.BALANCE_SHEET)
+    bs_pages = by_type.get(PageType.BALANCE_SHEET, [])
+
+    # A rec page with no "Bank:" line continues the previous account's rec.
+    rec_groups: list[list[Page]] = []
+    for p in by_type.get(PageType.BANK_REC, []):
+        if _bank_of(p) is None and rec_groups:
+            rec_groups[-1].append(p)
+        else:
+            rec_groups.append([p])
+
     ie: dict[str, IncomeExpense] = {}
     for dept in ("operating", "reserve"):
         dept_pages = [
@@ -861,9 +995,9 @@ def extract_packet(pages: list[Page]) -> Packet:
     pp_pages = by_type.get(PageType.PREPAID_ASSESSMENTS)
     return Packet(
         page_types=types,
-        balance_sheet=parse_balance_sheet(bs_page) if bs_page else None,
+        balance_sheet=parse_balance_sheet(bs_pages) if bs_pages else None,
         income_expense=ie,
-        bank_recs=[parse_bank_rec(p) for p in by_type.get(PageType.BANK_REC, [])],
+        bank_recs=[parse_bank_rec(g) for g in rec_groups],
         ar_aging=parse_ar_aging(ar_pages) if ar_pages else None,
         prepaid_assessments=parse_prepaid_assessments(pp_pages) if pp_pages else None,
         accrued=parse_accrued_prepaid(ap, "accrued") if ap else None,

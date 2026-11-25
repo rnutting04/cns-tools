@@ -1,5 +1,5 @@
 # app/schemas/financials.py
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class FinancialCheckSide(BaseModel):
@@ -14,7 +14,12 @@ class FinancialCheckSide(BaseModel):
     # The line didn't parse cleanly, so the amount was picked by its position
     # on the page. Shown as a best guess for a human to confirm.
     guessed: bool = False
-    image: str | None  # data: URL of the highlighted page region (or where it should be)
+    # [x0, top, x1, bottom] in PDF points on ``page``: where the figure was
+    # read (or should be). Sent back to /evidence to render the screenshot.
+    bbox: list[float] | None = None
+    # data: URL of the highlighted page region; None when the report was
+    # requested without images (fetch from /evidence instead).
+    image: str | None
 
 
 class FinancialCheckResult(BaseModel):
@@ -26,6 +31,15 @@ class FinancialCheckResult(BaseModel):
     notes: list[str]
     left: FinancialCheckSide | None
     right: FinancialCheckSide | None
+
+
+class FinancialEvidenceRegion(BaseModel):
+    page: int = Field(ge=1)
+    bbox: list[float] = Field(min_length=4, max_length=4)
+
+
+class FinancialEvidenceResponse(BaseModel):
+    images: list[str | None]  # data: URLs, in request order
 
 
 class FinancialCheckReport(BaseModel):

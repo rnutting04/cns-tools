@@ -388,7 +388,9 @@ def run_checks(packet: Packet) -> list[CheckResult]:
 
 
 def _last4(label: str) -> str | None:
-    m = re.search(r"-\s*(\d{3,4})\s*$", label)
+    # The account number is the last "- 1234" in the label; a note can
+    # follow it ("1302 Rese Bank Ozk - 1435 (.50%)" at FAI).
+    m = re.search(r"-\s*(\d{3,4})\s*(?:\([^)]*\))?\s*$", label)
     return m.group(1) if m else None
 
 

@@ -304,7 +304,10 @@ export interface FinancialCheckSide {
   verified: boolean | null
   /** amount was picked by its position on the page (line didn't parse cleanly) — confirm it */
   guessed: boolean
-  /** data: URL of the highlighted region of the scanned page (or where the figure should be) */
+  /** [x0, top, x1, bottom] in PDF points on `page` — sent to /evidence to render the screenshot */
+  bbox: number[] | null
+  /** data: URL of the highlighted region (or where the figure should be); null when the
+   * report was fetched without images */
   image: string | null
 }
 

@@ -110,6 +110,29 @@ class TestClassify:
         )
         assert classify(page) is PageType.BALANCE_SHEET
 
+    @pytest.mark.parametrize(
+        "header, expected",
+        [
+            # Title words out of order / on separate lines, plus a column clue.
+            (["Reconciliation Expanded", "Bank Summary", "Statement Date"], PageType.BANK_REC),
+            (["Report Expense", "and Income", "Actual Budget Variance"], PageType.INCOME_EXPENSE),
+            (["Insurance of Schedule", "Policy Description"], PageType.INSURANCE_SCHEDULE),
+            (["Schedule", "Reserves", "Code Receipts Expenses"], PageType.RESERVE_SCHEDULE),
+            (["Prepaid Invoices", "Accrued", "Vendor Services"], PageType.ACCRUED_PREPAID),
+            (["Prepaid Period", "CSC", "Resident Contact"], PageType.PREPAID_ASSESSMENTS),
+            (["Register Check", "By Department"], PageType.CHECK_REGISTER),
+            # Title words without the clue stay unclassified.
+            (["Schedule", "Reserve"], PageType.OTHER),
+            (["Income Expense"], PageType.OTHER),
+        ],
+    )
+    def test_title_words_in_any_order(self, header, expected):
+        rows = [
+            (30 + 15 * i, [(30 + 60 * j, w) for j, w in enumerate(line.split())])
+            for i, line in enumerate(header)
+        ]
+        assert classify(make_page(rows)) is expected
+
     def test_balance_word_alone_is_not_a_balance_sheet(self):
         page = make_page([(30, [(30, "Statement"), (90, "Balance")]), (45, [(30, "Total")])])
         assert classify(page) is PageType.OTHER
@@ -327,6 +350,26 @@ EXPECTED = {
         "prepaid_insurance": Status.PASS,
         "accrued_expenses": Status.PASS,
         "reserve_schedule": Status.PASS,
+        "net_income:operating": Status.PASS,
+        "net_income:reserve": Status.PASS,
+    },
+    # Balance sheet runs over 2 pages (Net Income on page 2); the 8458 rec
+    # summary spills onto a second page; "Bank Ozk - 1435 (.50%)" has a note
+    # after the account number. No 1527 rec and no reserve schedule in the packet.
+    "FAI October 2026.pdf": {
+        "bank:8458": Status.PASS,
+        "bank_rec_zero:8458": Status.PASS,
+        "bank:3950": Status.PASS,
+        "bank_rec_zero:3950": Status.PASS,
+        "bank:1527": Status.MISSING,
+        "bank:1435": Status.PASS,
+        "bank_rec_zero:1435": Status.PASS,
+        "ar": Status.PASS,
+        "prepaid_expenses": Status.NOT_APPLICABLE,
+        "prepaid_assessments": Status.PASS,
+        "prepaid_insurance": Status.PASS,
+        "accrued_expenses": Status.PASS,
+        "reserve_schedule": Status.MISSING,
         "net_income:operating": Status.PASS,
         "net_income:reserve": Status.PASS,
     },
