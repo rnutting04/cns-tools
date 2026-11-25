@@ -8,6 +8,7 @@ from app.routers import (
     audit,
     auth,
     budget,
+    excel,
     financials,
     jobs,
     managers,
@@ -38,6 +39,7 @@ app.include_router(audit.router, prefix="/api")
 app.include_router(budget.router, prefix="/api")
 app.include_router(jobs.router, prefix="/api")
 app.include_router(financials.router, prefix="/api")
+app.include_router(excel.router, prefix="/api")
 
 
 @app.get("/health")

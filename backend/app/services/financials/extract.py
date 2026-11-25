@@ -57,7 +57,8 @@ def classify(page: Page) -> PageType:
         return PageType.INCOME_EXPENSE
     if "scheduleofinsurance" in h:
         return PageType.INSURANCE_SCHEDULE
-    if "reserveschedule" in h:
+    # "Reserve Schedule" or "Reserves Schedule" depending on the association.
+    if re.search(r"reserves?schedule", h):
         return PageType.RESERVE_SCHEDULE
     if "accruedprepaid" in h:
         return PageType.ACCRUED_PREPAID
@@ -150,13 +151,14 @@ def _nearby_amount(
     note: str,
     column_x: float | None = None,
     max_dy: float = 9.0,
+    rightmost: bool = False,
 ) -> Value | None:
     """Best-guess amount for a label whose line didn't parse cleanly.
 
     Looks at amounts on the page within ``max_dy`` points of the label's row
     (OCR often drifts a figure onto a neighbouring line) and to its right.
     With ``column_x``, takes the amount nearest that column; otherwise the
-    first one after the label.
+    first (or with ``rightmost``, the last) amount on the nearest row.
     """
     anchor = _label_box(line)
     ay = page.level(anchor)
@@ -173,7 +175,12 @@ def _nearby_amount(
         # too, and both sit in the same column.
         key = lambda c: (dy(c[1]), abs(c[1].cx - column_x))  # noqa: E731
     else:
-        key = lambda c: (c[1].x0, dy(c[1]))  # noqa: E731
+        # Keep only the row nearest the label, then take its first/last figure.
+        if cands:
+            nearest = min(dy(b) for _, b in cands)
+            cands = [(a, b) for a, b in cands if dy(b) <= nearest + 3]
+        sign = -1 if rightmost else 1
+        key = lambda c: (sign * c[1].x0, dy(c[1]))  # noqa: E731
     if not cands:
         return None
     amount, box = min(cands, key=key)
@@ -599,15 +606,19 @@ class ReportTotal:
     whole_dollars: bool = False
     rows: int = 0
     blank: bool = False
+    # Where the total should be, when it couldn't be read at all.
+    searched: tuple[int, BBox] | None = None
 
 
 def parse_ar_aging(pages: list[Page]) -> ReportTotal:
     identities: list[Identity] = []
+    unread: tuple[Page, Line] | None = None
     for page in reversed(pages):
         for ln in page.lines:
             if ln.key.startswith("count"):
                 a = _amounts_on(ln, page, "AR aging total")
                 if not a:
+                    unread = unread or (page, ln)
                     continue
                 if len(a) == 5:
                     _settle(
@@ -619,7 +630,29 @@ def parse_ar_aging(pages: list[Page]) -> ReportTotal:
                         page.number,
                     )
                 return ReportTotal(PageType.AR_AGING, a[-1], identities)
-    return ReportTotal(PageType.AR_AGING, None, identities)
+    return _guess_total(
+        PageType.AR_AGING, unread, identities, "AR aging total", "the Count line's balance"
+    )
+
+
+def _guess_total(
+    kind: PageType,
+    unread: tuple[Page, Line] | None,
+    identities: list[Identity],
+    label: str,
+    what: str,
+) -> ReportTotal:
+    """The total line was found but had no readable amount on it: take the
+    last figure on the nearest row as a best guess, or failing that, point
+    the reviewer at the line."""
+    if unread is None:
+        return ReportTotal(kind, None, identities)
+    page, ln = unread
+    note = f"Couldn't read {what} cleanly; took the nearest figure as a best guess."
+    g = _nearby_amount(page, ln, label, note, rightmost=True)
+    if g:
+        return ReportTotal(kind, g, identities)
+    return ReportTotal(kind, None, identities, searched=(page.number, ln.bbox))
 
 
 _ACCOUNT_NO = re.compile(r"\b\d{5}\b")
@@ -667,6 +700,20 @@ def parse_accrued_prepaid(page: Page, which: str) -> ReportTotal:
     for ln in lines[start + 1 :]:
         if ln.key.startswith("total"):
             a = _amounts_on(ln, page, f"Accrued/Prepaid — {which} total")
+            if not a and items:
+                # Invoices are listed, so the total can't really be blank:
+                # its figure drifted off the line. Guess it and check it
+                # against the invoices.
+                g = _nearby_amount(
+                    page,
+                    ln,
+                    f"Accrued/Prepaid — {which} total",
+                    f"Couldn't read the {which} total cleanly; took the nearest figure "
+                    "as a best guess.",
+                    rightmost=True,
+                )
+                if g:
+                    a = [g]
             if not a:
                 # A blank "Total $" means nothing is booked in this section.
                 zero = Value(Decimal(0), page.number, ln.bbox, f"Accrued/Prepaid — {which} total")
@@ -702,7 +749,13 @@ def parse_insurance_schedule(page: Page) -> ReportTotal:
     ln = lines[totals_idx]
     nums = parse_whole_amounts(ln.text)
     if not nums:
-        return ReportTotal(PageType.INSURANCE_SCHEDULE, None, identities, whole_dollars=True)
+        return ReportTotal(
+            PageType.INSURANCE_SCHEDULE,
+            None,
+            identities,
+            whole_dollars=True,
+            searched=(page.number, ln.bbox),
+        )
     total = Value(nums[-1], page.number, ln.bbox, "Insurance schedule — prepaid balance")
 
     row_vals: list[Value] = []
@@ -728,10 +781,12 @@ def parse_insurance_schedule(page: Page) -> ReportTotal:
 
 def parse_reserve_schedule(page: Page) -> ReportTotal:
     identities: list[Identity] = []
+    unread: tuple[Page, Line] | None = None
     for ln in page.lines:
         if squash(re.split(r"[\d(]", ln.text, maxsplit=1)[0]) == "total":
             a = _amounts_on(ln, page, "Reserve schedule — ending balance")
             if not a:
+                unread = unread or (page, ln)
                 continue
             if len(a) == 5:
                 start, receipts, adj, expenses, balance = a
@@ -744,7 +799,13 @@ def parse_reserve_schedule(page: Page) -> ReportTotal:
                     page.number,
                 )
             return ReportTotal(PageType.RESERVE_SCHEDULE, a[-1], identities)
-    return ReportTotal(PageType.RESERVE_SCHEDULE, None, identities)
+    return _guess_total(
+        PageType.RESERVE_SCHEDULE,
+        unread,
+        identities,
+        "Reserve schedule — ending balance",
+        "the TOTAL line's balance",
+    )
 
 
 # --------------------------------------------------------------------------

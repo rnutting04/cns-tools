@@ -58,6 +58,7 @@ temp/
 
 # Generated email previews (scripts/preview_emails.py)
 backend/test_data/email_previews/
+backend/test_data/context/
 
 # Testing
 .pytest_cache/

@@ -327,3 +327,37 @@ export interface FinancialCheckReport {
   summary: Record<FinancialCheckStatus, number>
   checks: FinancialCheckResult[]
 }
+
+/** A reserve component on the MASS Reserve Schedule whose Balance breaks the no-negative rule */
+export interface ReserveScheduleIssue {
+  /** association code — one tab per association */
+  sheet: string
+  /** heading the component sits under, e.g. "SIRS Non-Waivable"; "" if none */
+  group: string
+  /** e.g. "H10" */
+  cell: string
+  row: number
+  /** GL code, e.g. "7061" */
+  code: string
+  description: string
+  /** null when the cell isn't a number */
+  balance: number | null
+  problem: 'negative' | 'not_a_number'
+}
+
+export interface ReserveScheduleSheet {
+  name: string
+  line_items: number
+  issue_count: number
+  /** false: no Balance header found, so the tab couldn't be checked */
+  checked: boolean
+}
+
+/** Response from POST /api/excel/reserve-schedule/check */
+export interface ReserveScheduleReport {
+  filename: string
+  sheet_count: number
+  line_items: number
+  issues: ReserveScheduleIssue[]
+  sheets: ReserveScheduleSheet[]
+}

@@ -271,7 +271,27 @@ EXPECTED = {
         "prepaid_assessments": Status.PASS,
         "prepaid_insurance": Status.PASS,  # 4,011.00 vs whole-dollar 4,010
         "accrued_expenses": Status.PASS,
-        "reserve_schedule": Status.MISSING,
+        # Titled "Reserves Schedule"; ties to reserve assets less reserve
+        # liabilities (279,126.07 - 1,895.00 = 277,231.07).
+        "reserve_schedule": Status.PASS,
+        "net_income:operating": Status.PASS,
+        "net_income:reserve": Status.PASS,
+    },
+    # Titled "GL Balance Sheet". Reserve AP of 30,633.50 sits between reserve
+    # assets and the reserve schedule balance.
+    "BCC September 2026.pdf": {
+        "bank:5711": Status.PASS,
+        "bank_rec_zero:5711": Status.PASS,
+        "bank:5738": Status.PASS,
+        "bank_rec_zero:5738": Status.PASS,
+        "bank:711": Status.PASS,
+        "bank_rec_zero:711": Status.PASS,
+        "ar": Status.PASS,
+        "prepaid_expenses": Status.PASS,
+        "prepaid_assessments": Status.PASS,
+        "prepaid_insurance": Status.PASS,
+        "accrued_expenses": Status.PASS,
+        "reserve_schedule": Status.PASS,
         "net_income:operating": Status.PASS,
         "net_income:reserve": Status.PASS,
     },
@@ -325,7 +345,10 @@ EXPECTED = {
 
 @pytest.mark.parametrize("name", sorted(EXPECTED))
 def test_real_packet(name):
-    path = TEST_DATA / name
+    path = next(
+        (p for p in (TEST_DATA / name, TEST_DATA / "context" / name) if p.exists()),
+        TEST_DATA / name,
+    )
     if not path.exists():
         pytest.skip(f"{name} not present")
     _, results = check_packet(path)

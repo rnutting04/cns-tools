@@ -149,7 +149,7 @@ def _schedule_check(
             None,
             notes=[f"No {report_name} page found in the packet."],
         )
-    right = Side.of(report_name, report.total)
+    right = Side.of(report_name, report.total, searched=report.searched)
     if row is None:
         if report.total is not None and report.total.amount == 0:
             return CheckResult(
@@ -300,9 +300,33 @@ def run_checks(packet: Packet) -> list[CheckResult]:
         )
     )
 
-    # 7. Reserve assets vs reserve schedule
+    # 7. Reserve assets vs reserve schedule. The schedule's balance is the
+    # reserve *fund* balance: reserve assets less anything the reserve fund
+    # owes (e.g. reserve accounts payable). CAR (1,895.00) and BCC
+    # (30,633.50) both tie only after that subtraction.
     total_assets = next((r for r in bs.rows if r.key == "totalassets"), None)
-    left = Side.of("balance sheet", _bs(total_assets, "reserve"), "Total Assets — Reserve")
+    total_liab = next((r for r in bs.rows if r.key in ("totalliability", "totalliabilities")), None)
+    assets = _bs(total_assets, "reserve")
+    liab = _bs(total_liab, "reserve")
+    left = Side.of("balance sheet", assets, "Total Assets — Reserve")
+    if assets is not None and liab is not None and liab.amount:
+        verified = (
+            False
+            if False in (assets.verified, liab.verified)
+            else (True if assets.verified and liab.verified else None)
+        )
+        left = Side(
+            "balance sheet",
+            "Reserve Total Assets − Total Liability",
+            assets.amount - liab.amount,
+            assets.page,
+            assets.bbox.union(liab.bbox) if assets.page == liab.page else assets.bbox,
+            verified,
+            note=(
+                f"Reserve assets {assets.amount:,.2f} less reserve liabilities "
+                f"{liab.amount:,.2f} = {assets.amount - liab.amount:,.2f}."
+            ),
+        )
     if packet.reserve_schedule is None:
         results.append(
             CheckResult(
@@ -320,7 +344,11 @@ def run_checks(packet: Packet) -> list[CheckResult]:
                 "reserve_schedule",
                 "Reserve assets vs reserve schedule",
                 left,
-                Side.of("reserve schedule", packet.reserve_schedule.total),
+                Side.of(
+                    "reserve schedule",
+                    packet.reserve_schedule.total,
+                    searched=packet.reserve_schedule.searched,
+                ),
             )
         )
 
