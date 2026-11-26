@@ -413,7 +413,7 @@ export interface FdicInstitution {
   notes: string[]
 }
 
-export type AccountingTool = 'fdic' | 'revenue_threshold' | 'receivables'
+export type AccountingTool = 'fdic' | 'revenue_threshold' | 'receivables' | 'cd_maturity'
 
 /** The combined files a receivables run compares */
 export type ReceivablesRole = 'balance_sheet' | 'ar' | 'prepaid'
@@ -469,13 +469,47 @@ export interface ReceivablesCheck {
 }
 
 /** A highlighted strip of one uploaded file's page, saved during the run */
-export interface ReceivablesShot {
-  role: ReceivablesRole
+export interface Shot {
+  /** which uploaded file: a receivables role, or "report" for single-file tools */
+  role: string
   page: number
   bbox: number[]
   caption: string
   /** JPEG data URL; missing if the page couldn't be rendered */
   image?: string
+}
+
+export type ReceivablesShot = Shot
+
+/**
+ * How soon a CD matures, from the day the check ran. `investment` rows sit
+ * in the CD section but have no maturity (brokerage, money market).
+ */
+export type CdTier = 'matured' | 'due_30' | 'due_60' | 'due_90' | 'later' | 'no_date' | 'investment'
+
+export interface CdAccount {
+  label: string
+  amount: number
+  tier: CdTier
+  /** ISO date read from the account name */
+  maturity: string | null
+  /** days from the run date; negative once matured */
+  days: number | null
+  /** term as written ("13m", "52w") */
+  term: string | null
+  notes: string[]
+  source: SourceFigure
+  /** the CD's line on the balance sheet, for flagged CDs */
+  shots: Shot[]
+}
+
+export interface CdSectionResult {
+  /** the day the check ran (tiers count from it) */
+  as_of: string
+  /** the balance sheet's own date */
+  period_end: string | null
+  /** soonest first, then undated CDs, then investment accounts */
+  cds: CdAccount[]
 }
 
 /** Pages ([first, last]) of this association in each uploaded file */
@@ -503,6 +537,7 @@ export type SectionResult =
   | RevenueSectionResult
   | ReceivablesSectionResult
   | ReceivablesUnmatched
+  | CdSectionResult
 
 export interface AccountingJobResult {
   association: string

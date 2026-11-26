@@ -95,10 +95,66 @@ def _no_text(what: str = "This PDF") -> str:
     return detail
 
 
+def _shots_in(obj: Any) -> Iterator[dict[str, Any]]:
+    """Every screenshot placeholder in a section result."""
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            if k == "shots" and isinstance(v, list):
+                yield from v
+            else:
+                yield from _shots_in(v)
+    elif isinstance(obj, list):
+        for x in obj:
+            yield from _shots_in(x)
+
+
+class _SectionShots:
+    """Renders a single-file job's screenshots section by section, while the
+    pages are fresh (sections come in page order, so two cached pages do)."""
+
+    PAD = 8.0  # the CD's line and a sliver of its neighbours
+
+    def __init__(self, data: bytes) -> None:
+        self.data = data
+        self.renderer: CropRenderer | None = None
+        self.broken = False
+
+    def fill(self, result: dict[str, Any]) -> None:
+        shots = list(_shots_in(result))
+        if not shots or self.broken:
+            return
+        try:
+            if self.renderer is None:
+                self.renderer = CropRenderer(io.BytesIO(self.data), max_pages=2)
+            for shot in shots:
+                img = self.renderer.crop(shot["page"], BBox(*shot["bbox"]), self.PAD, "JPEG")
+                shot["image"] = "data:image/jpeg;base64," + base64.b64encode(img).decode()
+        except Exception:  # noqa: BLE001 — screenshots are a convenience
+            logger.warning("couldn't render screenshots", exc_info=True)
+            self.broken = True
+
+    def close(self) -> None:
+        if self.renderer is not None:
+            self.renderer.close()
+
+
 def _run_single(db, job: AccountingJob, data: bytes) -> None:
     progress = _Progress(db, job)
     stats: dict = {}
+    shots = _SectionShots(data)
+    try:
+        _sections(db, job, progress, shots, data, stats)
+    finally:
+        shots.close()
+    if stats["text"] == 0:
+        raise JobFailed(_no_text())
+
+
+def _sections(
+    db, job: AccountingJob, progress: _Progress, shots: _SectionShots, data: bytes, stats: dict
+) -> None:
     for section, result in run_sections(job.tool, progress.pages(data, stats=stats)):
+        shots.fill(result)
         first, last_page = section.page_range
         job.results = [
             *job.results,
@@ -111,8 +167,6 @@ def _run_single(db, job: AccountingJob, data: bytes) -> None:
             },
         ]
         progress.tick(force=True)
-    if stats["text"] == 0:
-        raise JobFailed(_no_text())
 
 
 def _run_receivables(db, job: AccountingJob, files: dict[str, bytes]) -> None:

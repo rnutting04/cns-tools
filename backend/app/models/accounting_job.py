@@ -22,7 +22,7 @@ class AccountingJob(Base):
     __tablename__ = "accounting_jobs"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tool = Column(String(30), nullable=False)  # "fdic" | "revenue_threshold"
+    tool = Column(String(30), nullable=False)  # fdic | revenue_threshold | receivables | cd_maturity
     filename = Column(String(255), nullable=False)
     input_path = Column(String(500), nullable=True)  # cleared once processed
 

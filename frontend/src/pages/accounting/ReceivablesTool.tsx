@@ -24,13 +24,13 @@ import type {
   ReceivablesPages,
   ReceivablesRole,
   ReceivablesSectionResult,
-  ReceivablesShot,
   ReceivablesSide,
   ReceivablesUnmatched,
 } from '../../types'
 import { money } from './helpers'
 import JobRunner from './JobRunner'
 import type { JobInput } from './JobRunner'
+import { Shots } from './shared'
 
 const INPUTS: JobInput[] = [
   {
@@ -163,41 +163,6 @@ function CheckCell({ c }: { c: ReceivablesCheck | undefined }) {
           Off by {money(Math.abs(c.difference))}
         </Typography>
       )}
-    </Box>
-  )
-}
-
-/** Highlighted strips of the pages, saved when the run read the PDFs. */
-function Shots({ shots }: { shots: ReceivablesShot[] | undefined }) {
-  if (!shots?.length) return null
-  return (
-    <Box display="flex" flexDirection="column" gap={1} mt={1}>
-      {shots.map((s) => (
-        <Box key={`${s.role}-${s.page}-${s.bbox.join(',')}`}>
-          <Typography variant="caption" color="text.secondary" display="block" mb={0.25}>
-            {s.caption}
-          </Typography>
-          {s.image ? (
-            <Box
-              component="img"
-              src={s.image}
-              alt={s.caption}
-              sx={{
-                display: 'block',
-                maxWidth: '100%',
-                border: 1,
-                borderColor: 'divider',
-                borderRadius: 1,
-                bgcolor: '#fff',
-              }}
-            />
-          ) : (
-            <Typography variant="caption" color="text.secondary">
-              (screenshot unavailable)
-            </Typography>
-          )}
-        </Box>
-      ))}
     </Box>
   )
 }

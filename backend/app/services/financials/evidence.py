@@ -26,9 +26,12 @@ class CropRenderer:
     scanned page per crop would dominate request time.
     """
 
-    def __init__(self, source: str | Path | BinaryIO):
+    def __init__(self, source: str | Path | BinaryIO, max_pages: int | None = None):
+        """``max_pages`` keeps only that many rendered pages (the most
+        recently used): a combined file has hundreds, ~3 MB each."""
         self._pdf = pdfplumber.open(source)
         self._pages: dict[int, Image.Image] = {}
+        self._max = max_pages
 
     def __enter__(self) -> CropRenderer:
         return self
@@ -36,10 +39,18 @@ class CropRenderer:
     def __exit__(self, *exc: object) -> None:
         self._pdf.close()
 
+    def close(self) -> None:
+        self._pdf.close()
+
     def _page(self, number: int) -> Image.Image:
-        if number not in self._pages:
+        if number in self._pages:
+            self._pages[number] = self._pages.pop(number)  # most recent last
+        else:
             pg = self._pdf.pages[number - 1]
             self._pages[number] = pg.to_image(resolution=RESOLUTION).original.convert("RGB")
+            if self._max is not None:
+                while len(self._pages) > self._max:
+                    del self._pages[next(iter(self._pages))]
         return self._pages[number]
 
     def crop(self, page_number: int, bbox: BBox, pad: float = 28, fmt: str = "PNG") -> bytes:

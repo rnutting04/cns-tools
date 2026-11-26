@@ -18,6 +18,7 @@ from typing import Any
 
 from .extract import Value, _page_of, _within_one_edit, extract_packet
 from .fdic import fdic_exposure
+from .maturity import FLAGGED_TIERS, cd_maturities
 from .pdf import Page
 from .thresholds import RevenueBasis, revenue_tier
 
@@ -285,9 +286,47 @@ def fdic_section(section: Section) -> dict[str, Any]:
     }
 
 
+def cd_section(section: Section) -> dict[str, Any]:
+    packet = extract_packet(section.pages)
+    if packet.balance_sheet is None:
+        return {"problem": "Balance sheet couldn't be read in this section."}
+    r = cd_maturities(packet.balance_sheet, section.pages)
+
+    def cd(c) -> dict[str, Any]:
+        b = c.bbox
+        return {
+            "label": c.label,
+            "amount": float(c.amount),
+            "tier": c.tier,
+            "maturity": c.maturity.isoformat() if c.maturity else None,
+            "days": c.days,
+            "term": c.term,
+            "notes": c.notes,
+            "source": _fig(c.value),
+            # Filled with images by the job while it still has the PDF.
+            "shots": [
+                {
+                    "role": "report",
+                    "page": c.value.page,
+                    "bbox": [b.x0, b.top, b.x1, b.bottom],
+                    "caption": f"Balance sheet p.{c.value.page}",
+                }
+            ]
+            if c.flagged
+            else [],
+        }
+
+    return {
+        "as_of": r.as_of.isoformat(),
+        "period_end": r.period_end.isoformat() if r.period_end else None,
+        "cds": [cd(c) for c in r.cds],
+    }
+
+
 TOOLS: dict[str, Callable[[Section], dict[str, Any]]] = {
     "revenue_threshold": revenue_section,
     "fdic": fdic_section,
+    "cd_maturity": cd_section,
 }
 
 
@@ -309,6 +348,8 @@ def flagged(tool: str, result: dict[str, Any]) -> bool:
         return True
     if tool == "fdic":
         return any(i["over_limit"] for i in result["institutions"]) or bool(result["unrecognized"])
+    if tool == "cd_maturity":
+        return any(c["tier"] in FLAGGED_TIERS for c in result["cds"])
     return result["ytd_actual"]["tier"] in (None, "compilation", "review", "audit")
 
 

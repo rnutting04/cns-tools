@@ -8,6 +8,7 @@ import apiClient from '../../api/client'
 import { useJobs } from '../../context/JobsContext'
 import { downloadFromUrl } from '../../utils/download'
 import type { JobDetail } from '../../types'
+import WorkingText from './WorkingText'
 
 export default function JobStatusBanner({
   jobId,
@@ -52,7 +53,10 @@ export default function JobStatusBanner({
         onClose={onDismiss}
         sx={{ mt: 2 }}
       >
-        {job.current_step ?? 'Processing your document…'}
+        <Box display="flex" alignItems="center" columnGap={1.5} rowGap={0.5} flexWrap="wrap">
+          <WorkingText />
+          {job.current_step && <span>{job.current_step}</span>}
+        </Box>
       </Alert>
     )
   }

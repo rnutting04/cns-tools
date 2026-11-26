@@ -12,6 +12,7 @@ import ExcelToolsPage from '../pages/ExcelToolsPage'
 import FinancialChecksPage from '../pages/FinancialChecksPage'
 import AccountingLayout from '../pages/accounting/AccountingLayout'
 import AccountingOverview from '../pages/accounting/AccountingOverview'
+import CdMaturityTool from '../pages/accounting/CdMaturityTool'
 import FdicTool from '../pages/accounting/FdicTool'
 import ReceivablesTool from '../pages/accounting/ReceivablesTool'
 import RevenueThresholdTool from '../pages/accounting/RevenueThresholdTool'
@@ -66,6 +67,7 @@ export default function AppRouter() {
             <Route path="review" element={<FinancialChecksPage />} />
             <Route path="audit-threshold" element={<RevenueThresholdTool />} />
             <Route path="fdic" element={<FdicTool />} />
+            <Route path="cd-maturity" element={<CdMaturityTool />} />
             <Route path="ar-prepaid" element={<ReceivablesTool />} />
             <Route path="reserve-schedule" element={<ExcelToolsPage />} />
           </Route>

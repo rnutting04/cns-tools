@@ -5,6 +5,7 @@ export const JOB_TOOLS: Record<AccountingTool, { label: string; path: string }> 
   fdic: { label: 'FDIC exposure', path: 'fdic' },
   revenue_threshold: { label: 'Audit threshold', path: 'audit-threshold' },
   receivables: { label: 'AR & prepaid', path: 'ar-prepaid' },
+  cd_maturity: { label: 'CD maturity', path: 'cd-maturity' },
 }
 
 /** The tool page, showing this run. */

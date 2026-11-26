@@ -7,6 +7,42 @@ import Paper from '@mui/material/Paper'
 import Typography from '@mui/material/Typography'
 import RestartAltIcon from '@mui/icons-material/RestartAlt'
 import UploadFileIcon from '@mui/icons-material/UploadFile'
+import type { Shot } from '../../types'
+
+/** Highlighted strips of the pages, saved when the run read the PDFs. */
+export function Shots({ shots }: { shots: Shot[] | undefined }) {
+  if (!shots?.length) return null
+  return (
+    <Box display="flex" flexDirection="column" gap={1} mt={1}>
+      {shots.map((s) => (
+        <Box key={`${s.role}-${s.page}-${s.bbox.join(',')}`}>
+          <Typography variant="caption" color="text.secondary" display="block" mb={0.25}>
+            {s.caption}
+          </Typography>
+          {s.image ? (
+            <Box
+              component="img"
+              src={s.image}
+              alt={s.caption}
+              sx={{
+                display: 'block',
+                maxWidth: '100%',
+                border: 1,
+                borderColor: 'divider',
+                borderRadius: 1,
+                bgcolor: '#fff',
+              }}
+            />
+          ) : (
+            <Typography variant="caption" color="text.secondary">
+              (screenshot unavailable)
+            </Typography>
+          )}
+        </Box>
+      ))}
+    </Box>
+  )
+}
 
 /** A tool's title and one-line description. */
 export function ToolHeader({ title, children }: { title: string; children: ReactNode }) {

@@ -22,6 +22,7 @@ import InsertDriveFileOutlinedIcon from '@mui/icons-material/InsertDriveFileOutl
 import PlayArrowIcon from '@mui/icons-material/PlayArrow'
 import { useSearchParams } from 'react-router-dom'
 import ErrorAlert from '../../components/layout/ErrorAlert'
+import WorkingText from '../../components/common/WorkingText'
 import { useJobs } from '../../context/JobsContext'
 import { isActive, useAccountingJob, useAccountingJobs } from '../../hooks/useAccountingJobs'
 import type { AccountingJobResult, AccountingJobSummary, AccountingTool } from '../../types'
@@ -381,19 +382,23 @@ export default function JobRunner({
           )}
           {s.status === 'processing' && (
             <Box mb={2}>
-              <LinearProgress
-                variant="determinate"
-                value={pct}
-                sx={{ borderRadius: 1, mb: 0.75 }}
-              />
-              <Typography variant="body2" color="text.secondary">
-                {s.current_association ? (
-                  <>
-                    Working on <strong>{s.current_association}</strong> ·{' '}
-                  </>
-                ) : null}
-                page {s.pages_done} of {s.total_pages ?? '…'} · you can leave this page; the run
-                continues in the background.
+              <LinearProgress variant="determinate" value={pct} sx={{ borderRadius: 1, mb: 1 }} />
+              <Box display="flex" alignItems="center" columnGap={1.5} rowGap={0.5} flexWrap="wrap">
+                <Typography variant="body2" component="div">
+                  <WorkingText />
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  {s.current_association ? (
+                    <>
+                      <strong>{s.current_association}</strong> ·{' '}
+                    </>
+                  ) : null}
+                  page {s.pages_done} of {s.total_pages ?? '…'}
+                </Typography>
+              </Box>
+              <Typography variant="caption" color="text.secondary" display="block" mt={0.5}>
+                You can leave this page; the run continues in the background and shows up in My
+                Jobs.
               </Typography>
             </Box>
           )}
