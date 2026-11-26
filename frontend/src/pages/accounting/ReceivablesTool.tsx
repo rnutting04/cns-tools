@@ -24,6 +24,7 @@ import type {
   ReceivablesPages,
   ReceivablesRole,
   ReceivablesSectionResult,
+  ReceivablesShot,
   ReceivablesSide,
   ReceivablesUnmatched,
 } from '../../types'
@@ -70,7 +71,7 @@ const STATUS: Record<
   not_applicable: { label: 'N/A', color: 'default' },
 }
 
-type Filter = 'all' | 'mismatch' | 'review' | 'unmatched' | 'ok'
+type Filter = 'all' | 'mismatch' | 'review' | 'unmatched' | 'na' | 'ok'
 
 const matched = (r: AccountingJobResult): ReceivablesSectionResult | null =>
   'checks' in r.result ? (r.result as ReceivablesSectionResult) : null
@@ -83,6 +84,7 @@ function category(r: AccountingJobResult): Exclude<Filter, 'all'> {
   const s = statuses(r)
   if (s.includes('fail')) return 'mismatch'
   if (s.some((x) => x === 'review' || x === 'missing')) return 'review'
+  if (s.includes('not_applicable')) return 'na'
   return 'ok'
 }
 
@@ -145,7 +147,13 @@ function CheckCell({ c }: { c: ReceivablesCheck | undefined }) {
         variant={c.status === 'pass' ? 'outlined' : 'filled'}
         sx={{ mb: 0.5 }}
       />
-      {c.status !== 'not_applicable' && (
+      {c.status === 'not_applicable' ? (
+        <Typography variant="caption" color="text.secondary" display="block">
+          {c.report
+            ? 'Not on balance sheet · report total 0.00'
+            : `${c.balance_sheet ? 'Zero' : 'Not'} on balance sheet · no report`}
+        </Typography>
+      ) : (
         <Typography variant="body2" color="text.secondary" component="div">
           BS <Amount side={c.balance_sheet} /> · report <Amount side={c.report} />
         </Typography>
@@ -159,14 +167,69 @@ function CheckCell({ c }: { c: ReceivablesCheck | undefined }) {
   )
 }
 
+/** Highlighted strips of the pages, saved when the run read the PDFs. */
+function Shots({ shots }: { shots: ReceivablesShot[] | undefined }) {
+  if (!shots?.length) return null
+  return (
+    <Box display="flex" flexDirection="column" gap={1} mt={1}>
+      {shots.map((s) => (
+        <Box key={`${s.role}-${s.page}-${s.bbox.join(',')}`}>
+          <Typography variant="caption" color="text.secondary" display="block" mb={0.25}>
+            {s.caption}
+          </Typography>
+          {s.image ? (
+            <Box
+              component="img"
+              src={s.image}
+              alt={s.caption}
+              sx={{
+                display: 'block',
+                maxWidth: '100%',
+                border: 1,
+                borderColor: 'divider',
+                borderRadius: 1,
+                bgcolor: '#fff',
+              }}
+            />
+          ) : (
+            <Typography variant="caption" color="text.secondary">
+              (screenshot unavailable)
+            </Typography>
+          )}
+        </Box>
+      ))}
+    </Box>
+  )
+}
+
+/** Why one check came out as it did: its notes, then the page regions. */
+function CheckDetail({ c }: { c: ReceivablesCheck }) {
+  const meta = STATUS[c.status]
+  return (
+    <Box mb={2}>
+      <Box display="flex" alignItems="center" gap={1} mb={0.5}>
+        <Typography variant="subtitle2">{c.title}</Typography>
+        <Chip size="small" label={meta.label} color={meta.color} variant="outlined" />
+      </Box>
+      {c.notes.map((n) => (
+        <Typography key={n} variant="body2" color="text.secondary">
+          {n}
+        </Typography>
+      ))}
+      <Shots shots={c.shots} />
+    </Box>
+  )
+}
+
 function Row({ r }: { r: AccountingJobResult }) {
   const [open, setOpen] = useState(false)
   const v = matched(r)
   const unmatched = v ? null : (r.result as ReceivablesUnmatched)
   const byId = (id: ReceivablesCheck['id']) => v?.checks.find((c) => c.id === id)
-  const notes = v ? v.checks.flatMap((c) => c.notes.map((n) => `${c.title}: ${n}`)) : []
+  // Passing checks only have something to say if they carry a note.
+  const explained = v ? v.checks.filter((c) => c.status !== 'pass' || c.notes.length) : []
   const renamed = v ? (Object.entries(v.names) as [ReceivablesRole, string][]) : []
-  const expandable = notes.length > 0 || renamed.length > 0
+  const expandable = explained.length > 0 || renamed.length > 0 || Boolean(unmatched?.shots?.length)
 
   return (
     <Fragment>
@@ -223,16 +286,15 @@ function Row({ r }: { r: AccountingJobResult }) {
             <Collapse in={open} unmountOnExit>
               <Box py={1.5}>
                 {renamed.map(([role, name]) => (
-                  <Typography key={role} variant="body2" color="text.secondary">
+                  <Typography key={role} variant="body2" color="text.secondary" mb={1}>
                     Printed as “{name}” in the {FILE_LABEL[role]} report — paired by name; confirm
                     it’s the same association.
                   </Typography>
                 ))}
-                {notes.map((n) => (
-                  <Typography key={n} variant="body2" color="text.secondary">
-                    {n}
-                  </Typography>
+                {explained.map((c) => (
+                  <CheckDetail key={c.id} c={c} />
                 ))}
+                <Shots shots={unmatched?.shots} />
               </Box>
             </Collapse>
           </TableCell>
@@ -252,6 +314,7 @@ function ResultsTable({ results, running }: { results: AccountingJobResult[]; ru
       mismatch: 0,
       review: 0,
       unmatched: 0,
+      na: 0,
       ok: 0,
     }
     for (const r of results) c[category(r)]++
@@ -277,6 +340,7 @@ function ResultsTable({ results, running }: { results: AccountingJobResult[]; ru
     ['mismatch', `Mismatch ${counts.mismatch}`, 'error'],
     ['review', `Needs review ${counts.review}`, 'warning'],
     ['unmatched', `No balance sheet match ${counts.unmatched}`, 'warning'],
+    ['na', `N/A ${counts.na}`, 'default'],
     ['ok', `Matches ${counts.ok}`, 'default'],
   ]
 

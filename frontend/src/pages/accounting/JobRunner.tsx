@@ -20,7 +20,9 @@ import CloseIcon from '@mui/icons-material/Close'
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline'
 import InsertDriveFileOutlinedIcon from '@mui/icons-material/InsertDriveFileOutlined'
 import PlayArrowIcon from '@mui/icons-material/PlayArrow'
+import { useSearchParams } from 'react-router-dom'
 import ErrorAlert from '../../components/layout/ErrorAlert'
+import { useJobs } from '../../context/JobsContext'
 import { isActive, useAccountingJob, useAccountingJobs } from '../../hooks/useAccountingJobs'
 import type { AccountingJobResult, AccountingJobSummary, AccountingTool } from '../../types'
 import { downloadCsv } from './helpers'
@@ -272,7 +274,12 @@ export default function JobRunner({
   children: (results: AccountingJobResult[], running: boolean) => ReactNode
 }) {
   const { jobs, loading, error, clearError, start, update } = useAccountingJobs(tool)
-  const [chosen, setChosen] = useState<string | null>(null)
+  const { trackAccountingJob } = useJobs()
+  // The run shown is in the URL (?job=), so My Jobs and the "finished"
+  // pop-up can link straight to it.
+  const [params, setParams] = useSearchParams()
+  const chosen = params.get('job')
+  const setChosen = (id: string) => setParams({ job: id }, { replace: true })
   const [uploading, setUploading] = useState(0)
   const [rejected, setRejected] = useState<string | null>(null)
   const selectedId = chosen ?? jobs[0]?.id ?? null
@@ -282,7 +289,10 @@ export default function JobRunner({
     setUploading((n) => n + 1)
     const job = await start(input)
     setUploading((n) => n - 1)
-    if (job) setChosen(job.id)
+    if (job) {
+      trackAccountingJob(job)
+      setChosen(job.id)
+    }
     return Boolean(job)
   }
 

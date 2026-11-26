@@ -269,6 +269,15 @@ class TestReconcile:
             "ar": [5, 5],
             "prepaid": [8, 8],
         }
+        # Says why in plain words, and points at both figures.
+        assert "The report is 154.19 higher." in pp["notes"][0]
+        assert [(s["role"], s["page"]) for s in pp["shots"]] == [
+            ("balance_sheet", 2),
+            ("prepaid", 8),
+        ]
+        assert pp["shots"][0]["caption"] == "Balance sheet p.2: 2100 Prepaid Member Assessment"
+        # Passing checks carry no screenshots.
+        assert by_name["5400"]["result"]["checks"][0]["shots"] == []
 
     def test_same_difference_on_ar_and_prepaid_is_called_out(self):
         result = reconcile(
@@ -340,6 +349,84 @@ class TestReconcile:
             }
         )
         assert result[0]["result"]["checks"][0]["status"] == "not_applicable"
+
+    def test_not_applicable_shows_where_the_line_would_be(self):
+        page = laid_out(
+            1,
+            [
+                [(30, "Balance Sheet"), (300, "Wednesday, November 25, 2026 15:57")],
+                [(30, "Period 10/31/2026")],
+                [(30, "Botanica")],
+                [(OPER - 25, "Operating"), (RESE - 20, "Reserve"), (TOTAL - 12, "Total")],
+                [(90, "Assets")],
+                [(40, "1000"), (70, "Oper Truist"), num(OPER, "100.00"), num(TOTAL, "100.00")],
+                [(40, "1130"), (70, "Prepaid Insurance"), num(OPER, "50.00"), num(TOTAL, "50.00")],
+                [(90, "Total Assets"), num(OPER, "150.00"), num(TOTAL, "150.00")],
+            ],
+        )
+        result = reconcile(
+            {"balance_sheet": [found("balance_sheet", "Botanica", [page])], "ar": []}
+        )
+        (check,) = result[0]["result"]["checks"]
+        assert check["status"] == "not_applicable"
+        assert "from 1000 Oper Truist to 1130 Prepaid Insurance" in check["notes"][0]
+        (shot,) = check["shots"]
+        assert shot["caption"] == "Balance sheet p.1: where 1100 would be"
+        top, bottom = shot["bbox"][1], shot["bbox"][3]
+        assert top < 30 + 14 * 5 + 1 and bottom > 30 + 14 * 6  # spans both lines
+
+    def test_suggests_the_closest_unpaired_name(self):
+        result = reconcile(
+            {
+                "balance_sheet": [
+                    found(
+                        "balance_sheet",
+                        "Arbor Oaks",
+                        [balance_sheet(1, "Arbor Oaks", prepaid=None)],
+                    )
+                ],
+                "ar": [found("ar", "Arbor Lakes", [ar_report(2, "Arbor Lakes")])],
+            }
+        )
+        arbor, lakes = result
+        (check,) = arbor["result"]["checks"]
+        assert check["status"] == "missing"
+        assert "shows 5,880.22 on 1100" in check["notes"][0]
+        assert "unpaired section named “Arbor Lakes” (p.2)" in check["notes"][-1]
+        assert (
+            "Closest balance sheet without this report: “Arbor Oaks” (p.1)"
+            in (lakes["result"]["problem"])
+        )
+        assert [s["role"] for s in lakes["result"]["shots"]] == ["ar"]
+
+
+class TestImages:
+    def _pdf(self, pages=2) -> bytes:
+        import io
+
+        import pypdfium2 as pdfium
+
+        doc = pdfium.PdfDocument.new()
+        for _ in range(pages):
+            doc.new_page(612, 792)
+        buf = io.BytesIO()
+        doc.save(buf)
+        return buf.getvalue()
+
+    def test_fills_each_shot_with_a_jpeg(self):
+        from app.services.financials.tasks import add_images
+
+        shot = {"role": "ar", "page": 2, "bbox": [300, 100, 400, 110], "caption": "x"}
+        results = [{"result": {"checks": [{"shots": [shot]}]}}]
+        add_images(results, {"ar": self._pdf()})
+        assert shot["image"].startswith("data:image/jpeg;base64,")
+
+    def test_an_unreadable_file_just_leaves_shots_without_images(self):
+        from app.services.financials.tasks import add_images
+
+        shot = {"role": "ar", "page": 1, "bbox": [0, 0, 10, 10], "caption": "x"}
+        add_images([{"result": {"problem": "p", "shots": [shot]}}], {"ar": b"not a pdf"})
+        assert "image" not in shot
 
 
 class TestJob:

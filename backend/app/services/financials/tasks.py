@@ -3,6 +3,7 @@ PDFs (e.g. ~180 balance sheets in one file, which needs minutes of OCR)."""
 
 from __future__ import annotations
 
+import base64
 import io
 import json
 import logging
@@ -22,9 +23,10 @@ from app.models.letter_job import JobStatus
 from app.services.storage import storage_service
 
 from .batch import association_name, flagged, run_sections, split_sections
+from .evidence import CropRenderer
 from .ocr import ocr_available
-from .pdf import Page, iter_pages, page_count
-from .receivables import ROLE_NAMES, ROLES, looks_like, read_section, reconcile
+from .pdf import BBox, Page, iter_pages, page_count
+from .receivables import ROLE_NAMES, ROLES, all_shots, looks_like, read_section, reconcile
 
 logger = logging.getLogger(__name__)
 
@@ -139,8 +141,36 @@ def _run_receivables(db, job: AccountingJob, files: dict[str, bytes]) -> None:
                 f"{what} doesn't look like {_EXPECTED_REPORT[role]}. "
                 "Check the files went in the right boxes."
             )
+    results = reconcile(found)
+    job.current_association = "Saving screenshots of flagged items"
+    progress.tick(force=True)
+    add_images(results, files)
     job.current_association = None
-    job.results = reconcile(found)
+    job.results = results
+
+
+# Context around a highlighted figure, in points: the balance sheet line
+# with its neighbours; only the report's total line (owner rows sit above it).
+_SHOT_PAD = {"balance_sheet": 20.0, "ar": 6.0, "prepaid": 6.0}
+
+
+def add_images(results: list[dict[str, Any]], files: dict[str, bytes]) -> None:
+    """Fill each shot with a highlighted crop of its page, as a JPEG data
+    URL. The PDFs are deleted after the run, so this is the only chance.
+    A file that can't be rendered just leaves its shots without images."""
+    by_role: dict[str, list[dict[str, Any]]] = {}
+    for shot in all_shots(results):
+        by_role.setdefault(shot["role"], []).append(shot)
+    for role, shots in by_role.items():
+        if role not in files:
+            continue
+        try:
+            with CropRenderer(io.BytesIO(files[role])) as r:
+                for shot in shots:
+                    img = r.crop(shot["page"], BBox(*shot["bbox"]), _SHOT_PAD[role], "JPEG")
+                    shot["image"] = "data:image/jpeg;base64," + base64.b64encode(img).decode()
+        except Exception:  # noqa: BLE001 — screenshots are a convenience
+            logger.warning("couldn't render screenshots from the %s", role, exc_info=True)
 
 
 @celery_app.task(bind=True, time_limit=3600, soft_time_limit=3540)

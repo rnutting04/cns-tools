@@ -15,8 +15,10 @@ import useMediaQuery from '@mui/material/useMediaQuery'
 import { useTheme } from '@mui/material/styles'
 import DownloadIcon from '@mui/icons-material/Download'
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'
+import OpenInNewIcon from '@mui/icons-material/OpenInNew'
 import { DataGrid } from '@mui/x-data-grid'
 import type { GridColDef, GridRenderCellParams } from '@mui/x-data-grid'
+import { useNavigate } from 'react-router-dom'
 import apiClient from '../api/client'
 import { useJobs } from '../context/JobsContext'
 import ErrorAlert from '../components/layout/ErrorAlert'
@@ -25,20 +27,61 @@ import LetterDetailDialog from '../components/letters/LetterDetailDialog'
 import BudgetDetailDialog from '../components/budget/BudgetDetailDialog'
 import { downloadFromUrl } from '../utils/download'
 import { formatDateTime } from '../utils/formatDate'
-import type { Job, JobDetail, JobType } from '../types'
+import { JOB_TOOLS, jobLink, jobProgress, utc } from './accounting/jobTools'
+import type { AccountingJobSummary, Job, JobDetail, JobStatus, JobType } from '../types'
 
-type TabValue = 'all' | JobType
+type Kind = JobType | 'accounting'
+type TabValue = 'all' | Kind
 
-const TYPE_LABEL: Record<JobType, string> = { letter: 'Letter', budget: 'Budget' }
-const TYPE_COLOR: Record<JobType, 'primary' | 'secondary'> = {
+const TAB_NOUN: Record<Kind, string> = {
+  letter: 'letter',
+  budget: 'budget',
+  accounting: 'accounting',
+}
+const TYPE_COLOR: Record<Kind, 'primary' | 'secondary' | 'success'> = {
   letter: 'primary',
   budget: 'secondary',
+  accounting: 'success',
 }
 
-function TypeChip({ jobType }: { jobType: JobType }) {
-  return (
-    <Chip label={TYPE_LABEL[jobType]} size="small" color={TYPE_COLOR[jobType]} variant="outlined" />
-  )
+/** A letter / budget job or an accounting tool run, as one list row. */
+interface Row {
+  id: string
+  kind: Kind
+  typeLabel: string
+  title: string
+  /** association (letters, budgets) or progress (accounting runs) */
+  detail: string
+  status: JobStatus
+  created_at: string
+  job?: Job
+  run?: AccountingJobSummary
+}
+
+const fromJob = (job: Job): Row => ({
+  id: job.id,
+  kind: job.job_type,
+  typeLabel: job.job_type === 'budget' ? 'Budget' : 'Letter',
+  title: job.title,
+  detail: job.association_name,
+  status: job.status,
+  created_at: job.created_at,
+  job,
+})
+
+const fromRun = (run: AccountingJobSummary): Row => ({
+  id: run.id,
+  kind: 'accounting',
+  typeLabel: JOB_TOOLS[run.tool]?.label ?? 'Accounting',
+  title: run.filename,
+  detail: jobProgress(run),
+  status: run.status,
+  created_at: utc(run.created_at),
+  run,
+})
+
+function TypeChip({ row }: { row: Row }) {
+  return <Chip label={row.typeLabel} size="small" color={TYPE_COLOR[row.kind]} variant="outlined" />
 }
 
 function JobsSkeleton() {
@@ -62,70 +105,81 @@ function JobsSkeleton() {
   )
 }
 
-interface MobileRowProps {
-  job: Job
-  isLast: boolean
+interface ActionProps {
+  row: Row
   downloadingId: string | null
   onDownload: (job: Job) => void
-  onDetails: (id: string) => void
-  onBudgetDetails: (id: string) => void
+  onOpen: (run: AccountingJobSummary) => void
 }
 
-function MobileRow({
-  job,
-  isLast,
-  downloadingId,
-  onDownload,
-  onDetails,
-  onBudgetDetails,
-}: MobileRowProps) {
+/** Download a letter / budget, or open an accounting run's results. */
+function RowAction({ row, downloadingId, onDownload, onOpen }: ActionProps) {
+  if (row.run) {
+    const run = row.run
+    return (
+      <Button
+        variant="outlined"
+        size="small"
+        startIcon={<OpenInNewIcon />}
+        disabled={run.status === 'pending'}
+        onClick={() => onOpen(run)}
+      >
+        {run.status === 'processing' ? 'Follow' : 'Results'}
+      </Button>
+    )
+  }
+  const job = row.job as Job
+  return (
+    <Button
+      variant="outlined"
+      size="small"
+      startIcon={
+        downloadingId === job.id ? <CircularProgress size={14} color="inherit" /> : <DownloadIcon />
+      }
+      disabled={job.status !== 'complete' || downloadingId === job.id}
+      onClick={() => onDownload(job)}
+    >
+      Download
+    </Button>
+  )
+}
+
+interface MobileRowProps extends ActionProps {
+  isLast: boolean
+  onDetails: (job: Job) => void
+}
+
+function MobileRow({ row, isLast, onDetails, ...action }: MobileRowProps) {
   return (
     <>
       <Box sx={{ p: 2 }}>
         <Box display="flex" justifyContent="space-between" alignItems="flex-start" gap={1}>
           <Box minWidth={0}>
             <Box display="flex" alignItems="center" gap={1} mb={0.5}>
-              <TypeChip jobType={job.job_type} />
+              <TypeChip row={row} />
             </Box>
             <Typography variant="subtitle2" noWrap>
-              {job.title}
+              {row.title}
             </Typography>
             <Typography variant="body2" color="text.secondary" noWrap>
-              {job.association_name}
+              {row.detail}
             </Typography>
             <Box mt={0.5}>
-              <JobStatusChip status={job.status} />
+              <JobStatusChip status={row.status} />
             </Box>
             <Typography variant="caption" color="text.secondary" display="block" mt={0.5}>
-              {formatDateTime(job.created_at)}
+              {formatDateTime(row.created_at)}
             </Typography>
           </Box>
           <Box display="flex" flexDirection="column" alignItems="flex-end" gap={1}>
-            <Tooltip title="View details">
-              <IconButton
-                size="small"
-                onClick={() =>
-                  job.job_type === 'letter' ? onDetails(job.id) : onBudgetDetails(job.id)
-                }
-              >
-                <InfoOutlinedIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-            <Button
-              variant="outlined"
-              size="small"
-              startIcon={
-                downloadingId === job.id ? (
-                  <CircularProgress size={14} color="inherit" />
-                ) : (
-                  <DownloadIcon />
-                )
-              }
-              disabled={job.status !== 'complete' || downloadingId === job.id}
-              onClick={() => onDownload(job)}
-            >
-              Download
-            </Button>
+            {row.job && (
+              <Tooltip title="View details">
+                <IconButton size="small" onClick={() => onDetails(row.job as Job)}>
+                  <InfoOutlinedIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            )}
+            <RowAction row={row} {...action} />
           </Box>
         </Box>
       </Box>
@@ -137,24 +191,27 @@ function MobileRow({
 export default function JobsPage() {
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('md'))
+  const navigate = useNavigate()
   const [allJobs, setAllJobs] = useState<Job[]>([])
+  const [runs, setRuns] = useState<AccountingJobSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
   const [detailJobId, setDetailJobId] = useState<string | null>(null)
   const [detailBudgetJobId, setDetailBudgetJobId] = useState<string | null>(null)
   const [tab, setTab] = useState<TabValue>('all')
-  const { jobs: liveJobs, inFlightCount } = useJobs()
+  const { jobs: liveJobs, accountingJobs: liveRuns, inFlightCount } = useJobs()
 
   const fetchJobs = useCallback(async () => {
-    try {
-      const { data } = await apiClient.get<Job[]>('/api/jobs')
-      setAllJobs(data)
-    } catch {
+    const [jobs, accounting] = await Promise.allSettled([
+      apiClient.get<Job[]>('/api/jobs'),
+      apiClient.get<AccountingJobSummary[]>('/api/accounting/jobs'),
+    ])
+    if (jobs.status === 'fulfilled') setAllJobs(jobs.value.data)
+    if (accounting.status === 'fulfilled') setRuns(accounting.value.data)
+    if (jobs.status === 'rejected' || accounting.status === 'rejected')
       setError('Failed to load jobs.')
-    } finally {
-      setLoading(false)
-    }
+    setLoading(false)
   }, [])
 
   useEffect(() => {
@@ -184,36 +241,45 @@ export default function JobsPage() {
     }
   }, [])
 
-  // Merge live polling status into each row, then apply tab filter.
-  const rows = useMemo(() => {
-    const filtered = tab === 'all' ? allJobs : allJobs.filter((j) => j.job_type === tab)
-    return filtered.map((job) => {
-      const live = liveJobs[job.id]
-      return live ? { ...job, status: live.status } : job
-    })
-  }, [allJobs, liveJobs, tab])
+  const openRun = useCallback((run: AccountingJobSummary) => navigate(jobLink(run)), [navigate])
+  const openDetails = useCallback((job: Job) => {
+    if (job.job_type === 'letter') setDetailJobId(job.id)
+    else setDetailBudgetJobId(job.id)
+  }, [])
 
-  const columns = useMemo<GridColDef<Job>[]>(
+  // Merge live polling status into each row, newest first, then apply the tab filter.
+  const rows = useMemo(() => {
+    const merged = [
+      ...allJobs.map((job) => {
+        const live = liveJobs[job.id]
+        return fromJob(live ? { ...job, status: live.status } : job)
+      }),
+      ...runs.map((run) => fromRun({ ...run, ...liveRuns[run.id] })),
+    ].sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))
+    return tab === 'all' ? merged : merged.filter((r) => r.kind === tab)
+  }, [allJobs, liveJobs, runs, liveRuns, tab])
+
+  const columns = useMemo<GridColDef<Row>[]>(
     () => [
       {
-        field: 'job_type',
+        field: 'kind',
         headerName: 'Type',
-        width: 100,
-        renderCell: (p: GridRenderCellParams<Job>) => <TypeChip jobType={p.row.job_type} />,
+        width: 130,
+        renderCell: (p: GridRenderCellParams<Row>) => <TypeChip row={p.row} />,
       },
       { field: 'title', headerName: 'Job', flex: 1, minWidth: 160 },
-      { field: 'association_name', headerName: 'Association', flex: 1, minWidth: 160 },
+      { field: 'detail', headerName: 'Association / progress', flex: 1, minWidth: 200 },
       {
         field: 'status',
         headerName: 'Status',
         width: 130,
-        renderCell: (p: GridRenderCellParams<Job>) => <JobStatusChip status={p.row.status} />,
+        renderCell: (p: GridRenderCellParams<Row>) => <JobStatusChip status={p.row.status} />,
       },
       {
         field: 'created_at',
         headerName: 'Created',
         width: 180,
-        renderCell: (p: GridRenderCellParams<Job>) => formatDateTime(p.row.created_at),
+        renderCell: (p: GridRenderCellParams<Row>) => formatDateTime(p.row.created_at),
       },
       {
         field: 'details',
@@ -221,49 +287,34 @@ export default function JobsPage() {
         width: 56,
         sortable: false,
         filterable: false,
-        renderCell: (p: GridRenderCellParams<Job>) => (
-          <Tooltip title="View details">
-            <IconButton
-              size="small"
-              onClick={() =>
-                p.row.job_type === 'letter'
-                  ? setDetailJobId(p.row.id)
-                  : setDetailBudgetJobId(p.row.id)
-              }
-            >
-              <InfoOutlinedIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-        ),
+        renderCell: (p: GridRenderCellParams<Row>) =>
+          p.row.job ? (
+            <Tooltip title="View details">
+              <IconButton size="small" onClick={() => openDetails(p.row.job as Job)}>
+                <InfoOutlinedIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          ) : null,
       },
       {
-        field: 'download',
+        field: 'action',
         headerName: '',
         width: 130,
         sortable: false,
         filterable: false,
         align: 'right',
         headerAlign: 'right',
-        renderCell: (p: GridRenderCellParams<Job>) => (
-          <Button
-            variant="outlined"
-            size="small"
-            startIcon={
-              downloadingId === p.row.id ? (
-                <CircularProgress size={14} color="inherit" />
-              ) : (
-                <DownloadIcon />
-              )
-            }
-            disabled={p.row.status !== 'complete' || downloadingId === p.row.id}
-            onClick={() => handleDownload(p.row)}
-          >
-            Download
-          </Button>
+        renderCell: (p: GridRenderCellParams<Row>) => (
+          <RowAction
+            row={p.row}
+            downloadingId={downloadingId}
+            onDownload={handleDownload}
+            onOpen={openRun}
+          />
         ),
       },
     ],
-    [downloadingId, handleDownload],
+    [downloadingId, handleDownload, openRun, openDetails],
   )
 
   return (
@@ -275,11 +326,14 @@ export default function JobsPage() {
       <Tabs
         value={tab}
         onChange={(_, v: TabValue) => setTab(v)}
+        variant="scrollable"
+        allowScrollButtonsMobile
         sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}
       >
         <Tab label="All" value="all" />
         <Tab label="Letters" value="letter" />
         <Tab label="Budgets" value="budget" />
+        <Tab label="Accounting" value="accounting" />
       </Tabs>
 
       {error && <ErrorAlert message={error} onClose={() => setError(null)} />}
@@ -289,20 +343,20 @@ export default function JobsPage() {
       ) : rows.length === 0 ? (
         <Paper variant="outlined" sx={{ borderRadius: 2, px: 2, py: 6, textAlign: 'center' }}>
           <Typography color="text.secondary">
-            {tab === 'all' ? 'No jobs yet.' : `No ${tab} jobs yet.`}
+            {tab === 'all' ? 'No jobs yet.' : `No ${TAB_NOUN[tab]} jobs yet.`}
           </Typography>
         </Paper>
       ) : isMobile ? (
         <Paper variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden' }}>
-          {rows.map((job, i) => (
+          {rows.map((row, i) => (
             <MobileRow
-              key={job.id}
-              job={job}
+              key={row.id}
+              row={row}
               isLast={i === rows.length - 1}
               downloadingId={downloadingId}
               onDownload={handleDownload}
-              onDetails={setDetailJobId}
-              onBudgetDetails={setDetailBudgetJobId}
+              onOpen={openRun}
+              onDetails={openDetails}
             />
           ))}
         </Paper>

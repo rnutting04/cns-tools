@@ -19,6 +19,7 @@ associations: anything that can't be paired is listed for a person.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from difflib import SequenceMatcher
 from typing import Any
 
 from .batch import Section, _alnum, _name_key, _numbering, same_association
@@ -33,7 +34,7 @@ from .extract import (
     parse_ar_aging,
     parse_prepaid_assessments,
 )
-from .pdf import Page
+from .pdf import BBox, Page
 
 # The three uploads, in the order they're read.
 ROLES = ("balance_sheet", "ar", "prepaid")
@@ -144,7 +145,7 @@ def _side(s: Side | None) -> dict[str, Any] | None:
     }
 
 
-def _check_json(c: CheckResult) -> dict[str, Any]:
+def _check_json(c: CheckResult, shots: list[dict[str, Any]]) -> dict[str, Any]:
     return {
         "id": c.id,
         "title": c.title,
@@ -153,7 +154,142 @@ def _check_json(c: CheckResult) -> dict[str, Any]:
         "report": _side(c.right),
         "difference": float(c.difference) if c.difference is not None else None,
         "notes": c.notes,
+        "shots": shots,
     }
+
+
+# --------------------------------------------------------------------------
+# Explaining a result: plain-language reasons, and the page regions to show
+# ("shots"; the job cuts them out of the PDFs while it still has them).
+# --------------------------------------------------------------------------
+
+FILE_NAMES = {"balance_sheet": "Balance sheet", "ar": "AR report", "prepaid": "Prepaid report"}
+
+
+def _shot(role: str, page: int | None, bbox: BBox | None, caption: str) -> list[dict[str, Any]]:
+    if page is None or bbox is None:
+        return []
+    return [
+        {
+            "role": role,
+            "page": page,
+            "bbox": [bbox.x0, bbox.top, bbox.x1, bbox.bottom],
+            "caption": f"{FILE_NAMES[role]} p.{page}: {caption}",
+        }
+    ]
+
+
+def _code_of(row: BSRow) -> int | None:
+    return int(row.code[:4]) if row.code and row.code[:4].isdigit() else None
+
+
+def _row_name(row: BSRow) -> str:
+    return (
+        row.label if not row.code or row.label.startswith(row.code) else f"{row.code} {row.label}"
+    )
+
+
+def _neighbours(bs: BalanceSheet, code: str) -> tuple[BSRow | None, BSRow | None]:
+    """The balance sheet lines just before and after where ``code`` would be."""
+    target = int(code)
+    coded = [(c, r) for r in bs.rows if (c := _code_of(r)) is not None]
+    before = max((x for x in coded if x[0] < target), default=None, key=lambda x: x[0])
+    after = min((x for x in coded if x[0] > target), default=None, key=lambda x: x[0])
+    return (before[1] if before else None, after[1] if after else None)
+
+
+def _money(v: Any) -> str:
+    return f"{v:,.2f}"
+
+
+def explain(role: str, c: CheckResult, bs: Found | None) -> list[dict[str, Any]]:
+    """Rewrite the check's notes so they say why, in plain words, and return
+    the page regions a reviewer should see. Passing checks need neither."""
+    if c.status is Status.PASS:
+        return []
+    _, _, code, keys, report_name = _CHECKS[role]
+    sheet = bs.balance_sheet if bs else None
+    row = sheet.find(code, keys) if sheet else None
+    left, right = c.left, c.right
+    shots: list[dict[str, Any]] = []
+    if left is not None and left.bbox is not None:
+        label = left.label if left.label.startswith(code) else f"{code} {left.label}"
+        shots += _shot("balance_sheet", left.page, left.bbox, label.strip())
+    if right is not None:
+        shots += _shot(role, right.page, right.bbox, f"{report_name} total")
+    # Notes from reading a figure don't say which file they're about.
+    for side, where in ((left, "Balance sheet"), (right, FILE_NAMES[role])):
+        if side is not None and side.note in c.notes:
+            c.notes[c.notes.index(side.note)] = f"{where}: {side.note}"
+
+    if c.status is Status.NOT_APPLICABLE and sheet is not None:
+        if row is None:
+            before, after = _neighbours(sheet, code)
+            if before and after:
+                where = f"it goes straight from {_row_name(before)} to {_row_name(after)}"
+                # Lines aren't always in code order, so take whichever is higher.
+                span = BBox(
+                    min(before.bbox.x0, after.bbox.x0),
+                    min(before.bbox.top, after.bbox.top),
+                    max(before.bbox.x1, after.bbox.x1),
+                    max(before.bbox.bottom, after.bbox.bottom),
+                )
+                shots += _shot("balance_sheet", sheet.page, span, f"where {code} would be")
+            else:
+                where = "no nearby numbered lines were found either"
+            c.notes = [
+                f"There's no {code} line on the balance sheet ({where}), and the "
+                f"{ROLE_NAMES[role]} has no section for this association, so there's "
+                "nothing to compare. If the screenshot does show the line, the scan "
+                "misread it: check it by hand."
+            ]
+        else:
+            c.notes = [
+                f"{code} is 0.00 on the balance sheet and the {ROLE_NAMES[role]} has no "
+                "section for this association: nothing owed, so no report is expected."
+            ]
+    elif c.status is Status.MISSING and left is not None and left.amount is not None:
+        c.notes = [
+            f"The balance sheet shows {_money(left.amount)} on {code}, but the "
+            f"{ROLE_NAMES[role]} has no section for this association. Either the report "
+            "wasn't run for it, or its name is printed differently there."
+        ]
+    elif c.status is Status.FAIL and c.difference is not None and left and right:
+        higher = "higher" if c.difference < 0 else "lower"
+        c.notes.insert(
+            0,
+            f"The balance sheet's {code} is {_money(left.amount)}; the {report_name} "
+            f"shows {_money(right.amount)}. The report is {_money(abs(c.difference))} "
+            f"{higher}.",
+        )
+    elif c.status is Status.REVIEW and left and right:
+        if left.amount is not None and right.amount is not None:
+            agree = "agree" if c.difference == 0 else f"differ by {_money(abs(c.difference))}"
+            c.notes.insert(
+                0,
+                f"The balance sheet's {code} reads {_money(left.amount)} and the "
+                f"{report_name} {_money(right.amount)}; they {agree}, but at least one "
+                "read is doubtful, so a person should confirm it against the screenshots.",
+            )
+        if not shots and right.page:
+            c.notes.append(f"See {FILE_NAMES[role]} p.{right.page}.")
+    return shots
+
+
+def _closest(name: str, candidates: list[Found]) -> Found | None:
+    """The most similar name, if any is close enough to be worth suggesting."""
+    key = _alnum(name)
+    scored = [
+        (SequenceMatcher(None, key, _alnum(f.name)).ratio(), f)
+        for f in candidates
+        if f.name != UNNAMED
+    ]
+    best = max(scored, default=None, key=lambda x: x[0])
+    return best[1] if best and best[0] >= 0.6 else None
+
+
+def _pages_text(f: Found) -> str:
+    return f"p.{f.first_page}" + (f"–{f.last_page}" if f.last_page != f.first_page else "")
 
 
 _CHECKS = {
@@ -235,10 +371,20 @@ def reconcile(found: dict[str, list[Found]]) -> list[dict[str, Any]]:
     pairs = {r: pair(names, found[r]) for r in reports}
     out: list[dict[str, Any]] = []
 
+    taken_by = {r: {id(f) for f in pairs[r] if f is not None} for r in reports}
+    unpaired = {r: [f for f in found[r] if id(f) not in taken_by[r]] for r in reports}
+
     for n, bs in enumerate(sheets):
         paired = {r: pairs[r][n] for r in reports}
         checks = [compare(r, bs, paired[r]) for r in reports]
+        shots = [explain(r, c, bs) for r, c in zip(reports, checks, strict=True)]
         _note_shared_difference(checks)
+        for r, c in zip(reports, checks, strict=True):
+            if c.status is Status.MISSING and (near := _closest(bs.name, unpaired[r])):
+                c.notes.append(
+                    f"The {ROLE_NAMES[r]} has an unpaired section named “{near.name}” "
+                    f"({_pages_text(near)}). If that's this association, compare it by hand."
+                )
         out.append(
             _result(
                 bs.name,
@@ -246,6 +392,7 @@ def reconcile(found: dict[str, list[Found]]) -> list[dict[str, Any]]:
                 bs.last_page,
                 {"balance_sheet": bs, **paired},
                 checks,
+                shots,
             )
         )
 
@@ -278,11 +425,27 @@ def reconcile(found: dict[str, list[Found]]) -> list[dict[str, Any]]:
             "Compare it by hand (the name may be printed differently, or it's "
             "part of a master association)."
         )
+        # A balance sheet that's missing this report is the likeliest match.
+        lacking = [bs for n, bs in enumerate(sheets) if any(pairs[r][n] is None for r in g)]
+        if any_f.name != UNNAMED and (near := _closest(any_f.name, lacking)):
+            problem += (
+                f" Closest balance sheet without this report: “{near.name}” "
+                f"({_pages_text(near)})."
+            )
         if any_f.name == UNNAMED:
             problem = (
                 f"The association name couldn't be read on these pages of the {where}. "
                 "Compare it by hand."
             )
+        shots = []
+        for r, f in g.items():
+            total = f.report.total if f.report else None
+            page, bbox = (
+                (total.page, total.bbox)
+                if total
+                else (f.report.searched if f.report and f.report.searched else (None, None))
+            )
+            shots += _shot(r, page, bbox, f"{_CHECKS[r][4]} total")
         out.append(
             {
                 "association": any_f.name,
@@ -291,6 +454,7 @@ def reconcile(found: dict[str, list[Found]]) -> list[dict[str, Any]]:
                 "flagged": True,
                 "result": {
                     "problem": problem,
+                    "shots": shots,
                     "pages": _pages(g),
                     "reports": {
                         r: _side(Side.of(ROLE_NAMES[r], f.report.total if f.report else None))
@@ -312,6 +476,7 @@ def _result(
     last: int,
     found: dict[str, Found | None],
     checks: list[CheckResult],
+    shots: list[list[dict[str, Any]]],
 ) -> dict[str, Any]:
     names = {
         r: f.name
@@ -327,9 +492,29 @@ def _result(
             "pages": _pages(found),
             # Where a report printed the name differently (paired by OCR tolerance).
             "names": names,
-            "checks": [_check_json(c) for c in checks],
+            "checks": [_check_json(c, s) for c, s in zip(checks, shots, strict=True)],
         },
     }
 
 
-__all__ = ["ROLES", "Found", "compare", "looks_like", "read_section", "reconcile"]
+def all_shots(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Every shot in the results, to have its image filled in."""
+    out = []
+    for r in results:
+        res = r["result"]
+        out += res.get("shots", [])
+        for c in res.get("checks", []):
+            out += c.get("shots", [])
+    return out
+
+
+__all__ = [
+    "ROLES",
+    "Found",
+    "all_shots",
+    "compare",
+    "explain",
+    "looks_like",
+    "read_section",
+    "reconcile",
+]

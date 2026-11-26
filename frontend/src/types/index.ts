@@ -464,6 +464,18 @@ export interface ReceivablesCheck {
   report: ReceivablesSide | null
   difference: number | null
   notes: string[]
+  /** Page regions behind a non-passing check (absent on older runs) */
+  shots?: ReceivablesShot[]
+}
+
+/** A highlighted strip of one uploaded file's page, saved during the run */
+export interface ReceivablesShot {
+  role: ReceivablesRole
+  page: number
+  bbox: number[]
+  caption: string
+  /** JPEG data URL; missing if the page couldn't be rendered */
+  image?: string
 }
 
 /** Pages ([first, last]) of this association in each uploaded file */
@@ -481,6 +493,7 @@ export interface ReceivablesUnmatched {
   problem: string
   pages: ReceivablesPages
   reports: Partial<Record<ReceivablesRole, ReceivablesSide | null>>
+  shots?: ReceivablesShot[]
 }
 
 /** `problem` is set when the association's section couldn't be processed */
