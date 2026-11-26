@@ -1,4 +1,4 @@
-import { Fragment, useMemo } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
@@ -17,7 +17,11 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight'
 import DescriptionIcon from '@mui/icons-material/Description'
 import FolderIcon from '@mui/icons-material/Folder'
 import InboxOutlinedIcon from '@mui/icons-material/InboxOutlined'
-import { useQuery } from '@tanstack/react-query'
+import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
+import ReminderDialog from '../components/reminders/ReminderDialog'
+import { etDateTime } from '../components/reminders/format'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useJobs } from '../context/JobsContext'
@@ -231,6 +235,8 @@ export default function DashboardPage() {
 
   const isManagerUp = user ? hasRole(user, ['manager', 'admin', 'super_admin']) : false
   const isAdmin = user ? hasRole(user, ['admin', 'super_admin']) : false
+  const queryClient = useQueryClient()
+  const [reminderOpen, setReminderOpen] = useState(false)
 
   // Shared query keys, so navigating between the dashboard and the pages that
   // use these lists reuses one cache entry instead of refetching.
@@ -318,6 +324,12 @@ export default function DashboardPage() {
             to: '/templates',
             icon: <FolderIcon />,
           },
+          {
+            label: 'Reminders',
+            description: 'Scheduled emails for mailing days and deadlines',
+            to: '/reminders',
+            icon: <NotificationsActiveIcon />,
+          },
         ]
       : []),
   ]
@@ -364,7 +376,16 @@ export default function DashboardPage() {
             {todayLabel()} · {user.title || roleLabel(user.role)}
           </Typography>
         </Box>
-        <Box display="flex" gap={1} flexShrink={0}>
+        <Box display="flex" gap={1} flexShrink={0} flexWrap="wrap">
+          {isAdmin && (
+            <Button
+              variant="outlined"
+              startIcon={<NotificationsActiveIcon />}
+              onClick={() => setReminderOpen(true)}
+            >
+              New reminder
+            </Button>
+          )}
           <Button
             component={Link}
             to="/accounting"
@@ -466,6 +487,23 @@ export default function DashboardPage() {
           </Paper>
         </Grid>
       </Grid>
+
+      {isAdmin && (
+        <ReminderDialog
+          open={reminderOpen}
+          onClose={() => setReminderOpen(false)}
+          onSaved={(r) => {
+            setReminderOpen(false)
+            void queryClient.invalidateQueries({ queryKey: queryKeys.reminders })
+            toast.success(
+              r.next_send_at
+                ? `Reminder set. Next email ${etDateTime(r.next_send_at)}.`
+                : 'Reminder saved.',
+              { action: { label: 'View', onClick: () => navigate('/reminders') } },
+            )
+          }}
+        />
+      )}
     </Box>
   )
 }
