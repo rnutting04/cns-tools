@@ -218,6 +218,7 @@ def test_task_runs_every_step_even_if_one_fails(db_session):
         patch.object(tasks, "fail_stuck_jobs", side_effect=RuntimeError("boom")),
         patch.object(tasks, "expire_budget_uploads", return_value=2) as uploads,
         patch.object(tasks, "purge_jobs", return_value={"letters": 1}) as purge,
+        patch.object(tasks, "purge_reminder_history", return_value=5),
         patch.object(tasks, "purge_old_events", return_value=7),
     ):
         out = tasks.purge_old_data()
@@ -225,6 +226,7 @@ def test_task_runs_every_step_even_if_one_fails(db_session):
         "stuck_accounting_runs_failed": "failed",
         "budget_uploads_deleted": 2,
         "jobs_deleted": {"letters": 1},
+        "reminder_sends_deleted": 5,
         "audit_events_deleted": 7,
     }
     assert uploads.call_args.args[1] == 14 and purge.call_args.args[1] == 90

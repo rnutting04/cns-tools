@@ -178,3 +178,24 @@ def purge_jobs(db: Session, retention_days: int) -> dict[str, int]:
 
     db.commit()
     return out
+
+
+# --------------------------------------------------------------------------
+# Reminders
+# --------------------------------------------------------------------------
+
+
+def purge_reminder_history(db: Session, log_days: int) -> int:
+    """Trim the reminder send log (who was emailed, when) after ``log_days``:
+    it's an audit trail, so it follows the audit log's period. Reminders
+    themselves are never deleted automatically, like users: only an admin
+    deletes one. Returns how many log rows were deleted."""
+    from app.models.reminder import ReminderDelivery
+
+    deleted = (
+        db.query(ReminderDelivery)
+        .filter(ReminderDelivery.sent_at < _now() - timedelta(days=log_days))
+        .delete(synchronize_session=False)
+    )
+    db.commit()
+    return deleted

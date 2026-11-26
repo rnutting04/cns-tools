@@ -6,6 +6,8 @@ from app.models.budget_job import BudgetJob as BudgetJob
 from app.models.budget_layout_profile import BudgetLayoutProfile as BudgetLayoutProfile
 from app.models.letter_job import JobStatus as JobStatus
 from app.models.letter_job import LetterJob as LetterJob
+from app.models.reminder import Reminder as Reminder
+from app.models.reminder import ReminderDelivery as ReminderDelivery
 from app.models.template import Template as Template
 from app.models.user import User as User
 from app.models.user import UserRole as UserRole

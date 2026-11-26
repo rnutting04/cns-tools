@@ -20,6 +20,7 @@ import BudgetGeneratorPage from '../pages/ai/BudgetGeneratorPage'
 import NotFoundPage from '../pages/NotFoundPage'
 import SettingsPage from '../pages/settings/SettingsPage'
 import AuditPage from '../pages/AuditPage'
+import RemindersPage from '../pages/RemindersPage'
 
 export default function AppRouter() {
   return (
@@ -54,6 +55,14 @@ export default function AppRouter() {
           <Route path="letters" element={<LetterGeneratorPage />} />
           <Route path="letters/generated" element={<Navigate to="/jobs" replace />} />
           <Route path="jobs" element={<JobsPage />} />
+          <Route
+            path="reminders"
+            element={
+              <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
+                <RemindersPage />
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="templates"
             element={

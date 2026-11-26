@@ -13,6 +13,7 @@ from app.routers import (
     financials,
     jobs,
     managers,
+    reminders,
     templates,
     user,
 )
@@ -42,6 +43,7 @@ app.include_router(jobs.router, prefix="/api")
 app.include_router(financials.router, prefix="/api")
 app.include_router(excel.router, prefix="/api")
 app.include_router(accounting.router, prefix="/api")
+app.include_router(reminders.router, prefix="/api")
 
 
 @app.get("/health")

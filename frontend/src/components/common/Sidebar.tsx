@@ -15,6 +15,7 @@ import WorkHistoryIcon from '@mui/icons-material/WorkHistory'
 import FolderIcon from '@mui/icons-material/Folder'
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance'
 import CalculateIcon from '@mui/icons-material/Calculate'
+import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive'
 import SettingsIcon from '@mui/icons-material/Settings'
 import SecurityIcon from '@mui/icons-material/Security'
 import { NavLink, useLocation } from 'react-router-dom'
@@ -72,6 +73,12 @@ const NAV_ITEMS: NavItem[] = [
     roles: ['admin', 'super_admin'],
   },
   { label: 'Accounting tools', to: '/accounting', icon: <CalculateIcon fontSize="small" /> },
+  {
+    label: 'Reminders',
+    to: '/reminders',
+    icon: <NotificationsActiveIcon fontSize="small" />,
+    roles: ['admin', 'super_admin'],
+  },
   {
     label: 'Audit log',
     to: '/audit',

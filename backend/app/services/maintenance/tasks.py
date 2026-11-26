@@ -12,7 +12,12 @@ from app.config import settings
 from app.database import SessionLocal
 from app.services.audit_retention import purge_old_events
 
-from .retention import expire_budget_uploads, fail_stuck_jobs, purge_jobs
+from .retention import (
+    expire_budget_uploads,
+    fail_stuck_jobs,
+    purge_jobs,
+    purge_reminder_history,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +30,9 @@ def purge_old_data() -> dict[str, Any]:
             db, settings.UPLOAD_RETENTION_DAYS
         ),
         "jobs_deleted": lambda db: purge_jobs(db, settings.JOB_RETENTION_DAYS),
+        "reminder_sends_deleted": lambda db: purge_reminder_history(
+            db, settings.AUDIT_RETENTION_DAYS
+        ),
         "audit_events_deleted": lambda db: purge_old_events(db, settings.AUDIT_RETENTION_DAYS),
     }
     out: dict[str, Any] = {}

@@ -1,5 +1,5 @@
 import apiClient from './client'
-import type { AccountingJobSummary, Association, Job, Template, User } from '../types'
+import type { AccountingJobSummary, Association, Job, Reminder, Template, User } from '../types'
 
 // A manager as returned by /api/managers (a lighter shape than the full User).
 export type ManagerOption = {
@@ -22,6 +22,7 @@ export const queryKeys = {
   managers: ['managers'] as const,
   jobs: ['jobs'] as const,
   accountingJobs: ['accounting-jobs'] as const,
+  reminders: ['reminders'] as const,
 }
 
 // Reference data (associations, managers, templates, users) changes rarely.
@@ -52,6 +53,12 @@ export async function fetchManagers(): Promise<ManagerOption[]> {
 
 export async function fetchJobs(): Promise<Job[]> {
   const { data } = await apiClient.get<Job[]>('/api/jobs')
+  return data
+}
+
+/** Every reminder (admins only), soonest first. */
+export async function fetchReminders(): Promise<Reminder[]> {
+  const { data } = await apiClient.get<Reminder[]>('/api/reminders')
   return data
 }
 

@@ -565,3 +565,40 @@ export interface FdicReport {
   institutions: FdicInstitution[]
   unrecognized: FdicAccount[]
 }
+
+/** How often a reminder's event comes round */
+export type ReminderRepeat = 'none' | 'weekly' | 'monthly' | 'yearly'
+
+/** What an admin fills in to create or edit a reminder */
+export interface ReminderInput {
+  title: string
+  message: string
+  recipients: string[]
+  /** the event's (first) date, YYYY-MM-DD */
+  start_date: string
+  repeat: ReminderRepeat
+  /** send this many days before each occurrence */
+  lead_days: number
+  /** HH:MM, Eastern */
+  send_time: string
+  active: boolean
+}
+
+/** A scheduled reminder email (GET /api/reminders) */
+export interface Reminder extends ReminderInput {
+  id: string
+  /** "Every month on the 25th · 3 days before · 8:00 AM ET" */
+  schedule: string
+  next_event_date: string | null
+  /** UTC; null while paused or once a one-off has gone out */
+  next_send_at: string | null
+  last_sent_at: string | null
+  created_by_name: string
+  created_at: string | null
+}
+
+export interface ReminderDelivery {
+  event_date: string
+  recipient: string
+  sent_at: string
+}

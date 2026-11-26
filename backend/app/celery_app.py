@@ -53,6 +53,7 @@ celery_app.conf.update(
         "app.services.email.tasks",
         "app.services.financials.tasks",
         "app.services.maintenance.tasks",
+        "app.services.reminders.tasks",
     ),
     # Queue routing: quick tasks go to the light worker, heavy tasks to default.
     task_default_queue="default",
@@ -60,6 +61,7 @@ celery_app.conf.update(
         "app.services.letters.tasks.*": {"queue": "light"},
         "app.services.email.tasks.*": {"queue": "light"},
         "app.services.maintenance.tasks.*": {"queue": "light"},
+        "app.services.reminders.tasks.*": {"queue": "light"},
     },
     # Scheduled tasks. Celery beat (one process, see RAILWAY.md and
     # `make beat`) only enqueues them; the workers run them. Crontab times are
@@ -69,6 +71,14 @@ celery_app.conf.update(
         "purge-old-data": {
             "task": "app.services.maintenance.tasks.purge_old_data",
             "schedule": crontab(hour=3, minute=15),
+        },
+        # Reminders live in Postgres; this just checks for due ones.
+        "send-due-reminders": {
+            "task": "app.services.reminders.tasks.send_due_reminders",
+            "schedule": crontab(minute="*/5"),
+            # A check that waited longer than its interval is superseded by
+            # the next one; don't pile them up behind a stalled worker.
+            "options": {"expires": 240},
         },
     },
 )
