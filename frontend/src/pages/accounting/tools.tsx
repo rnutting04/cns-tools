@@ -2,6 +2,7 @@ import type { ReactElement } from 'react'
 import FactCheckIcon from '@mui/icons-material/FactCheck'
 import GavelIcon from '@mui/icons-material/Gavel'
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance'
+import ReceiptLongIcon from '@mui/icons-material/ReceiptLong'
 import TableChartIcon from '@mui/icons-material/TableChart'
 
 export interface AccountingTool {
@@ -37,6 +38,14 @@ export const ACCOUNTING_TOOLS: AccountingTool[] = [
     description: 'Adds up balances at each bank from the balance sheet and flags $250,000 or more.',
     input: 'Balance sheet PDFs',
     icon: <AccountBalanceIcon />,
+  },
+  {
+    path: 'ar-prepaid',
+    title: 'AR & prepaid',
+    description:
+      'Ties every association’s Accounts Receivable (1100) and Prepaid Assessments (2100) to the AR and prepaid reports.',
+    input: 'Balance sheet, AR and prepaid PDFs',
+    icon: <ReceiptLongIcon />,
   },
   {
     path: 'reserve-schedule',

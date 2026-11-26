@@ -2,8 +2,6 @@
 import logging
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from pdfminer.pdfparser import PDFSyntaxError
-from pdfplumber.utils.exceptions import PdfminerException
 from pydantic import TypeAdapter, ValidationError
 from sqlalchemy.orm import Session
 
@@ -16,6 +14,7 @@ from app.schemas.financials import (
     FinancialEvidenceResponse,
 )
 from app.services.audit import log_event
+from app.services.financials.pdf import PDF_ERRORS as _PDF_ERRORS
 from app.services.financials.pdf import BBox
 from app.services.financials.report import build_report, render_evidence
 
@@ -27,7 +26,6 @@ MAX_PDF_BYTES = 40 * 1024 * 1024  # sample packets are 6-10 MB
 # A packet yields ~30 regions; this only guards against abuse.
 MAX_REGIONS = 200
 
-_PDF_ERRORS = (PdfminerException, PDFSyntaxError, ValueError)
 _regions_adapter = TypeAdapter(list[FinancialEvidenceRegion])
 
 

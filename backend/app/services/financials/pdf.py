@@ -10,14 +10,23 @@ box it came from so a human can be shown exactly where it was read.
 
 from __future__ import annotations
 
+import io
 import re
+from collections import deque
 from collections.abc import Iterator
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
 from typing import BinaryIO
 
 import pdfplumber
+import pypdfium2 as pdfium
+from pdfminer.pdfparser import PDFSyntaxError
+from pdfplumber.utils.exceptions import PdfminerException
+
+# Raised for a file that isn't a readable PDF (by pdfium or pdfplumber).
+PDF_ERRORS = (pdfium.PdfiumError, PdfminerException, PDFSyntaxError, ValueError)
 
 # A money amount with exactly two decimals. The lookahead rejects
 # percentages and longer decimals ("2.95%", "1.00000").
@@ -131,14 +140,18 @@ def _repair_amount_token(token: str) -> str:
     """Fix OCR character slips in a token that is otherwise a money amount.
     Only applied when the repaired text is a valid amount, so words and
     codes are left alone."""
-    lead = len(token) - len(token.lstrip("(-$"))
+    # "=" and quote marks are OCR's reading of a minus sign.
+    lead = len(token) - len(token.lstrip('(-$=“"'))
     trail = len(token) - len(token.rstrip(")"))
     core = token[lead : len(token) - trail]
     if not core:
         return token
     fixed = core
-    if _LOOKALIKE_CHARS & set(core) and sum(c.isdigit() for c in core) >= 3:
-        candidate = core.translate(_LOOKALIKE)
+    # A stray comma before the decimal point: "61,905,.32".
+    if ",." in fixed and _AMOUNT_FULL.fullmatch(fixed.replace(",.", ".")):
+        fixed = fixed.replace(",.", ".")
+    if _LOOKALIKE_CHARS & set(fixed) and sum(c.isdigit() for c in fixed) >= 3:
+        candidate = fixed.translate(_LOOKALIKE)
         if _AMOUNT_FULL.fullmatch(candidate) or _COMMA_DECIMAL.fullmatch(candidate):
             fixed = candidate
     if _COMMA_DECIMAL.fullmatch(fixed):
@@ -273,30 +286,78 @@ def build_page(
 
 
 def iter_pages(
-    source: str | Path | BinaryIO, max_ocr_pages: int | None = MAX_OCR_PAGES
+    source: str | Path | BinaryIO,
+    max_ocr_pages: int | None = MAX_OCR_PAGES,
+    ocr_workers: int = 1,
 ) -> Iterator[Page]:
-    """Pages one at a time. A page with no text layer (printed-to-PDF vector
-    text, or an un-OCR'd scan) is read with Tesseract when it's installed,
-    up to ``max_ocr_pages`` (None = no limit); ``Page.ocr`` marks those."""
-    from .ocr import ocr_page  # local import: ocr imports this module
+    """Pages one at a time, in order. A page with no text layer (printed-to-
+    PDF vector text, or an un-OCR'd scan) is read with Tesseract when it's
+    installed, up to ``max_ocr_pages`` (None = no limit); ``Page.ocr`` marks
+    those. ``ocr_workers`` > 1 reads that many pages with Tesseract at once
+    (background jobs: a combined file is hundreds of OCR pages)."""
+    # Local import: ocr imports this module.
+    from .ocr import ocr_available, read_image, render_for_ocr
 
+    can_ocr = ocr_available()
     budget = max_ocr_pages
-    with pdfplumber.open(source) as pdf:
-        for i, pg in enumerate(pdf.pages, start=1):
-            words = [
-                Word(w["text"], BBox(w["x0"], w["top"], w["x1"], w["bottom"]))
-                for w in pg.extract_words(keep_blank_chars=False, use_text_flow=False)
-            ]
-            used_ocr = False
-            if not words and (budget is None or budget > 0):
-                if budget is not None:
-                    budget -= 1
-                words = ocr_page(pg) or []
-                used_ocr = bool(words)
-            width, height = float(pg.width), float(pg.height)
-            # Free pdfplumber's per-page cache: a combined file is 500+ pages.
-            pg.close()
-            yield build_page(i, width, height, words, used_ocr)
+    parallel = ocr_workers > 1
+    # (number, width, height, words, OCR future or None), oldest first
+    pending: deque[tuple[int, float, float, list[Word], Future | None]] = deque()
+
+    def finish(item) -> Page:
+        number, width, height, words, fut = item
+        if fut is None:
+            return build_page(number, width, height, words)
+        ocr_words = fut.result() or []
+        return build_page(number, width, height, ocr_words, bool(ocr_words))
+
+    # pdfplumber and pdfium each get their own copy of a stream, so their
+    # reads can't move each other's file position.
+    if not isinstance(source, str | Path):
+        source = source.read()
+    doc = pdfium.PdfDocument(source)
+    try:
+        with (
+            pdfplumber.open(io.BytesIO(source) if isinstance(source, bytes) else source) as pdf,
+            ThreadPoolExecutor(max_workers=max(ocr_workers, 1)) as pool,
+        ):
+            for i, pg in enumerate(pdf.pages, start=1):
+                fpage = doc[i - 1]
+                # pdfium answers "is there any text?" in microseconds; pdfplumber
+                # would parse every glyph outline of a printed-to-PDF page
+                # (up to a second) to find none.
+                textpage = fpage.get_textpage()
+                has_text = textpage.count_chars() > 0
+                textpage.close()
+                words = (
+                    [
+                        Word(w["text"], BBox(w["x0"], w["top"], w["x1"], w["bottom"]))
+                        for w in pg.extract_words(keep_blank_chars=False, use_text_flow=False)
+                    ]
+                    if has_text
+                    else []
+                )
+                fut: Future | None = None
+                if not words and can_ocr and (budget is None or budget > 0):
+                    if budget is not None:
+                        budget -= 1
+                    # Rendering stays on this thread (pdfium isn't thread-
+                    # safe); only Tesseract itself runs in the pool.
+                    fut = pool.submit(read_image, render_for_ocr(fpage), i, parallel)
+                fpage.close()
+                width, height = float(pg.width), float(pg.height)
+                # Free pdfplumber's per-page cache: a combined file is 500+ pages.
+                pg.close()
+                pending.append((i, width, height, words, fut))
+                # Keep up to ``ocr_workers`` pages in flight; hand back the rest.
+                while pending and (
+                    pending[0][4] is None or pending[0][4].done() or len(pending) > ocr_workers
+                ):
+                    yield finish(pending.popleft())
+            while pending:
+                yield finish(pending.popleft())
+    finally:
+        doc.close()
 
 
 def page_count(source: str | Path | BinaryIO) -> int:

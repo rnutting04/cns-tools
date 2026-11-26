@@ -38,7 +38,17 @@ _NOT_NAME = (
     "operatingreserve",
     "actualbudget",
     "page",
+    # Titles and column headings of the AR aging ("CSC AR NAMES") and
+    # prepaid assessment ("CSC_ Prepaid") reports.
+    "cscarnames",
+    "cscprepaid",
+    "residentcontact",
+    "propertyaddress",
+    "acctstatus",
 )
+
+
+_MONEY = re.compile(r"\d\.\d{2}\b|\d,\d{2}$")
 
 
 def _alnum(s: str) -> str:
@@ -47,7 +57,8 @@ def _alnum(s: str) -> str:
 
 def association_name(page: Page) -> str:
     """The association named in the page header, or "" if none is found."""
-    for ln in page.lines[:6]:
+    # The prepaid report prints the name under its two-line column header.
+    for ln in page.lines[:8]:
         text = ln.text.strip()
         key = _alnum(text)
         letters = re.sub(r"[^a-z]", "", key)
@@ -60,8 +71,24 @@ def association_name(page: Page) -> str:
             any(m in letters for m in _MONTHS) and re.search(r"\d{4}", text)
         ):
             continue
-        # Column headings ("Operating Reserve Total", "Actual Budget Variance").
-        if letters in ("operating", "reserve", "total", "operatingreservetotal"):
+        # Column headings ("Operating Reserve Total", "Actual Budget Variance",
+        # the prepaid report's "Prepaid" over "Amount").
+        if letters in (
+            "operating",
+            "reserve",
+            "total",
+            "operatingreservetotal",
+            "prepaid",
+            "amount",
+            "prepaidamount",
+            "property",
+            "address",
+        ):
+            continue
+        # A report row (an owner on a page that doesn't repeat the name),
+        # not a name: names never carry a money amount, nor an owner's
+        # "Last, First" with a 5-digit account number.
+        if _MONEY.search(text) or ("," in text and re.search(r"(?<![\d,.])\d{5}(?![\d,.])", text)):
             continue
         return text
     return ""
@@ -91,6 +118,37 @@ def _same(a: str, b: str, fuzzy: bool) -> bool:
     return min(len(a), len(b)) >= 6 and _within_one_edit(a, b)
 
 
+def _name_key(name: str) -> str:
+    """Comparable form of a name: letters and digits, with Roman numerals
+    normalised for OCR ("Ill" and "|||" are both "iii")."""
+    out = []
+    for t in re.findall(r"[a-z0-9|!]+", name.lower()):
+        out.append(re.sub(r"[l|1!]", "i", t) if _NUMBERING.match(t) and not t.isdigit() else t)
+    return re.sub(r"[^a-z0-9]", "", "".join(out))
+
+
+# Some reports cut long names off ("Carpentras at the Villages of Avi").
+_MIN_TRUNCATED = 15
+
+
+def same_association(a: str, b: str) -> bool:
+    """Do two reports name the same association? For pairing sections of
+    *different* files, so it also accepts one OCR slip and a name one report
+    cut short — but never names that differ in a number or Roman numeral."""
+    ka, kb = _name_key(a), _name_key(b)
+    if not ka or not kb:
+        return False
+    if ka == kb:
+        return True
+    if _numbering(a) != _numbering(b):
+        return False
+    short, long_ = sorted((ka, kb), key=len)
+    if len(short) >= 6 and _within_one_edit(ka, kb):
+        return True
+    # Cut short, possibly with OCR junk on the cut edge ("Nation<", "N:").
+    return len(short) >= _MIN_TRUNCATED and long_.startswith(short[:-2])
+
+
 @dataclass
 class Section:
     name: str
@@ -104,6 +162,9 @@ class Section:
 def split_sections(pages: Iterable[Page]) -> Iterator[Section]:
     """Group consecutive pages by association, yielding each section as soon
     as the next one starts (so a long OCR run can report as it goes)."""
+    # The printed "Page N of M" can't be trusted to *join* pages: the
+    # combined balance sheet file numbers a blank page "1 of 2" and the next
+    # association's page "2 of 2". A different printed name always wins.
     current: Section | None = None
     for page in pages:
         name = association_name(page)

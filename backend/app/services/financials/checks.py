@@ -122,7 +122,7 @@ def _bs(row: BSRow | None, col: str = "total") -> Value | None:
 
 
 def _schedule_check(
-    packet: Packet,
+    packet: Packet | None,
     id: str,
     title: str,
     row: BSRow | None,

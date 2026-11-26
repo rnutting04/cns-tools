@@ -13,6 +13,7 @@ import FinancialChecksPage from '../pages/FinancialChecksPage'
 import AccountingLayout from '../pages/accounting/AccountingLayout'
 import AccountingOverview from '../pages/accounting/AccountingOverview'
 import FdicTool from '../pages/accounting/FdicTool'
+import ReceivablesTool from '../pages/accounting/ReceivablesTool'
 import RevenueThresholdTool from '../pages/accounting/RevenueThresholdTool'
 import BudgetGeneratorPage from '../pages/ai/BudgetGeneratorPage'
 import NotFoundPage from '../pages/NotFoundPage'
@@ -65,6 +66,7 @@ export default function AppRouter() {
             <Route path="review" element={<FinancialChecksPage />} />
             <Route path="audit-threshold" element={<RevenueThresholdTool />} />
             <Route path="fdic" element={<FdicTool />} />
+            <Route path="ar-prepaid" element={<ReceivablesTool />} />
             <Route path="reserve-schedule" element={<ExcelToolsPage />} />
           </Route>
           {/* Old locations, kept so bookmarks still work. */}

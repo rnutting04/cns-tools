@@ -1,6 +1,6 @@
 /**
- * Background accounting-tool runs (FDIC exposure, audit threshold) over a
- * combined multi-association PDF. Jobs live on the server, so they survive
+ * Background accounting-tool runs (FDIC exposure, audit threshold, AR &
+ * prepaid) over combined multi-association PDFs. Jobs live on the server, so they survive
  * leaving the page or refreshing.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -47,11 +47,19 @@ export function useAccountingJobs(tool: AccountingTool) {
     }
   }, [tool])
 
+  /** One combined PDF, or (multi-file tools) the files by role. */
   const start = useCallback(
-    async (file: File): Promise<AccountingJobSummary | null> => {
+    async (input: File | Partial<Record<string, File>>): Promise<AccountingJobSummary | null> => {
       const form = new FormData()
       form.append('tool', tool)
-      form.append('report', file)
+      const files = input instanceof File ? { report: input } : input
+      for (const [role, file] of Object.entries(files)) {
+        if (file) form.append(role, file)
+      }
+      const names = Object.values(files)
+        .filter((f): f is File => Boolean(f))
+        .map((f) => f.name)
+        .join(', ')
       try {
         // Upload only; the work happens in the background.
         const res = await apiClient.post<AccountingJobSummary>('/api/accounting/jobs', form, {
@@ -60,7 +68,7 @@ export function useAccountingJobs(tool: AccountingTool) {
         setJobs((js) => [res.data, ...js.filter((j) => j.id !== res.data.id)])
         return res.data
       } catch (e) {
-        setError(errorText(e, `Could not upload ${file.name}.`))
+        setError(errorText(e, `Could not upload ${names}.`))
         return null
       }
     },

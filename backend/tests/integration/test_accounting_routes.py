@@ -1,5 +1,6 @@
 """Integration tests for the accounting tools' background-job routes."""
 
+import json
 from unittest.mock import patch
 
 import pytest
@@ -56,6 +57,51 @@ def test_start_job_rejects_bad_input(client, as_user, tool, file, status):
     as_user(role=UserRole.employee)
     res, _, task = _start(client, tool, file)
     assert res.status_code == status
+    task.delay.assert_not_called()
+
+
+def _start_receivables(client, files):
+    with (
+        patch("app.routers.accounting.storage_service") as storage,
+        patch("app.routers.accounting.run_accounting_job") as task,
+    ):
+        res = client.post("/api/accounting/jobs", data={"tool": "receivables"}, files=files)
+    return res, storage, task
+
+
+def test_receivables_job_stores_each_file(client, as_user, db_session):
+    as_user(role=UserRole.employee)
+    res, storage, task = _start_receivables(
+        client,
+        {
+            "balance_sheet": ("Bal Sheet.pdf", b"%PDF-1.4 bs", "application/pdf"),
+            "ar": ("AR.pdf", b"%PDF-1.4 ar", "application/pdf"),
+            "prepaid": ("Prepaid.pdf", b"%PDF-1.4 pp", "application/pdf"),
+        },
+    )
+    assert res.status_code == 202
+    body = res.json()
+    assert body["filename"] == "Bal Sheet.pdf + AR.pdf + Prepaid.pdf"
+    job = db_session.query(AccountingJob).filter_by(id=body["id"]).one()
+    keys = json.loads(job.input_path)
+    assert set(keys) == {"balance_sheet", "ar", "prepaid"}
+    uploaded = {c.args[1]: c.args[0] for c in storage.upload_file.call_args_list}
+    assert uploaded[keys["ar"]] == b"%PDF-1.4 ar"
+    task.delay.assert_called_once_with(body["id"])
+
+
+@pytest.mark.parametrize(
+    "roles",
+    [("ar", "prepaid"), ("balance_sheet",)],
+    ids=["no balance sheet", "nothing to compare"],
+)
+def test_receivables_job_needs_balance_sheet_and_a_report(client, as_user, roles):
+    as_user(role=UserRole.employee)
+    res, storage, task = _start_receivables(
+        client, {r: (f"{r}.pdf", b"%PDF-1.4", "application/pdf") for r in roles}
+    )
+    assert res.status_code == 422
+    storage.upload_file.assert_not_called()
     task.delay.assert_not_called()
 
 

@@ -918,8 +918,38 @@ def parse_ar_aging(pages: list[Page]) -> ReportTotal:
                         page.number,
                     )
                 return ReportTotal(PageType.AR_AGING, a[-1], identities)
+    if unread is None:
+        # No Count line at all (OCR lost it): add up the owners' balances.
+        # An owner row is an account number then the five aging amounts.
+        rows = [
+            a[-1]
+            for page in pages
+            for ln in page.lines
+            if _ACCOUNT_NO.match(ln.text.strip())
+            and len(a := _amounts_on(ln, page, "AR aging total")) == 5
+        ]
+        summed = _row_sum(rows, "AR aging total", "the Count line")
+        if summed:
+            return ReportTotal(PageType.AR_AGING, summed, identities, rows=len(rows))
     return _guess_total(
         PageType.AR_AGING, unread, identities, "AR aging total", "the Count line's balance"
+    )
+
+
+def _row_sum(rows: list[Value], label: str, what: str) -> Value | None:
+    """Best guess at a report total whose line OCR lost entirely: the sum of
+    its rows, highlighted over the last page's rows. Always a guess — a
+    row OCR missed too would make it short — so it goes to a person."""
+    if not rows:
+        return None
+    last = rows[-1].page
+    return Value(
+        sum((r.amount for r in rows), Decimal(0)),
+        last,
+        BBox.union_all([r.bbox for r in rows if r.page == last]),
+        label,
+        note=f"Couldn't read {what}; added up the report's {len(rows)} rows instead.",
+        guessed=True,
     )
 
 
@@ -963,7 +993,13 @@ def parse_prepaid_assessments(pages: list[Page]) -> ReportTotal:
             elif _ACCOUNT_NO.search(ln.text):
                 rows.append(a[0])
     if total is None:
-        return ReportTotal(PageType.PREPAID_ASSESSMENTS, None, identities)
+        # The total line was lost (OCR): add up the owners instead.
+        guess = _row_sum(
+            [Value(abs(r.amount), r.page, r.bbox, r.label) for r in rows],
+            "Prepaid assessment report total",
+            "the report total",
+        )
+        return ReportTotal(PageType.PREPAID_ASSESSMENTS, guess, identities, rows=len(rows))
     # Credits print negative; OCR occasionally drops the minus, so sum magnitudes.
     if rows:
         _settle(

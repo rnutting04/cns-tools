@@ -413,7 +413,10 @@ export interface FdicInstitution {
   notes: string[]
 }
 
-export type AccountingTool = 'fdic' | 'revenue_threshold'
+export type AccountingTool = 'fdic' | 'revenue_threshold' | 'receivables'
+
+/** The combined files a receivables run compares */
+export type ReceivablesRole = 'balance_sheet' | 'ar' | 'prepaid'
 
 /** A background run over a combined multi-association PDF */
 export interface AccountingJobSummary {
@@ -442,8 +445,51 @@ export interface RevenueSectionResult {
   annual: RevenueBasis
 }
 
+/** One side of a receivables comparison, as read from its PDF */
+export interface ReceivablesSide {
+  source: string
+  label: string
+  amount: number | null
+  page: number | null
+  bbox: number[] | null
+  verified: boolean | null
+  guessed: boolean
+}
+
+export interface ReceivablesCheck {
+  id: 'ar' | 'prepaid_assessments'
+  title: string
+  status: FinancialCheckStatus
+  balance_sheet: ReceivablesSide | null
+  report: ReceivablesSide | null
+  difference: number | null
+  notes: string[]
+}
+
+/** Pages ([first, last]) of this association in each uploaded file */
+export type ReceivablesPages = Partial<Record<ReceivablesRole, number[] | null>>
+
+export interface ReceivablesSectionResult {
+  pages: ReceivablesPages
+  /** where a report printed the name differently (paired despite OCR) */
+  names: Partial<Record<ReceivablesRole, string>>
+  checks: ReceivablesCheck[]
+}
+
+/** An association only found in the AR / prepaid files */
+export interface ReceivablesUnmatched {
+  problem: string
+  pages: ReceivablesPages
+  reports: Partial<Record<ReceivablesRole, ReceivablesSide | null>>
+}
+
 /** `problem` is set when the association's section couldn't be processed */
-export type SectionResult = { problem: string } | FdicSectionResult | RevenueSectionResult
+export type SectionResult =
+  | { problem: string }
+  | FdicSectionResult
+  | RevenueSectionResult
+  | ReceivablesSectionResult
+  | ReceivablesUnmatched
 
 export interface AccountingJobResult {
   association: string

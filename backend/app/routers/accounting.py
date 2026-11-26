@@ -11,12 +11,11 @@ PDFs without a text layer apply here too.
 """
 
 import io
+import json
 import logging
 import uuid
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from pdfminer.pdfparser import PDFSyntaxError
-from pdfplumber.utils.exceptions import PdfminerException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -40,8 +39,9 @@ from app.services.financials.batch import TOOLS
 from app.services.financials.extract import Packet, Value, extract_packet
 from app.services.financials.fdic import Account, fdic_exposure
 from app.services.financials.ocr import ocr_available
-from app.services.financials.pdf import Page, load_pages
-from app.services.financials.tasks import run_accounting_job
+from app.services.financials.pdf import PDF_ERRORS, Page, load_pages
+from app.services.financials.receivables import ROLES
+from app.services.financials.tasks import MULTI_FILE_TOOLS, run_accounting_job
 from app.services.financials.thresholds import RevenueBasis, revenue_tier
 from app.services.storage import storage_service
 
@@ -50,7 +50,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/accounting", tags=["accounting"])
 
 MAX_PDF_BYTES = 40 * 1024 * 1024
-_PDF_ERRORS = (PdfminerException, PDFSyntaxError, ValueError)
+_PDF_ERRORS = PDF_ERRORS
 
 
 def _load(upload: UploadFile) -> tuple[str, list[Page], Packet]:
@@ -227,32 +227,60 @@ def _own_job(db: Session, job_id: str, user: User) -> AccountingJob:
     return job
 
 
+def _job_pdf(upload: UploadFile) -> bytes:
+    data = upload.file.read(MAX_JOB_PDF_BYTES + 1)
+    name = upload.filename or "PDF"
+    if len(data) > MAX_JOB_PDF_BYTES:
+        raise HTTPException(status_code=413, detail=f"{name} is larger than 100 MB.")
+    if not data.startswith(b"%PDF"):
+        raise HTTPException(status_code=422, detail=f"{name} is not a PDF.")
+    return data
+
+
 @router.post("/jobs", response_model=AccountingJobSummary, status_code=202)
 def start_job(
     tool: str = Form(...),
-    report: UploadFile = File(...),
+    report: UploadFile | None = File(None),
+    balance_sheet: UploadFile | None = File(None),
+    ar: UploadFile | None = File(None),
+    prepaid: UploadFile | None = File(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> AccountingJobSummary:
     """Run a tool over a combined PDF (any number of associations) in the
-    background. Poll GET /accounting/jobs/{id} for progress and results."""
-    if tool not in TOOLS:
-        raise HTTPException(status_code=422, detail=f"Unknown tool: {tool}")
-    data = report.file.read(MAX_JOB_PDF_BYTES + 1)
-    if len(data) > MAX_JOB_PDF_BYTES:
-        raise HTTPException(status_code=413, detail="PDF is larger than 100 MB.")
-    if not data.startswith(b"%PDF"):
-        raise HTTPException(status_code=422, detail="File is not a PDF.")
+    background. Poll GET /accounting/jobs/{id} for progress and results.
 
+    Most tools take one file (``report``). ``receivables`` takes the combined
+    ``balance_sheet`` file plus the ``ar`` and/or ``prepaid`` files."""
     job_id = uuid.uuid4()
-    filename = report.filename or "report.pdf"
-    key = f"accounting/{job_id}/input.pdf"
-    storage_service.upload_file(data, key, content_type="application/pdf")
+    if tool in MULTI_FILE_TOOLS:
+        given = {"balance_sheet": balance_sheet, "ar": ar, "prepaid": prepaid}
+        uploads = {r: given[r] for r in ROLES if given[r] is not None}
+        if "balance_sheet" not in uploads or len(uploads) < 2:
+            raise HTTPException(
+                status_code=422,
+                detail="Upload the balance sheet file and the AR and/or prepaid file.",
+            )
+    elif tool in TOOLS:
+        if report is None:
+            raise HTTPException(status_code=422, detail="Upload a PDF.")
+        uploads = {"report": report}
+    else:
+        raise HTTPException(status_code=422, detail=f"Unknown tool: {tool}")
+
+    files = {role: _job_pdf(u) for role, u in uploads.items()}
+    keys: dict[str, str] = {}
+    for role, data in files.items():
+        name = "input" if role == "report" else role
+        keys[role] = f"accounting/{job_id}/{name}.pdf"
+        storage_service.upload_file(data, keys[role], content_type="application/pdf")
+    filename = " + ".join(u.filename or f"{role}.pdf" for role, u in uploads.items())[:255]
     job = AccountingJob(
         id=job_id,
         tool=tool,
         filename=filename,
-        input_path=key,
+        # One key, or a JSON object of keys by role (see tasks.input_keys).
+        input_path=keys["report"] if "report" in keys else json.dumps(keys),
         results=[],
         pages_done=0,
         status=JobStatus.pending,
