@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
-import Chip from '@mui/material/Chip'
 import CircularProgress from '@mui/material/CircularProgress'
 import Divider from '@mui/material/Divider'
 import IconButton from '@mui/material/IconButton'
@@ -27,61 +26,23 @@ import LetterDetailDialog from '../components/letters/LetterDetailDialog'
 import BudgetDetailDialog from '../components/budget/BudgetDetailDialog'
 import { downloadFromUrl } from '../utils/download'
 import { formatDateTime } from '../utils/formatDate'
-import { JOB_TOOLS, jobLink, jobProgress, utc } from './accounting/jobTools'
-import type { AccountingJobSummary, Job, JobDetail, JobStatus, JobType } from '../types'
+import { jobLink } from './accounting/jobTools'
+import {
+  byNewest,
+  fromJob,
+  fromRun,
+  type JobKind as Kind,
+  type JobRow as Row,
+} from '../components/common/jobRows'
+import TypeChip from '../components/common/JobTypeChip'
+import type { AccountingJobSummary, Job, JobDetail } from '../types'
 
-type Kind = JobType | 'accounting'
 type TabValue = 'all' | Kind
 
 const TAB_NOUN: Record<Kind, string> = {
   letter: 'letter',
   budget: 'budget',
   accounting: 'accounting',
-}
-const TYPE_COLOR: Record<Kind, 'primary' | 'secondary' | 'success'> = {
-  letter: 'primary',
-  budget: 'secondary',
-  accounting: 'success',
-}
-
-/** A letter / budget job or an accounting tool run, as one list row. */
-interface Row {
-  id: string
-  kind: Kind
-  typeLabel: string
-  title: string
-  /** association (letters, budgets) or progress (accounting runs) */
-  detail: string
-  status: JobStatus
-  created_at: string
-  job?: Job
-  run?: AccountingJobSummary
-}
-
-const fromJob = (job: Job): Row => ({
-  id: job.id,
-  kind: job.job_type,
-  typeLabel: job.job_type === 'budget' ? 'Budget' : 'Letter',
-  title: job.title,
-  detail: job.association_name,
-  status: job.status,
-  created_at: job.created_at,
-  job,
-})
-
-const fromRun = (run: AccountingJobSummary): Row => ({
-  id: run.id,
-  kind: 'accounting',
-  typeLabel: JOB_TOOLS[run.tool]?.label ?? 'Accounting',
-  title: run.filename,
-  detail: jobProgress(run),
-  status: run.status,
-  created_at: utc(run.created_at),
-  run,
-})
-
-function TypeChip({ row }: { row: Row }) {
-  return <Chip label={row.typeLabel} size="small" color={TYPE_COLOR[row.kind]} variant="outlined" />
 }
 
 function JobsSkeleton() {
@@ -255,7 +216,7 @@ export default function JobsPage() {
         return fromJob(live ? { ...job, status: live.status } : job)
       }),
       ...runs.map((run) => fromRun({ ...run, ...liveRuns[run.id] })),
-    ].sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))
+    ].sort(byNewest)
     return tab === 'all' ? merged : merged.filter((r) => r.kind === tab)
   }, [allJobs, liveJobs, runs, liveRuns, tab])
 

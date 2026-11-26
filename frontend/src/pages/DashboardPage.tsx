@@ -1,47 +1,44 @@
+import { Fragment, useMemo } from 'react'
+import type { ReactNode } from 'react'
 import Box from '@mui/material/Box'
-import Card from '@mui/material/Card'
-import CardActionArea from '@mui/material/CardActionArea'
-import CardContent from '@mui/material/CardContent'
-import Chip from '@mui/material/Chip'
+import Button from '@mui/material/Button'
+import ButtonBase from '@mui/material/ButtonBase'
 import Divider from '@mui/material/Divider'
 import Grid from '@mui/material/Grid'
+import List from '@mui/material/List'
+import ListItemButton from '@mui/material/ListItemButton'
 import Paper from '@mui/material/Paper'
 import Skeleton from '@mui/material/Skeleton'
 import Typography from '@mui/material/Typography'
-import Button from '@mui/material/Button'
-import { alpha, useTheme } from '@mui/material/styles'
-import ApartmentIcon from '@mui/icons-material/Apartment'
-import PeopleIcon from '@mui/icons-material/People'
-import DescriptionIcon from '@mui/icons-material/Description'
-import TableChartIcon from '@mui/icons-material/TableChart'
+import { alpha } from '@mui/material/styles'
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance'
-import WorkHistoryIcon from '@mui/icons-material/WorkHistory'
+import CalculateIcon from '@mui/icons-material/Calculate'
 import ChevronRightIcon from '@mui/icons-material/ChevronRight'
+import DescriptionIcon from '@mui/icons-material/Description'
+import FolderIcon from '@mui/icons-material/Folder'
 import InboxOutlinedIcon from '@mui/icons-material/InboxOutlined'
-import type { SvgIconProps } from '@mui/material/SvgIcon'
 import { useQuery } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useJobs } from '../context/JobsContext'
 import { hasRole } from '../utils/auth'
 import {
   REFERENCE_STALE_TIME,
+  fetchAccountingJobs,
   fetchAssociations,
   fetchJobs,
   fetchUsers,
   queryKeys,
 } from '../api/queries'
-import type { JobType } from '../types'
 import JobStatusChip from '../components/common/JobStatusChip'
+import { byNewest, fromJob, fromRun } from '../components/common/jobRows'
+import JobTypeChip from '../components/common/JobTypeChip'
+import type { JobRow } from '../components/common/jobRows'
+import { ACCOUNTING_TOOLS } from './accounting/tools'
+import { jobLink } from './accounting/jobTools'
 import { formatDateTime } from '../utils/formatDate'
 
-type BrandColor = 'primary' | 'secondary' | 'warning'
-
-const TYPE_LABEL: Record<JobType, string> = { letter: 'Letter', budget: 'Budget' }
-const TYPE_COLOR: Record<JobType, 'primary' | 'secondary'> = {
-  letter: 'primary',
-  budget: 'secondary',
-}
+const RECENT = 6
 
 function greeting(): string {
   const h = new Date().getHours()
@@ -55,145 +52,172 @@ function todayLabel(): string {
     weekday: 'long',
     month: 'long',
     day: 'numeric',
+    year: 'numeric',
   })
 }
 
-// A tinted, rounded icon badge — the shared visual motif across the app's cards.
-function IconBadge({
-  color,
-  children,
-}: {
-  color: BrandColor
-  children: React.ReactElement<SvgIconProps>
-}) {
+const roleLabel = (role: string) => role.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase())
+
+/** Small uppercase heading used for panel sections. */
+function Overline({ children }: { children: ReactNode }) {
   return (
-    <Box
-      sx={(theme) => ({
-        width: 48,
-        height: 48,
-        flexShrink: 0,
-        borderRadius: 2,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        bgcolor: alpha(theme.palette[color].main, 0.12),
-        color: `${color}.main`,
-      })}
+    <Typography
+      variant="overline"
+      color="text.secondary"
+      sx={{ fontWeight: 600, letterSpacing: '0.08em', lineHeight: 1.6 }}
     >
       {children}
+    </Typography>
+  )
+}
+
+function PanelHeader({ title, action }: { title: string; action?: ReactNode }) {
+  return (
+    <Box
+      sx={{
+        px: 2.5,
+        py: 1.5,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        borderBottom: 1,
+        borderColor: 'divider',
+      }}
+    >
+      <Typography variant="subtitle1" fontWeight={600}>
+        {title}
+      </Typography>
+      {action}
     </Box>
   )
 }
 
-interface StatCardProps {
-  icon: React.ReactElement<SvgIconProps>
+interface Metric {
   label: string
-  value: string | number
-  color: BrandColor
-  to?: string
+  value: number | null
+  caption: string
+  to: string
 }
 
-function StatCard({ icon, label, value, color, to }: StatCardProps) {
-  const inner = (
-    <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-      <IconBadge color={color}>{icon}</IconBadge>
-      <Box flex={1} minWidth={0}>
-        <Typography variant="h5" fontWeight={700} lineHeight={1.2}>
-          {value}
-        </Typography>
-        <Typography variant="body2" color="text.secondary" noWrap>
-          {label}
-        </Typography>
-      </Box>
-      {to && <ChevronRightIcon fontSize="small" sx={{ color: 'text.disabled' }} />}
-    </CardContent>
-  )
-
+/** One figure in the overview strip. */
+function MetricCell({ m }: { m: Metric }) {
   return (
-    <Card
-      variant="outlined"
+    <ButtonBase
+      component={Link}
+      to={m.to}
       sx={(theme) => ({
-        borderRadius: 2.5,
+        display: 'block',
+        textAlign: 'left',
+        width: '100%',
         height: '100%',
-        transition: theme.transitions.create(['box-shadow', 'transform', 'border-color'], {
-          duration: theme.transitions.duration.shorter,
-        }),
-        ...(to && {
-          '&:hover': {
-            borderColor: `${color}.main`,
-            boxShadow: `0 6px 16px ${alpha(theme.palette[color].main, 0.16)}`,
-            transform: 'translateY(-2px)',
-          },
-        }),
+        px: 2.5,
+        py: 2,
+        transition: theme.transitions.create('background-color'),
+        '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.04) },
+        '&:focus-visible': { outline: `2px solid ${theme.palette.primary.main}` },
       })}
     >
-      {to ? (
-        <CardActionArea component={Link} to={to} sx={{ height: '100%' }}>
-          {inner}
-        </CardActionArea>
-      ) : (
-        inner
-      )}
-    </Card>
+      <Overline>{m.label}</Overline>
+      <Typography
+        sx={{
+          fontSize: 30,
+          fontWeight: 700,
+          lineHeight: 1.15,
+          fontVariantNumeric: 'tabular-nums',
+          color: 'text.primary',
+        }}
+      >
+        {m.value ?? <Skeleton width={56} />}
+      </Typography>
+      <Typography variant="body2" color="text.secondary" noWrap>
+        {m.caption}
+      </Typography>
+    </ButtonBase>
   )
 }
 
-interface QuickLinkProps {
-  icon: React.ReactElement<SvgIconProps>
+interface ToolLink {
   label: string
   description: string
   to: string
-  color: BrandColor
+  icon: ReactNode
 }
 
-function QuickLink({ icon, label, description, to, color }: QuickLinkProps) {
+function ToolItem({ t }: { t: ToolLink }) {
   return (
-    <Card
-      variant="outlined"
-      sx={(theme) => ({
-        borderRadius: 2.5,
-        height: '100%',
-        transition: theme.transitions.create(['box-shadow', 'transform', 'border-color'], {
-          duration: theme.transitions.duration.shorter,
-        }),
-        '&:hover': {
-          borderColor: `${color}.main`,
-          boxShadow: `0 6px 16px ${alpha(theme.palette[color].main, 0.16)}`,
-          transform: 'translateY(-2px)',
-        },
-      })}
+    <ListItemButton
+      component={Link}
+      to={t.to}
+      sx={{ px: 2.5, py: 1, gap: 1.5, alignItems: 'center' }}
     >
-      <CardActionArea component={Link} to={to} sx={{ height: '100%' }}>
-        <CardContent sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
-          <IconBadge color={color}>{icon}</IconBadge>
-          <Box minWidth={0}>
-            <Typography variant="subtitle1" fontWeight={600} lineHeight={1.3}>
-              {label}
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              {description}
-            </Typography>
-          </Box>
-        </CardContent>
-      </CardActionArea>
-    </Card>
+      <Box
+        sx={(theme) => ({
+          width: 32,
+          height: 32,
+          borderRadius: 1,
+          flexShrink: 0,
+          display: 'grid',
+          placeItems: 'center',
+          color: 'primary.main',
+          bgcolor: alpha(theme.palette.primary.main, 0.08),
+          '& svg': { fontSize: 18 },
+        })}
+      >
+        {t.icon}
+      </Box>
+      <Box minWidth={0} flex={1}>
+        <Typography variant="body2" fontWeight={600} noWrap>
+          {t.label}
+        </Typography>
+        <Typography variant="caption" color="text.secondary" display="block" noWrap>
+          {t.description}
+        </Typography>
+      </Box>
+      <ChevronRightIcon fontSize="small" sx={{ color: 'text.disabled' }} />
+    </ListItemButton>
   )
 }
 
-function RecentJobsSkeleton() {
+function ActivityRow({ row, onOpen }: { row: JobRow; onOpen: (row: JobRow) => void }) {
+  return (
+    <ListItemButton
+      onClick={() => onOpen(row)}
+      sx={{ px: 2.5, py: 1.25, gap: 2, alignItems: 'center' }}
+    >
+      <Box sx={{ width: 112, flexShrink: 0, display: { xs: 'none', sm: 'block' } }}>
+        <JobTypeChip row={row} />
+      </Box>
+      <Box minWidth={0} flex={1}>
+        <Typography variant="body2" fontWeight={500} noWrap>
+          {row.title || 'Untitled'}
+        </Typography>
+        <Typography variant="caption" color="text.secondary" display="block" noWrap>
+          {row.detail}
+        </Typography>
+      </Box>
+      <JobStatusChip status={row.status} />
+      <Typography
+        variant="caption"
+        color="text.secondary"
+        sx={{ width: 150, flexShrink: 0, textAlign: 'right', display: { xs: 'none', md: 'block' } }}
+      >
+        {formatDateTime(row.created_at)}
+      </Typography>
+    </ListItemButton>
+  )
+}
+
+function ActivitySkeleton() {
   return (
     <>
-      {[0, 1, 2].map((i) => (
-        <Box key={i}>
-          {i > 0 && <Divider />}
-          <Box sx={{ px: 2, py: 1.5, display: 'flex', alignItems: 'center', gap: 2 }}>
-            <Skeleton variant="rounded" width={56} height={22} />
-            <Box flex={1}>
-              <Skeleton variant="text" width="50%" height={20} />
-            </Box>
-            <Skeleton variant="rounded" width={72} height={22} />
-            <Skeleton variant="text" width={90} height={18} />
+      {[0, 1, 2, 3].map((i) => (
+        <Box key={i} sx={{ px: 2.5, py: 1.5, display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Skeleton variant="rounded" width={80} height={22} />
+          <Box flex={1}>
+            <Skeleton variant="text" width="45%" />
+            <Skeleton variant="text" width="30%" />
           </Box>
+          <Skeleton variant="rounded" width={80} height={22} />
         </Box>
       ))}
     </>
@@ -201,9 +225,9 @@ function RecentJobsSkeleton() {
 }
 
 export default function DashboardPage() {
-  const theme = useTheme()
   const { user } = useAuth()
-  const { inFlightCount } = useJobs()
+  const navigate = useNavigate()
+  const { jobs: liveJobs, accountingJobs: liveRuns, inFlightCount } = useJobs()
 
   const isManagerUp = user ? hasRole(user, ['manager', 'admin', 'super_admin']) : false
   const isAdmin = user ? hasRole(user, ['admin', 'super_admin']) : false
@@ -223,188 +247,223 @@ export default function DashboardPage() {
     staleTime: REFERENCE_STALE_TIME,
   })
   const jobsQuery = useQuery({ queryKey: queryKeys.jobs, queryFn: fetchJobs })
+  const runsQuery = useQuery({ queryKey: queryKeys.accountingJobs, queryFn: fetchAccountingJobs })
+
+  const recent = useMemo(
+    () =>
+      [
+        ...(jobsQuery.data ?? []).map((j) => {
+          const live = liveJobs[j.id]
+          return fromJob(live ? { ...j, status: live.status } : j)
+        }),
+        ...(runsQuery.data ?? []).map((r) => fromRun({ ...r, ...liveRuns[r.id] })),
+      ]
+        .sort(byNewest)
+        .slice(0, RECENT),
+    [jobsQuery.data, runsQuery.data, liveJobs, liveRuns],
+  )
 
   if (!user) return null
 
-  const assocCount = associationsQuery.data?.length ?? null
-  const userCount = usersQuery.data?.length ?? null
-  const recentJobs = (jobsQuery.data ?? []).slice(0, 5)
+  const associations = associationsQuery.data
+  const activeAssociations = associations?.filter((a) => a.is_active).length ?? null
+  const inactiveAssociations = associations ? associations.length - (activeAssociations ?? 0) : 0
+  const users = usersQuery.data
+  const activeUsers = users?.filter((u) => u.is_active).length ?? null
+  const inactiveUsers = users ? users.length - (activeUsers ?? 0) : 0
+
+  const metrics: Metric[] = [
+    ...(isManagerUp
+      ? [
+          {
+            label: 'Active associations',
+            value: activeAssociations,
+            caption: inactiveAssociations
+              ? `${inactiveAssociations} inactive · ${associations?.length} total`
+              : 'All associations active',
+            to: '/associations',
+          },
+        ]
+      : []),
+    ...(isAdmin
+      ? [
+          {
+            label: 'Active users',
+            value: activeUsers,
+            caption: inactiveUsers ? `${inactiveUsers} deactivated` : 'All accounts active',
+            to: '/users',
+          },
+        ]
+      : []),
+    {
+      label: 'Jobs in progress',
+      value: inFlightCount,
+      caption: inFlightCount ? 'Letters, budgets and accounting runs' : 'Nothing running',
+      to: '/jobs',
+    },
+  ]
+
+  const correspondence: ToolLink[] = [
+    {
+      label: 'Letter generator',
+      description: 'Correspondence letters from templates',
+      to: '/letters',
+      icon: <DescriptionIcon />,
+    },
+    ...(isAdmin
+      ? [
+          {
+            label: 'Template manager',
+            description: 'Upload and maintain letter templates',
+            to: '/templates',
+            icon: <FolderIcon />,
+          },
+        ]
+      : []),
+  ]
+  const finance: ToolLink[] = [
+    ...(isAdmin
+      ? [
+          {
+            label: 'Budget generator',
+            description: 'Draft an operating budget from financials',
+            to: '/ai/budget',
+            icon: <AccountBalanceIcon />,
+          },
+        ]
+      : []),
+    ...ACCOUNTING_TOOLS.map((t) => ({
+      label: t.title,
+      description: t.input,
+      to: `/accounting/${t.path}`,
+      icon: t.icon,
+    })),
+  ]
+
+  const openRow = (row: JobRow) => navigate(row.run ? jobLink(row.run) : '/jobs')
+  const loadingActivity = jobsQuery.isLoading || runsQuery.isLoading
 
   return (
     <Box>
-      {/* Welcome banner */}
-      <Paper
-        elevation={0}
-        sx={{
-          position: 'relative',
-          overflow: 'hidden',
-          borderRadius: 3,
-          p: { xs: 3, sm: 4 },
-          mb: 4,
-          border: 'none',
-          color: '#fff',
-          background: `linear-gradient(135deg, ${theme.palette.primary.dark} 0%, ${theme.palette.primary.main} 60%, ${theme.palette.secondary.dark} 135%)`,
-          '&::after': {
-            content: '""',
-            position: 'absolute',
-            inset: 0,
-            background:
-              'radial-gradient(50% 60% at 90% 15%, rgba(255,255,255,0.14), transparent 60%)',
-            pointerEvents: 'none',
-          },
-        }}
+      {/* Header */}
+      <Box
+        display="flex"
+        alignItems={{ xs: 'flex-start', sm: 'flex-end' }}
+        justifyContent="space-between"
+        flexDirection={{ xs: 'column', sm: 'row' }}
+        gap={2}
+        pb={2.5}
+        mb={3}
+        sx={{ borderBottom: 1, borderColor: 'divider' }}
       >
-        <Box position="relative">
-          <Typography variant="h4" fontWeight={700}>
+        <Box minWidth={0}>
+          <Typography variant="h4" component="h1">
             {greeting()}, {user.fname}
           </Typography>
-          <Box display="flex" alignItems="center" gap={1.25} mt={1} flexWrap="wrap">
-            {user.title && (
-              <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.85)' }}>
-                {user.title}
-              </Typography>
-            )}
-            <Chip
-              label={user.role.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase())}
-              size="small"
-              sx={{
-                height: 22,
-                fontWeight: 600,
-                color: '#fff',
-                bgcolor: 'rgba(255,255,255,0.22)',
-              }}
-            />
-            <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.7)', ml: { sm: 0.5 } }}>
-              · {todayLabel()}
-            </Typography>
-          </Box>
+          <Typography variant="body2" color="text.secondary" mt={0.5}>
+            {todayLabel()} · {user.title || roleLabel(user.role)}
+          </Typography>
+        </Box>
+        <Box display="flex" gap={1} flexShrink={0}>
+          <Button
+            component={Link}
+            to="/accounting"
+            variant="outlined"
+            startIcon={<CalculateIcon />}
+          >
+            Accounting tools
+          </Button>
+          <Button
+            component={Link}
+            to="/letters"
+            variant="contained"
+            startIcon={<DescriptionIcon />}
+          >
+            New letter
+          </Button>
+        </Box>
+      </Box>
+
+      {/* Overview */}
+      <Paper variant="outlined" sx={{ borderRadius: 2, mb: 3, overflow: 'hidden' }}>
+        <Box
+          display="grid"
+          gridTemplateColumns={{
+            xs: '1fr',
+            sm: `repeat(${Math.min(metrics.length, 3)}, minmax(0, 1fr))`,
+          }}
+          sx={{
+            '& > *:not(:last-child)': {
+              borderRight: { sm: 1 },
+              borderBottom: { xs: 1, sm: 0 },
+              borderColor: { xs: 'divider', sm: 'divider' },
+            },
+          }}
+        >
+          {metrics.map((m) => (
+            <Box key={m.label}>
+              <MetricCell m={m} />
+            </Box>
+          ))}
         </Box>
       </Paper>
 
-      {/* Overview stats */}
-      <Typography variant="subtitle1" fontWeight={600} mb={1.5} color="text.secondary">
-        Overview
-      </Typography>
-      <Grid container spacing={2} mb={4}>
-        {isManagerUp && (
-          <Grid size={{ xs: 12, sm: 6, md: 4 }}>
-            <StatCard
-              icon={<ApartmentIcon />}
-              label="Associations"
-              value={assocCount ?? '—'}
-              color="primary"
-              to="/associations"
+      <Grid container spacing={3}>
+        {/* Recent activity */}
+        <Grid size={{ xs: 12, md: 8 }}>
+          <Paper variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden' }}>
+            <PanelHeader
+              title="Recent activity"
+              action={
+                <Button component={Link} to="/jobs" size="small" endIcon={<ChevronRightIcon />}>
+                  All jobs
+                </Button>
+              }
             />
-          </Grid>
-        )}
-        {isAdmin && (
-          <Grid size={{ xs: 12, sm: 6, md: 4 }}>
-            <StatCard
-              icon={<PeopleIcon />}
-              label="Users"
-              value={userCount ?? '—'}
-              color="secondary"
-              to="/users"
-            />
-          </Grid>
-        )}
-        <Grid size={{ xs: 12, sm: 6, md: 4 }}>
-          <StatCard
-            icon={<WorkHistoryIcon />}
-            label="Active jobs"
-            value={inFlightCount}
-            color="warning"
-            to="/jobs"
-          />
-        </Grid>
-      </Grid>
-
-      {/* Recent jobs */}
-      <Box display="flex" justifyContent="space-between" alignItems="center" mb={1.5}>
-        <Typography variant="subtitle1" fontWeight={600} color="text.secondary">
-          Recent jobs
-        </Typography>
-        <Button component={Link} to="/jobs" size="small">
-          View all
-        </Button>
-      </Box>
-      <Card variant="outlined" sx={{ mb: 4, borderRadius: 2.5 }}>
-        {jobsQuery.isLoading ? (
-          <RecentJobsSkeleton />
-        ) : recentJobs.length === 0 ? (
-          <Box textAlign="center" py={5} px={2}>
-            <InboxOutlinedIcon sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
-            <Typography color="text.secondary" variant="body2">
-              No jobs yet. Generate a letter to get started.
-            </Typography>
-          </Box>
-        ) : (
-          recentJobs.map((job, i) => (
-            <Box key={job.id}>
-              {i > 0 && <Divider />}
-              <Box
-                sx={{
-                  px: 2,
-                  py: 1.5,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 2,
-                  flexWrap: 'wrap',
-                }}
-              >
-                <Chip
-                  label={TYPE_LABEL[job.job_type]}
-                  size="small"
-                  color={TYPE_COLOR[job.job_type]}
-                  variant="outlined"
-                  sx={{ flexShrink: 0 }}
-                />
-                <Typography variant="body2" flex={1} noWrap>
-                  {job.title}
-                </Typography>
-                <JobStatusChip status={job.status} />
-                <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0 }}>
-                  {formatDateTime(job.created_at)}
+            {loadingActivity ? (
+              <ActivitySkeleton />
+            ) : recent.length === 0 ? (
+              <Box textAlign="center" py={6} px={2}>
+                <InboxOutlinedIcon sx={{ fontSize: 36, color: 'text.disabled', mb: 1 }} />
+                <Typography color="text.secondary" variant="body2">
+                  No activity yet. Letters, budgets and accounting runs you start will appear here.
                 </Typography>
               </Box>
-            </Box>
-          ))
-        )}
-      </Card>
-
-      {/* Quick actions */}
-      <Typography variant="subtitle1" fontWeight={600} mb={1.5} color="text.secondary">
-        Tools
-      </Typography>
-      <Grid container spacing={2}>
-        <Grid size={{ xs: 12, sm: 6, md: 4 }}>
-          <QuickLink
-            icon={<DescriptionIcon />}
-            label="Letter generator"
-            description="Generate correspondence letters"
-            to="/letters"
-            color="primary"
-          />
+            ) : (
+              <List disablePadding>
+                {recent.map((row, i) => (
+                  <Fragment key={row.id}>
+                    {i > 0 && <Divider />}
+                    <ActivityRow row={row} onOpen={openRow} />
+                  </Fragment>
+                ))}
+              </List>
+            )}
+          </Paper>
         </Grid>
-        {isAdmin && (
-          <Grid size={{ xs: 12, sm: 6, md: 4 }}>
-            <QuickLink
-              icon={<AccountBalanceIcon />}
-              label="Budget generator"
-              description="Draft an HOA operating budget from financial reports"
-              to="/ai/budget"
-              color="secondary"
-            />
-          </Grid>
-        )}
-        <Grid size={{ xs: 12, sm: 6, md: 4 }}>
-          <QuickLink
-            icon={<TableChartIcon />}
-            label="Excel tools"
-            description="Process and export spreadsheet data"
-            to="/excel"
-            color="warning"
-          />
+
+        {/* Tools */}
+        <Grid size={{ xs: 12, md: 4 }}>
+          <Paper variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden' }}>
+            <PanelHeader title="Tools" />
+            <Box px={2.5} pt={1.5}>
+              <Overline>Correspondence</Overline>
+            </Box>
+            <List disablePadding>
+              {correspondence.map((t) => (
+                <ToolItem key={t.to} t={t} />
+              ))}
+            </List>
+            <Divider sx={{ mt: 1 }} />
+            <Box px={2.5} pt={1.5}>
+              <Overline>Finance & accounting</Overline>
+            </Box>
+            <List disablePadding sx={{ pb: 1 }}>
+              {finance.map((t) => (
+                <ToolItem key={t.to} t={t} />
+              ))}
+            </List>
+          </Paper>
         </Grid>
       </Grid>
     </Box>

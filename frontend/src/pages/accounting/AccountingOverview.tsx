@@ -11,8 +11,8 @@ export default function AccountingOverview() {
   return (
     <Box>
       <Typography color="text.secondary" mb={3} maxWidth={720}>
-        Month-end and year-end checks on association financials. Every tool reads the files in
-        memory — nothing you upload is stored.
+        Month-end and year-end checks on association financials. Uploaded PDFs are never kept:
+        they're deleted as soon as a check finishes.
       </Typography>
       <Box
         display="grid"
