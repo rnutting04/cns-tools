@@ -88,8 +88,10 @@ export default function BudgetDetailDialog({ jobId, onClose, onRetried }: Props)
       await apiClient.post(`/api/budget/jobs/${detail.job_id}/retry`)
       onRetried?.()
       onClose()
-    } catch {
-      setError('Failed to retry job.')
+    } catch (err) {
+      // 410: retention already deleted the uploads; the server says what to do.
+      const detail = (err as { response?: { data?: { detail?: unknown } } }).response?.data?.detail
+      setError(typeof detail === 'string' ? detail : 'Failed to retry job.')
     } finally {
       setRetrying(false)
     }

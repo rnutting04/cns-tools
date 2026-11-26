@@ -1,4 +1,4 @@
-.PHONY: dev worker seed migrate reset stop logs ps install test test-backend test-frontend ci ci-backend ci-frontend mail-preview help
+.PHONY: dev worker beat seed migrate reset stop logs ps install test test-backend test-frontend ci ci-backend ci-frontend mail-preview help
 
 dev:
 	docker compose up -d
@@ -9,6 +9,11 @@ dev:
 # -Q default,light: letter/email tasks route to "light", budget tasks to "default".
 worker:
 	cd backend && venv/bin/celery -A app.celery_app.celery_app worker --loglevel=info --concurrency=2 -Q default,light
+
+# The scheduler for nightly housekeeping. Only needed to test scheduled
+# tasks locally; the worker above runs what it queues.
+beat:
+	cd backend && venv/bin/celery -A app.celery_app.celery_app beat --loglevel=info --schedule /tmp/celerybeat-schedule
 
 seed:
 	./scripts/seed.sh
@@ -58,6 +63,7 @@ help:
 	@echo "Available commands:"
 	@echo "  make dev           - start docker + uvicorn"
 	@echo "  make worker        - start the Celery letter-generation worker"
+	@echo "  make beat          - start the Celery scheduler (nightly housekeeping)"
 	@echo "  make seed          - seed the database"
 	@echo "  make migrate       - run alembic migrations"
 	@echo "  make reset         - nuke and rebuild local DB"

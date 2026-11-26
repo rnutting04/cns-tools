@@ -155,6 +155,18 @@ def generate_budget_task(self, job_id: str) -> dict[str, Any]:
         job.review_flag_count = len(result.review_flags)
         db.commit()
 
+        # The uploads were only needed to build the workbook (a finished
+        # budget can't be retried). If storage refuses, the nightly
+        # retention job deletes them instead.
+        try:
+            from app.services.maintenance.retention import drop_budget_uploads
+
+            if drop_budget_uploads(job):
+                db.commit()
+        except Exception:  # noqa: BLE001 — never fail a finished budget over cleanup
+            logger.warning("couldn't delete uploads of budget job %s", job_id, exc_info=True)
+            db.rollback()
+
         creator = db.query(User).filter(User.id == job.created_by).first()
         if creator:
             budget_complete_email(

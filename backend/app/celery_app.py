@@ -9,9 +9,14 @@ so the worker process starts without pulling in HTTP routing. Tasks live in
 Run the worker with:
 
     celery -A app.celery_app.celery_app worker --loglevel=info --concurrency=2
+
+and the scheduler (exactly one, or scheduled tasks run once per copy):
+
+    celery -A app.celery_app.celery_app beat --loglevel=info
 """
 
 from celery import Celery
+from celery.schedules import crontab
 
 from app.config import settings
 
@@ -47,11 +52,23 @@ celery_app.conf.update(
         "app.services.budget.tasks",
         "app.services.email.tasks",
         "app.services.financials.tasks",
+        "app.services.maintenance.tasks",
     ),
     # Queue routing: quick tasks go to the light worker, heavy tasks to default.
     task_default_queue="default",
     task_routes={
         "app.services.letters.tasks.*": {"queue": "light"},
         "app.services.email.tasks.*": {"queue": "light"},
+        "app.services.maintenance.tasks.*": {"queue": "light"},
+    },
+    # Scheduled tasks. Celery beat (one process, see RAILWAY.md and
+    # `make beat`) only enqueues them; the workers run them. Crontab times are
+    # Eastern, where the associations are.
+    timezone="America/New_York",
+    beat_schedule={
+        "purge-old-data": {
+            "task": "app.services.maintenance.tasks.purge_old_data",
+            "schedule": crontab(hour=3, minute=15),
+        },
     },
 )

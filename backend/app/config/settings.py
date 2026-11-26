@@ -37,6 +37,13 @@ class Settings(BaseSettings):
     COOKIE_SECURE: bool = False
 
     AUDIT_RETENTION_DAYS: int = 365
+    # Retention (applied nightly, see app/services/maintenance/retention.py).
+    # Jobs and what they produced (letters, budgets, accounting results and
+    # screenshots) are deleted this long after they were started.
+    JOB_RETENTION_DAYS: int = 90
+    # Uploads are deleted as soon as a job finishes; a failed or parked
+    # budget keeps its uploads this long so it can be retried or confirmed.
+    UPLOAD_RETENTION_DAYS: int = 14
 
     # Celery / Redis. Defaults target a host-run worker against the
     # docker-compose Redis. In containers, override with redis://redis:6379/0.

@@ -107,6 +107,7 @@ Most workflows are wrapped by the root [makefile](makefile):
 ```bash
 make dev            # docker compose up -d + uvicorn --reload on :8000
 make worker         # start the Celery letter-generation worker
+make beat           # start the Celery scheduler (nightly cleanup; one copy only)
 make migrate        # alembic upgrade head
 make seed           # seed the database with initial data
 make stop           # stop docker containers

@@ -4,6 +4,7 @@ import uuid
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.database import get_db
 from app.dependencies import get_current_user, require_admin
 from app.models.budget_job import BudgetJob
@@ -20,7 +21,24 @@ from app.schemas.budget import (
 from app.services.audit import log_event
 from app.services.budget import layout_profiles
 from app.services.budget.tasks import AWAITING_LAYOUT_REVIEW, generate_budget_task
+from app.services.maintenance.retention import budget_uploads_expired
 from app.services.storage import storage_service
+
+_UPLOADS_EXPIRED = (
+    "This budget's uploaded files have been deleted (they're kept for "
+    "{days} days after a budget fails or waits for review). "
+    "Start a new budget with the same files."
+)
+
+
+def _require_uploads(job: BudgetJob) -> None:
+    """410 if retention already deleted the files a re-run would need."""
+    if budget_uploads_expired(job):
+        raise HTTPException(
+            status_code=410,
+            detail=_UPLOADS_EXPIRED.format(days=settings.UPLOAD_RETENTION_DAYS),
+        )
+
 
 # Budget generation is admin-only for now.
 router = APIRouter(prefix="/budget", tags=["budget"], dependencies=[Depends(require_admin)])
@@ -95,6 +113,7 @@ def retry_budget_job(
         raise HTTPException(status_code=404, detail="Job not found")
     if job.status == JobStatus.complete:
         raise HTTPException(status_code=409, detail="Job already completed")
+    _require_uploads(job)
 
     job.status = JobStatus.pending
     job.current_step = None
@@ -133,6 +152,7 @@ def confirm_job_layout(
         raise HTTPException(status_code=404, detail="Job not found")
     if job.current_step != AWAITING_LAYOUT_REVIEW:
         raise HTTPException(status_code=409, detail="Job is not awaiting layout review")
+    _require_uploads(job)
     if not job.layout_signature:
         raise HTTPException(status_code=409, detail="Job has no detected layout to confirm")
 

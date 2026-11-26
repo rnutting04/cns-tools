@@ -12,7 +12,8 @@ export default function AccountingOverview() {
     <Box>
       <Typography color="text.secondary" mb={3} maxWidth={720}>
         Month-end and year-end checks on association financials, grouped by the file they read.
-        Uploaded PDFs are never kept: they're deleted as soon as a check finishes.
+        Uploaded PDFs are deleted as soon as a check finishes. Results and screenshots are kept for
+        90 days, so download the CSV if you need a lasting record.
       </Typography>
       {TOOL_GROUPS.map((g) => {
         const tools = ACCOUNTING_TOOLS.filter((t) => t.group === g.id)
