@@ -151,3 +151,52 @@ def test_other_users_job_is_not_visible(client, as_user, db_session):
     as_user(role=UserRole.employee)
     assert client.get(f"/api/accounting/jobs/{job.id}").status_code == 404
     assert client.get("/api/accounting/jobs/not-a-uuid").status_code == 404
+
+
+def test_pending_run_shows_its_place_in_the_queue(client, as_user, db_session):
+    from datetime import UTC, datetime, timedelta
+
+    from app.models.budget_job import BudgetJob
+
+    user = as_user(role=UserRole.employee)
+    other = factories.create_user(db_session, role=UserRole.employee)
+    now = datetime.now(UTC).replace(tzinfo=None)
+
+    def run(status, minutes_ago, owner=other):
+        job = AccountingJob(
+            tool="cd_maturity",
+            filename="x.pdf",
+            status=status,
+            results=[],
+            created_by=owner.id,
+            created_at=now - timedelta(minutes=minutes_ago),
+        )
+        db_session.add(job)
+        return job
+
+    run(JobStatus.processing, 30)  # running now
+    run(JobStatus.pending, 10)  # ahead
+    run(JobStatus.pending, 300)  # lost hours ago: not counted
+    db_session.add(
+        BudgetJob(
+            association_name="Bay Club",
+            budget_year=2027,
+            financial_report_path="k",
+            financial_report_filename="f.pdf",
+            prior_budget_path="k",
+            prior_budget_filename="p.xlsx",
+            status=JobStatus.pending,
+            created_by=other.id,
+            created_at=now - timedelta(minutes=5),
+        )
+    )  # ahead: budgets share the long-jobs worker
+    mine = run(JobStatus.pending, 1, owner=user)
+    run(JobStatus.pending, 0)  # behind
+    done = run(JobStatus.complete, 20, owner=user)
+    db_session.commit()
+
+    body = client.get(f"/api/accounting/jobs/{mine.id}").json()
+    assert (body["queue_ahead"], body["queue_running"]) == (2, 1)
+    listed = {j["id"]: j for j in client.get("/api/accounting/jobs").json()}
+    assert listed[str(mine.id)]["queue_ahead"] == 2
+    assert listed[str(done.id)]["queue_ahead"] is None

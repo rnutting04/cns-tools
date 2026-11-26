@@ -65,6 +65,10 @@ class AccountingJobSummary(BaseModel):
     error_detail: str | None
     created_at: datetime | None
     finished_at: datetime | None
+    # While pending: jobs queued before this one on the long-jobs worker
+    # (anyone's accounting runs and budgets), and how many are running now.
+    queue_ahead: int | None = None
+    queue_running: int | None = None
 
 
 class AccountingJobResult(BaseModel):

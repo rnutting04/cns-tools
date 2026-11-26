@@ -14,6 +14,7 @@ import io
 import json
 import logging
 import uuid
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
@@ -21,6 +22,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.accounting_job import AccountingJob
+from app.models.budget_job import BudgetJob
 from app.models.letter_job import JobStatus
 from app.models.user import User, UserRole
 from app.schemas.accounting import (
@@ -198,9 +200,36 @@ def fdic(
 MAX_JOB_PDF_BYTES = 100 * 1024 * 1024
 
 
-def _summary(job: AccountingJob) -> dict:
+# Accounting runs share the long-jobs worker queue with budgets. A job still
+# "pending" after this long was lost (worker restarted, broker flushed) and
+# no longer holds anyone up, so it isn't counted.
+_STALE_AFTER = timedelta(hours=2)
+
+
+def _queue(db: Session, job: AccountingJob) -> dict:
+    """Where a waiting run stands: jobs queued before it on the long-jobs
+    worker (accounting runs and budgets, everyone's) and jobs running now.
+    Only for pending runs; the worker takes jobs first in, first out."""
+    if job.status != JobStatus.pending or job.created_at is None:
+        return {"queue_ahead": None, "queue_running": None}
+    since = datetime.now(UTC).replace(tzinfo=None) - _STALE_AFTER
+    ahead = running = 0
+    for model in (AccountingJob, BudgetJob):
+        recent = db.query(model).filter(model.created_at >= since)
+        ahead += (
+            recent.filter(model.status == JobStatus.pending, model.created_at < job.created_at)
+            .filter(model.id != job.id)
+            .count()
+        )
+        running += recent.filter(model.status == JobStatus.processing).count()
+    return {"queue_ahead": ahead, "queue_running": running}
+
+
+def _summary(job: AccountingJob, db: Session | None = None) -> dict:
     results = job.results or []
+    queue = _queue(db, job) if db is not None else {}
     return {
+        **queue,
         "id": str(job.id),
         "tool": job.tool,
         "filename": job.filename,
@@ -298,7 +327,7 @@ def start_job(
     db.commit()
     run_accounting_job.delay(str(job_id))
     db.refresh(job)
-    return AccountingJobSummary(**_summary(job))
+    return AccountingJobSummary(**_summary(job, db))
 
 
 @router.get("/jobs", response_model=list[AccountingJobSummary])
@@ -312,7 +341,7 @@ def list_jobs(
     if tool:
         q = q.filter(AccountingJob.tool == tool)
     jobs = q.order_by(AccountingJob.created_at.desc()).limit(20).all()
-    return [AccountingJobSummary(**_summary(j)) for j in jobs]
+    return [AccountingJobSummary(**_summary(j, db)) for j in jobs]
 
 
 @router.get("/jobs/{job_id}", response_model=AccountingJobDetail)
@@ -326,6 +355,6 @@ def get_job(
     ``since`` (associations finished since the last poll)."""
     job = _own_job(db, job_id, current_user)
     return AccountingJobDetail(
-        **_summary(job),
+        **_summary(job, db),
         results=[AccountingJobResult(**r) for r in (job.results or [])[max(since, 0) :]],
     )

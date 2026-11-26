@@ -432,6 +432,10 @@ export interface AccountingJobSummary {
   error_detail: string | null
   created_at: string | null
   finished_at: string | null
+  /** While pending: jobs queued before this one on the long-jobs worker (anyone's) */
+  queue_ahead?: number | null
+  /** While pending: long jobs running right now */
+  queue_running?: number | null
 }
 
 export interface FdicSectionResult {

@@ -27,6 +27,7 @@ import { useJobs } from '../../context/JobsContext'
 import { isActive, useAccountingJob, useAccountingJobs } from '../../hooks/useAccountingJobs'
 import type { AccountingJobResult, AccountingJobSummary, AccountingTool } from '../../types'
 import { downloadCsv } from './helpers'
+import { queuePosition } from './jobTools'
 import { DropZone, ToolHeader } from './shared'
 
 function when(iso: string | null): string {
@@ -377,7 +378,11 @@ export default function JobRunner({
 
           {s.status === 'pending' && (
             <Alert severity="info" icon={<CircularProgress size={18} />} sx={{ mb: 2 }}>
-              Waiting for the background worker to pick this up…
+              {queuePosition(s)}
+              <Typography variant="caption" display="block">
+                Long jobs (accounting runs and budgets) take turns, oldest first. You can leave this
+                page; it starts on its own and shows up in My Jobs.
+              </Typography>
             </Alert>
           )}
           {s.status === 'processing' && (

@@ -16,9 +16,23 @@ export const jobLink = (job: Pick<AccountingJobSummary, 'id' | 'tool'>) =>
 export const utc = (iso: string | null) =>
   iso && !/[zZ]|[+-]\d\d:?\d\d$/.test(iso) ? `${iso}Z` : (iso ?? '')
 
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
+
+/** A waiting run's place in line: "Queued · 2 jobs ahead of yours · 3 running". */
+export function queuePosition(
+  j: Pick<AccountingJobSummary, 'queue_ahead' | 'queue_running'>,
+): string {
+  const ahead = j.queue_ahead
+  const running = j.queue_running ?? 0
+  if (ahead === null || ahead === undefined) return 'Waiting for the background worker'
+  const busy = running ? ` · ${plural(running, 'job', 'jobs')} running` : ''
+  if (ahead === 0) return running ? `Queued · next in line${busy}` : 'Starting…'
+  return `Queued · ${plural(ahead, 'job', 'jobs')} ahead of yours${busy}`
+}
+
 /** "Working on X · page 40 of 604", or the finished run's counts. */
 export function jobProgress(j: AccountingJobSummary): string {
-  if (j.status === 'pending') return 'Waiting for the background worker'
+  if (j.status === 'pending') return queuePosition(j)
   if (j.status === 'failed') return j.error_detail ?? 'Failed'
   const counts = `${j.associations_done} association${j.associations_done === 1 ? '' : 's'}${
     j.flagged_count ? ` · ${j.flagged_count} flagged` : ''
