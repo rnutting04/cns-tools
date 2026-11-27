@@ -19,7 +19,8 @@ from typing import Any
 from .extract import Value, _page_of, _within_one_edit, extract_packet
 from .fdic import fdic_exposure
 from .maturity import FLAGGED_TIERS, cd_maturities
-from .pdf import Page
+from .negative import negative_balances
+from .pdf import BBox, Page
 from .thresholds import RevenueBasis, revenue_tier
 
 _WEEKDAYS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
@@ -323,10 +324,50 @@ def cd_section(section: Section) -> dict[str, Any]:
     }
 
 
+def _shot(page: int, b: BBox, caption: str) -> dict[str, Any]:
+    """A screenshot placeholder, filled with an image by the job while it
+    still has the PDF."""
+    return {
+        "role": "report",
+        "page": page,
+        "bbox": [b.x0, b.top, b.x1, b.bottom],
+        "caption": caption,
+    }
+
+
+def negative_bank_section(section: Section) -> dict[str, Any]:
+    packet = extract_packet(section.pages)
+    if packet.balance_sheet is None:
+        return {"problem": "Balance sheet couldn't be read in this section."}
+    r = negative_balances(packet.balance_sheet)
+
+    def account(a) -> dict[str, Any]:
+        page = a.value.page
+        return {
+            "label": a.label,
+            "amount": float(a.amount),
+            "amounts": {c: float(v) for c, v in a.amounts.items()},
+            "negative": a.negative,
+            "verified": a.verified,
+            "notes": a.notes,
+            "source": _fig(a.value),
+            "shots": [_shot(page, a.bbox, f"Balance sheet p.{page}")] if a.negative else [],
+        }
+
+    area = r.bank_area
+    return {
+        "accounts": [account(a) for a in r.accounts],
+        "totals_ok": r.totals_ok,
+        "total_checks": r.total_checks,
+        "shots": [_shot(area[0], area[1], f"Bank section, p.{area[0]}")] if area else [],
+    }
+
+
 TOOLS: dict[str, Callable[[Section], dict[str, Any]]] = {
     "revenue_threshold": revenue_section,
     "fdic": fdic_section,
     "cd_maturity": cd_section,
+    "negative_bank": negative_bank_section,
 }
 
 
@@ -350,6 +391,9 @@ def flagged(tool: str, result: dict[str, Any]) -> bool:
         return any(i["over_limit"] for i in result["institutions"]) or bool(result["unrecognized"])
     if tool == "cd_maturity":
         return any(c["tier"] in FLAGGED_TIERS for c in result["cds"])
+    if tool == "negative_bank":
+        # A failed Total Bank sum may hide an overdraft whose sign was misread.
+        return any(a["negative"] for a in result["accounts"]) or result["totals_ok"] is False
     return result["ytd_actual"]["tier"] in (None, "compilation", "review", "audit")
 
 

@@ -54,7 +54,7 @@ class AccountingJobSummary(BaseModel):
     """A background run over a combined multi-association PDF."""
 
     id: str
-    tool: str  # fdic | revenue_threshold | receivables | cd_maturity
+    tool: str  # fdic | revenue_threshold | receivables | cd_maturity | negative_bank
     filename: str
     status: str  # pending | processing | complete | failed
     total_pages: int | None

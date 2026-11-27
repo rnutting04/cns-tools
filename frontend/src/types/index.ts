@@ -413,7 +413,12 @@ export interface FdicInstitution {
   notes: string[]
 }
 
-export type AccountingTool = 'fdic' | 'revenue_threshold' | 'receivables' | 'cd_maturity'
+export type AccountingTool =
+  | 'fdic'
+  | 'revenue_threshold'
+  | 'receivables'
+  | 'cd_maturity'
+  | 'negative_bank'
 
 /** The combined files a receivables run compares */
 export type ReceivablesRole = 'balance_sheet' | 'ar' | 'prepaid'
@@ -516,6 +521,34 @@ export interface CdSectionResult {
   cds: CdAccount[]
 }
 
+/** A deposit account on the balance sheet (bank, CD, money market…) */
+export interface BankBalance {
+  label: string
+  /** the most negative figure on the line, or its Total */
+  amount: number
+  /** every figure read on the line, by column (operating / reserve / total) */
+  amounts: Record<string, number>
+  /** any column below zero */
+  negative: boolean
+  /** did the line pass the sheet's own sums? null when no sum covers it */
+  verified: boolean | null
+  notes: string[]
+  source: SourceFigure
+  /** the account's line on the balance sheet, for negative accounts */
+  shots: Shot[]
+}
+
+export interface NegativeBankSectionResult {
+  /** negative accounts first, then the rest in sheet order */
+  accounts: BankBalance[]
+  /** did the bank accounts sum to Total Bank? null when there's no Total Bank line */
+  totals_ok: boolean | null
+  /** the sums that failed, e.g. "bank accounts sum to Total Bank (operating)" */
+  total_checks: string[]
+  /** the bank section, when its sum failed */
+  shots: Shot[]
+}
+
 /** Pages ([first, last]) of this association in each uploaded file */
 export type ReceivablesPages = Partial<Record<ReceivablesRole, number[] | null>>
 
@@ -542,6 +575,7 @@ export type SectionResult =
   | ReceivablesSectionResult
   | ReceivablesUnmatched
   | CdSectionResult
+  | NegativeBankSectionResult
 
 export interface AccountingJobResult {
   association: string

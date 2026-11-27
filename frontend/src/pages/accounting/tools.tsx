@@ -3,6 +3,7 @@ import FactCheckIcon from '@mui/icons-material/FactCheck'
 import GavelIcon from '@mui/icons-material/Gavel'
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance'
 import EventIcon from '@mui/icons-material/Event'
+import MoneyOffIcon from '@mui/icons-material/MoneyOff'
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong'
 import TableChartIcon from '@mui/icons-material/TableChart'
 
@@ -60,6 +61,15 @@ export const ACCOUNTING_TOOLS: AccountingTool[] = [
     input: 'Balance sheet PDFs',
     group: 'balance_sheet',
     icon: <EventIcon />,
+  },
+  {
+    path: 'negative-bank',
+    title: 'Negative bank balances',
+    description:
+      'Flags any bank, CD or money market account below zero, and associations whose bank accounts don’t add up to Total Bank.',
+    input: 'Balance sheet PDFs',
+    group: 'balance_sheet',
+    icon: <MoneyOffIcon />,
   },
   {
     path: 'ar-prepaid',

@@ -6,6 +6,7 @@ export const JOB_TOOLS: Record<AccountingTool, { label: string; path: string }> 
   revenue_threshold: { label: 'Audit threshold', path: 'audit-threshold' },
   receivables: { label: 'AR & prepaid', path: 'ar-prepaid' },
   cd_maturity: { label: 'CD maturity', path: 'cd-maturity' },
+  negative_bank: { label: 'Negative bank balances', path: 'negative-bank' },
 }
 
 /** The tool page, showing this run. */
